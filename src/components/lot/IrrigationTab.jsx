@@ -91,18 +91,6 @@ export default function IrrigationTab({lot,data}){
       </div>
 
       <fieldset className="rounded-xl border border-emerald-200 p-4">
-        <legend className="px-2 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Infraestructura</legend>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {f('water_source','Fuente de agua')}
-          {f('well','Pozo',undefined,true)}
-          {f('pump','Bomba',undefined,true)}
-          {f('reservoir','Reservorio',undefined,true)}
-          {f('irrigation_sector','Sector de riego',undefined,true)}
-          {f('valve_code','Código válvula',undefined,true)}
-        </div>
-      </fieldset>
-
-      <fieldset className="rounded-xl border border-emerald-200 p-4">
         <legend className="px-2 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Tipo de riego y sector</legend>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="grid gap-1.5">
