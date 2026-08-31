@@ -1,6 +1,8 @@
 import React,{useState} from 'react';
 import { base44 } from '@/api/base44Client';
-import { lotMetrics, theoreticalPlants } from '@/lib/farmCalculations';
+import { theoreticalPlants } from '@/lib/farmCalculations';
+import { Target, Plus, TrendingUp } from 'lucide-react';
+
 export default function ObjectivesTab({lot,data}){
   const current=data.Campaign.find(c=>c.is_current)?.name||data.Campaign[data.Campaign.length-1]?.name||'';
   const [form,setForm]=useState({campaign:current,kg_ha:'',estimated_kg_ha:'',total_kg:'',kg_plant:'',category_1_pct:'',max_discard_pct:'',caliber:'',brix:'',comments:''});
@@ -26,34 +28,111 @@ export default function ObjectivesTab({lot,data}){
     setForm({...form,kg_ha:'',estimated_kg_ha:'',total_kg:'',kg_plant:'',category_1_pct:'',max_discard_pct:'',caliber:'',brix:'',comments:''});
     setBusy(false);
   };
-  const f=(k,label,type='text',opt=false)=> <label className="grid gap-1 text-xs font-bold uppercase text-slate-500">{label}{opt&&<span className="font-normal normal-case text-slate-400">(opcional)</span>}<input type={type} value={form[k]??''} onChange={e=>set(k,e.target.value)} required={!opt} className="rounded-xl border px-3 py-2 text-sm normal-case text-slate-800"/></label>;
-  return <div className="grid gap-5 lg:grid-cols-[1fr_2fr]">
-    <form onSubmit={add} className="h-fit rounded-2xl border bg-white p-5">
-      <h2 className="font-bold">Definir objetivo</h2>
-      <p className="mt-1 text-xs text-slate-500">Meta productiva y de calidad por campaña.</p>
-      <div className="mt-4 grid gap-3">
-        <label className="grid gap-1 text-xs font-bold uppercase text-slate-500">Campaña<select value={form.campaign} onChange={e=>set('campaign',e.target.value)} className="rounded-xl border px-3 py-2 text-sm normal-case text-slate-800">{data.Campaign.map(c=><option key={c.id}>{c.name}</option>)}</select></label>
-        <div className="grid grid-cols-2 gap-3">{f('kg_ha','kg/ha objetivo','number')}{f('estimated_kg_ha','kg/ha estimado','number')}</div>
-        <div className="grid grid-cols-2 gap-3">{f('total_kg','Total kg (opc.)','number',true)}{f('kg_plant','kg/planta (opc.)','number',true)}</div>
-        <div className="grid grid-cols-2 gap-3">{f('category_1_pct','Cat. 1 %','number',true)}{f('max_discard_pct','Descarte máx. %','number',true)}</div>
-        <div className="grid grid-cols-2 gap-3">{f('caliber','Calibre','number',true)}{f('brix','Brix','number',true)}</div>
-        <label className="grid gap-1 text-xs font-bold uppercase text-slate-500">Comentarios<textarea value={form.comments} onChange={e=>set('comments',e.target.value)} rows="2" className="rounded-xl border px-3 py-2 text-sm normal-case text-slate-800"/></label>
-      </div>
-      <button disabled={busy} className="mt-4 w-full rounded-xl bg-emerald-900 py-2 font-bold text-white">{busy?'Guardando…':'Guardar objetivo'}</button>
-    </form>
-    <div className="space-y-3">
-      {rows.map(o=>{
-        const compl=o.kg_ha?Math.round((o.estimated_kg_ha/o.kg_ha)*100):0;
-        const tone=compl>=100?'bg-emerald-100 text-emerald-800':compl>=75?'bg-amber-100 text-amber-800':'bg-rose-100 text-rose-800';
-        return <article key={o.id} className="rounded-2xl border bg-white p-5">
-          <div className="flex items-center justify-between"><b className="text-lg">Campaña {o.campaign}</b><span className={`rounded-lg px-3 py-1 text-sm font-bold ${tone}`}>{compl}% proyección</span></div>
-          <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
-            {[['kg/ha objetivo',o.kg_ha?.toLocaleString()],['kg/ha estimado',o.estimated_kg_ha?.toLocaleString()],['Total kg',o.total_kg?.toLocaleString()],['kg/planta',o.kg_plant?.toFixed(1)],[ 'Cat. 1',o.category_1_pct?`${o.category_1_pct}%`:'-'],['Descarte máx.',o.max_discard_pct?`${o.max_discard_pct}%`:'-'],['Calibre',o.caliber],[ 'Brix',o.brix]].map(([a,b])=><div key={a}><p className="text-xs text-slate-500">{a}</p><b>{b??'-'}</b></div>)}
-          </div>
-          {o.comments&&<p className="mt-3 text-sm text-slate-600">{o.comments}</p>}
-        </article>;
-      })}
-      {!rows.length&&<p className="text-slate-500">Aún no hay objetivos definidos para este lote.</p>}
+
+  const field=(k,label,type='text',opt=false)=>(
+    <div className="grid gap-1.5">
+      <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}{opt&&<span className="ml-1 font-normal normal-case text-slate-400">· opcional</span>}</label>
+      <input type={type} value={form[k]??''} onChange={e=>set(k,e.target.value)} required={!opt} className="rounded-lg border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500"/>
     </div>
-  </div>;
+  );
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
+      {/* Formulario */}
+      <form onSubmit={add} className="h-fit self-start rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-900 text-white"><Target size={18}/></span>
+          <div>
+            <h2 className="text-base font-bold text-charcoal">Definir objetivo</h2>
+            <p className="text-xs text-slate-500">Meta productiva y de calidad por campaña</p>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <div className="grid gap-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Campaña</label>
+            <select value={form.campaign} onChange={e=>set('campaign',e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500">{data.Campaign.map(c=><option key={c.id}>{c.name}</option>)}</select>
+          </div>
+
+          <div className="rounded-xl bg-emerald-50/60 p-4">
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Rendimiento</p>
+            <div className="grid grid-cols-2 gap-3">{field('kg_ha','kg/ha objetivo','number')}{field('estimated_kg_ha','kg/ha estimado','number')}</div>
+            <div className="mt-3 grid grid-cols-2 gap-3">{field('total_kg','Total kg','number',true)}{field('kg_plant','kg/planta','number',true)}</div>
+          </div>
+
+          <div className="rounded-xl bg-sand-light/60 p-4">
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-wide text-charcoal">Calidad</p>
+            <div className="grid grid-cols-2 gap-3">{field('category_1_pct','Cat. 1 %','number',true)}{field('max_discard_pct','Descarte máx. %','number',true)}</div>
+            <div className="mt-3 grid grid-cols-2 gap-3">{field('caliber','Calibre','number',true)}{field('brix','Brix','number',true)}</div>
+          </div>
+
+          <div className="grid gap-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Comentarios</label>
+            <textarea value={form.comments} onChange={e=>set('comments',e.target.value)} rows="2" placeholder="Notas sobre el objetivo…" className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500"/>
+          </div>
+        </div>
+
+        <button disabled={busy} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy?'Guardando…':<><Plus size={16}/>Guardar objetivo</>}</button>
+      </form>
+
+      {/* Listado */}
+      <div>
+        {rows.length===0 ? (
+          <div className="grid h-full min-h-[300px] place-items-center rounded-2xl border border-dashed border-slate-300 bg-white/50 p-10 text-center">
+            <div>
+              <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-50 text-emerald-700"><Target size={26}/></span>
+              <p className="mt-4 font-bold text-charcoal">Sin objetivos definidos</p>
+              <p className="mt-1 text-sm text-slate-500">Definí la meta productiva de la próxima campaña desde el panel izquierdo.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {rows.map(o=>{
+              const compl=o.kg_ha?Math.min(150,Math.round((o.estimated_kg_ha/o.kg_ha)*100)):0;
+              const status=compl>=100?{label:'En línea',cls:'bg-emerald-600'}:compl>=75?{label:'Cercano',cls:'bg-amber-500'}:{label:'Lejano',cls:'bg-rose-500'};
+              const metrics=[
+                {k:'kg/ha objetivo',v:o.kg_ha?.toLocaleString(),pri:true},
+                {k:'kg/ha estimado',v:o.estimated_kg_ha?.toLocaleString(),pri:true},
+                {k:'Total kg',v:o.total_kg?o.total_kg.toLocaleString():'-'},
+                {k:'kg/planta',v:o.kg_plant?o.kg_plant.toFixed(1):'-'},
+                {k:'Cat. 1',v:o.category_1_pct!=null?`${o.category_1_pct}%`:'-'},
+                {k:'Descarte máx.',v:o.max_discard_pct!=null?`${o.max_discard_pct}%`:'-'},
+                {k:'Calibre',v:o.caliber??'-'},
+                {k:'Brix',v:o.brix??'-'},
+              ];
+              return (
+                <article key={o.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <header className="flex items-center justify-between bg-emerald-950 px-5 py-4 text-white">
+                    <div className="flex items-center gap-3">
+                      <TrendingUp size={18}/>
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-200">Campaña</p>
+                        <h3 className="text-lg font-bold leading-tight">{o.campaign}</h3>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase text-emerald-200">Proyección</p>
+                        <p className="text-2xl font-bold leading-none">{compl}%</p>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-xs font-bold text-white ${status.cls}`}>{status.label}</span>
+                    </div>
+                  </header>
+                  <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4">
+                    {metrics.map(m=>(
+                      <div key={m.k} className={`bg-white p-4 ${m.pri?'bg-emerald-50/40':''}`}>
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{m.k}</p>
+                        <p className={`mt-1 ${m.pri?'text-lg font-bold text-emerald-800':'text-base font-semibold text-charcoal'}`}>{m.v??'-'}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {o.comments&&<p className="border-t border-slate-100 px-5 py-3 text-sm text-slate-600">{o.comments}</p>}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
