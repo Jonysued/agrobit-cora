@@ -1,0 +1,2 @@
+import React from 'react';
+export default function MetricCard({label,value,detail,tone='dark'}){const colors={dark:'bg-emerald-950 text-white',light:'bg-white text-slate-950',amber:'bg-amber-50 text-amber-950',red:'bg-red-50 text-red-950'};return <div className={`rounded-2xl border border-black/5 p-5 shadow-sm ${colors[tone]}`}><p className="text-[11px] font-bold uppercase tracking-[.14em] opacity-60">{label}</p><p className="mt-2 text-2xl font-bold tracking-tight">{value}</p>{detail&&<p className="mt-1 text-xs opacity-60">{detail}</p>}</div>}

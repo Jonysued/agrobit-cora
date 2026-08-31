@@ -1,0 +1,45 @@
+{
+  "name": "Objective",
+  "type": "object",
+  "properties": {
+    "lot_id": {
+      "type": "string"
+    },
+    "campaign": {
+      "type": "string"
+    },
+    "total_kg": {
+      "type": "number"
+    },
+    "kg_ha": {
+      "type": "number"
+    },
+    "kg_plant": {
+      "type": "number"
+    },
+    "category_1_pct": {
+      "type": "number"
+    },
+    "max_discard_pct": {
+      "type": "number"
+    },
+    "caliber": {
+      "type": "number"
+    },
+    "brix": {
+      "type": "number"
+    },
+    "estimated_kg_ha": {
+      "type": "number"
+    },
+    "comments": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "lot_id",
+    "campaign",
+    "kg_ha",
+    "estimated_kg_ha"
+  ]
+}

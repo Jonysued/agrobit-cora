@@ -1,0 +1,3 @@
+import React from 'react';
+import { FileText } from 'lucide-react';
+export default function DocumentsTab({lot,data}){const rows=data.LotDocument.filter(x=>x.lot_id===lot.id);return <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map(x=><a href={x.file_url} target="_blank" rel="noreferrer" className="rounded-2xl border bg-white p-5" key={x.id}><FileText className="text-emerald-700"/><b className="mt-4 block">{x.name}</b><p className="text-sm text-slate-500">{x.type} · {x.campaign}</p></a>)}{!rows.length&&<p className="text-slate-500">No hay documentos asociados a este lote.</p>}</div>}

@@ -1,0 +1,72 @@
+{
+  "name": "IrrigationDesign",
+  "type": "object",
+  "properties": {
+    "lot_id": {
+      "type": "string"
+    },
+    "water_source": {
+      "type": "string"
+    },
+    "well": {
+      "type": "string"
+    },
+    "pump": {
+      "type": "string"
+    },
+    "reservoir": {
+      "type": "string"
+    },
+    "irrigation_sector": {
+      "type": "string"
+    },
+    "valve_code": {
+      "type": "string"
+    },
+    "irrigation_type": {
+      "type": "string"
+    },
+    "sector_area_ha": {
+      "type": "number"
+    },
+    "drip_lines_per_row": {
+      "type": "number"
+    },
+    "lateral_diameter_mm": {
+      "type": "number"
+    },
+    "average_lateral_length_m": {
+      "type": "number"
+    },
+    "emitter_spacing_m": {
+      "type": "number"
+    },
+    "emitter_flow_lh": {
+      "type": "number"
+    },
+    "emitters_per_plant": {
+      "type": "number"
+    },
+    "design_pressure_bar": {
+      "type": "number"
+    },
+    "emitter_model": {
+      "type": "string"
+    },
+    "filtration_type": {
+      "type": "string"
+    },
+    "installation_year": {
+      "type": "number"
+    },
+    "plan_url": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "lot_id"
+  ]
+}

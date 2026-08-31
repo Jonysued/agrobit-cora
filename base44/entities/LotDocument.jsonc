@@ -1,0 +1,32 @@
+{
+  "name": "LotDocument",
+  "type": "object",
+  "properties": {
+    "lot_id": {
+      "type": "string"
+    },
+    "campaign": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "type": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "file_url": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "lot_id",
+    "date",
+    "type",
+    "name",
+    "file_url"
+  ]
+}

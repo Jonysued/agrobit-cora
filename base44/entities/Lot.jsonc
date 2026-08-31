@@ -1,0 +1,70 @@
+{
+  "name": "Lot",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "farm": {
+      "type": "string"
+    },
+    "sector": {
+      "type": "string"
+    },
+    "area_ha": {
+      "type": "number"
+    },
+    "crop": {
+      "type": "string"
+    },
+    "variety": {
+      "type": "string"
+    },
+    "planting_year": {
+      "type": "number"
+    },
+    "planting_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "row_spacing": {
+      "type": "number"
+    },
+    "plant_spacing": {
+      "type": "number"
+    },
+    "current_plants": {
+      "type": "number"
+    },
+    "soil_type": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "polygon": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  "required": [
+    "code",
+    "name",
+    "farm",
+    "area_ha",
+    "crop",
+    "variety",
+    "planting_year",
+    "row_spacing",
+    "plant_spacing",
+    "polygon"
+  ]
+}

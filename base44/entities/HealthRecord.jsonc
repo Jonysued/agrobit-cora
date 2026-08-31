@@ -1,0 +1,55 @@
+{
+  "name": "HealthRecord",
+  "type": "object",
+  "properties": {
+    "lot_id": {
+      "type": "string"
+    },
+    "campaign": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "problem": {
+      "type": "string"
+    },
+    "incidence": {
+      "type": "string",
+      "enum": [
+        "Baja",
+        "Media",
+        "Alta"
+      ]
+    },
+    "severity": {
+      "type": "string"
+    },
+    "affected_area_ha": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string"
+    },
+    "treatment": {
+      "type": "string"
+    },
+    "result": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "photo_url": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "lot_id",
+    "campaign",
+    "date",
+    "problem",
+    "incidence"
+  ]
+}
