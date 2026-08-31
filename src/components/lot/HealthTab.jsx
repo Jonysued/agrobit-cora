@@ -7,19 +7,17 @@ export default function HealthTab({lot,data}){
   const counts=rows.reduce((a,x)=>(a[x.problem]=(a[x.problem]||0)+1,a),{});
   const [open,setOpen]=useState(false);
   const [busy,setBusy]=useState(false);
-  const [form,setForm]=useState({campaign:data.Campaign.find(c=>c.is_current)?.name||'',date:'',problem:'',incidence:'Baja',severity:'',affected_area_ha:'',status:'',treatment:'',result:'',notes:''});
+  const [form,setForm]=useState({campaign:data.Campaign.find(c=>c.is_current)?.name||'',problem:'',incidence:'Baja',notes:''});
   const set=(k,v)=>setForm({...form,[k]:v});
 
   const submit=async e=>{
     e.preventDefault();setBusy(true);
-    const num=k=>form[k]===''||form[k]==null?undefined:Number(form[k]);
     await base44.entities.HealthRecord.create({
-      lot_id:lot.id,campaign:form.campaign,date:form.date,problem:form.problem,
-      incidence:form.incidence,severity:form.severity||undefined,affected_area_ha:num('affected_area_ha'),
-      status:form.status||undefined,treatment:form.treatment||undefined,result:form.result||undefined,notes:form.notes||undefined,
+      lot_id:lot.id,campaign:form.campaign,problem:form.problem,
+      incidence:form.incidence,notes:form.notes||undefined,
     });
     await data.refetch();setBusy(false);setOpen(false);
-    setForm({campaign:form.campaign,date:'',problem:'',incidence:'Baja',severity:'',affected_area_ha:'',status:'',treatment:'',result:'',notes:''});
+    setForm({campaign:form.campaign,problem:'',incidence:'Baja',notes:''});
   };
 
   const del=async id=>{await base44.entities.HealthRecord.delete(id);await data.refetch();};
@@ -54,10 +52,6 @@ export default function HealthTab({lot,data}){
                     {data.Campaign.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
                   </select>
                 </div>
-                {f('date','Fecha','date')}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {f('problem','Problema / plaga')}
                 <div className="grid gap-1.5">
                   <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Incidencia</label>
                   <select value={form.incidence} onChange={e=>set('incidence',e.target.value)} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-200">
@@ -65,15 +59,7 @@ export default function HealthTab({lot,data}){
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {f('severity','Severidad',undefined,true)}
-                {f('affected_area_ha','Superficie afectada (ha)','number',true)}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {f('status','Estado',undefined,true)}
-                {f('treatment','Tratamiento',undefined,true)}
-              </div>
-              {f('result','Resultado',undefined,true)}
+              {f('problem','Problema / plaga')}
               <div className="grid gap-1.5">
                 <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Observaciones</label>
                 <textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows="2" className="resize-none rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-200"/>
@@ -93,15 +79,14 @@ export default function HealthTab({lot,data}){
             <div className="flex justify-between gap-3">
               <div>
                 <b className="text-charcoal">{h.problem}</b>
-                <p className="text-xs text-slate-500">{h.campaign} · {h.date}{h.severity?` · ${h.severity}`:''}{h.affected_area_ha!=null?` · ${h.affected_area_ha} ha`:''}</p>
+                <p className="text-xs text-slate-500">{h.campaign}</p>
               </div>
               <div className="flex items-center gap-2">
                 <span className={`rounded-full px-3 py-1 text-xs font-bold ${incColor[h.incidence]||'bg-slate-100'}`}>{h.incidence}</span>
                 <button onClick={()=>del(h.id)} className="text-slate-300 transition hover:text-red-500"><Trash2 size={16}/></button>
               </div>
             </div>
-            {(h.status||h.treatment)&&<p className="mt-2 text-xs text-slate-500">{h.status}{h.status&&h.treatment?' · ':''}{h.treatment}</p>}
-            <p className="mt-3 text-sm text-slate-600">{h.notes||h.result||'Sin observaciones'}</p>
+            <p className="mt-3 text-sm text-slate-600">{h.notes||'Sin observaciones'}</p>
           </article>
         ))}
       </section>
