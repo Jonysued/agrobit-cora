@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Upload, Download, LoaderCircle } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
-const HEADERS = ['lote', 'campaña', 'total_kg', 'kg_ha', 'kg_planta', 'categoria_1_pct', 'descarte_pct'];
+const HEADERS = ['lote', 'campaña', 'total_kg', 'kg_ha', 'kg_planta', 'categoria_1_pct', 'categoria_2_pct', 'descarte_pct', 'calibre_promedio', 'brix', 'calidad_comercial', 'fecha_inicio_cosecha', 'fecha_fin_cosecha', 'estimada', 'notas'];
 
 export default function ProductionImport({ lots, onImported }) {
   const [busy, setBusy] = useState(false);
@@ -10,10 +10,11 @@ export default function ProductionImport({ lots, onImported }) {
 
   const downloadTemplate = () => {
     const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const blank = () => Array(HEADERS.length - 1).fill('').join(',');
     const rows = [
       HEADERS.join(','),
-      `${esc('EJEMPLO (borrar esta fila)')},2023/24,185000,12300,12.3,82,6`,
-      ...lots.map(l => `${esc(l.name)},,,,,,,`)
+      `${esc('EJEMPLO (borrar esta fila)')},2023/24,185000,12300,12.3,82,10,6,18.2,16.5,Extra,15/01/2024,28/02/2024,no,Cosecha manual`,
+      ...lots.map(l => `${esc(l.name)},${blank()}`)
     ];
     const blob = new Blob(['\ufeff' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a');
@@ -45,7 +46,15 @@ export default function ProductionImport({ lots, onImported }) {
                   kg_ha: { type: 'number' },
                   kg_planta: { type: 'number' },
                   categoria_1_pct: { type: 'number' },
-                  descarte_pct: { type: 'number' }
+                  categoria_2_pct: { type: 'number' },
+                  descarte_pct: { type: 'number' },
+                  calibre_promedio: { type: 'number' },
+                  brix: { type: 'number' },
+                  calidad_comercial: { type: 'string' },
+                  fecha_inicio_cosecha: { type: 'string' },
+                  fecha_fin_cosecha: { type: 'string' },
+                  estimada: { type: 'boolean' },
+                  notas: { type: 'string' }
                 }
               }
             }
@@ -64,8 +73,15 @@ export default function ProductionImport({ lots, onImported }) {
           kg_ha: Number(r.kg_ha) || 0,
           kg_plant: Number(r.kg_planta ?? r.kg_plant) || 0,
           category_1_pct: r.categoria_1_pct != null ? Number(r.categoria_1_pct) : undefined,
+          category_2_pct: r.categoria_2_pct != null ? Number(r.categoria_2_pct) : undefined,
           discard_pct: r.descarte_pct != null ? Number(r.descarte_pct) : undefined,
-          estimated: false
+          average_caliber: r.calibre_promedio != null ? Number(r.calibre_promedio) : undefined,
+          average_brix: r.brix != null ? Number(r.brix) : undefined,
+          commercial_quality: r.calidad_comercial || undefined,
+          harvest_start: r.fecha_inicio_cosecha || undefined,
+          harvest_end: r.fecha_fin_cosecha || undefined,
+          estimated: r.estimada === true || r.estimada === 'si' || r.estimada === 'sí',
+          notes: r.notas || undefined
         };
       }).filter(Boolean);
       if (!payload.length) { setMsg('No se encontraron registros válidos. Verifique que la columna "lote" coincida con los nombres de lotes.'); setBusy(false); return; }
