@@ -1,0 +1,40 @@
+{
+  "name": "PruningRecord",
+  "type": "object",
+  "properties": {
+    "lot_id": {
+      "type": "string"
+    },
+    "campaign": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "type": {
+      "type": "string"
+    },
+    "intensity": {
+      "type": "string",
+      "enum": [
+        "Leve",
+        "Media",
+        "Fuerte"
+      ]
+    },
+    "objective": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "lot_id",
+    "campaign",
+    "date",
+    "type",
+    "intensity"
+  ]
+}
