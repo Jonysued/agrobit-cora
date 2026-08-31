@@ -1,3 +1,9 @@
+export const polygonAreaHa = (pts) => {
+  if(!pts||pts.length<3) return 0;
+  const R=6378137; let area=0;
+  for(let i=0;i<pts.length;i++){const [lat1,lng1]=pts[i];const [lat2,lng2]=pts[(i+1)%pts.length];area+=(lng2-lng1)*Math.PI/180*R*R*( (2+Math.sin(lat1*Math.PI/180)+Math.sin(lat2*Math.PI/180))/4 );}
+  return Math.abs(area)/10000;
+};
 export const ageOf = (lot) => new Date().getFullYear() - lot.planting_year;
 export const densityOf = (lot) => Math.round(10000 / (lot.row_spacing * lot.plant_spacing));
 export const theoreticalPlants = (lot) => Math.round(densityOf(lot) * lot.area_ha);
