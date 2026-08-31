@@ -30,7 +30,7 @@ export default function MapPage(){
   return <div className="relative h-[calc(100vh-4rem)]">
     <MapContainer center={center} zoom={15} className="h-full w-full" zoomControl doubleClickZoom={false}>
       <TileLayer attribution="&copy; Esri" url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"/>
-      {lots.map(l=><Polygon key={l.id} positions={mode==='edit'&&editLot?.id===l.id?draft:l.polygon} pathOptions={{color:'#fff',weight:2,fillColor:color(l),fillOpacity:.62}} interactive={mode==='view'} eventHandlers={{click:()=>setSelected(l)}}><Tooltip permanent direction="center" className="lot-label">{l.code}</Tooltip></Polygon>)}
+      {lots.map(l=><Polygon key={l.id} positions={mode==='edit'&&editLot?.id===l.id?draft:l.polygon} pathOptions={{color:'#fff',weight:2,fillColor:color(l),fillOpacity:.62}} interactive={mode==='view'} eventHandlers={{click:()=>setSelected(l)}}><Tooltip permanent direction="center" className="lot-label">{l.name}</Tooltip></Polygon>)}
       {mode==='draw'&&<DrawLayer points={draft} setPoints={setDraft} onFinish={finishDraw}/>}
       {mode==='edit'&&editLot&&<EditLayer points={draft} setPoints={setDraft}/>}
     </MapContainer>
@@ -48,7 +48,7 @@ export default function MapPage(){
     {mode==='view' && <div className="absolute bottom-5 right-4 z-[1000] rounded-xl bg-white/95 px-4 py-3 text-xs shadow-xl"><b>{lots.length} lotes visibles</b><p className="mt-1 text-slate-500">Clic en un lote para ver opciones.</p></div>}
 
     {selected && mode==='view' && <div className="absolute bottom-5 left-4 z-[1000] flex w-[min(420px,calc(100%-2rem))] items-center gap-3 rounded-2xl bg-white p-4 shadow-2xl">
-      <div className="min-w-0 flex-1"><b className="truncate">{selected.code} · {selected.name}</b><p className="truncate text-sm text-slate-500">{selected.crop} {selected.variety} · {selected.area_ha} ha</p></div>
+      <div className="min-w-0 flex-1"><b className="truncate">{selected.name} · {selected.name}</b><p className="truncate text-sm text-slate-500">{selected.crop} {selected.variety} · {selected.area_ha} ha</p></div>
       <Btn onClick={()=>nav(`/lotes/${selected.id}`)}><FileText size={15}/>Ficha</Btn>
       <Btn onClick={()=>startEdit(selected)}><Pencil size={15}/>Editar</Btn>
       <Btn danger onClick={()=>setConfirmDel(selected)}><Trash2 size={15}/></Btn>
@@ -57,6 +57,6 @@ export default function MapPage(){
 
     {showForm && <LotFormModal polygon={draft} onSaved={d.refetch} onClose={()=>{setShowForm(false);setMode('view');setDraft([]);}}/>}
 
-    {confirmDel && <div className="fixed inset-0 z-[2000] grid place-items-center bg-black/50 p-4"><div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl"><h3 className="text-lg font-bold">Eliminar {confirmDel.code}</h3><p className="mt-2 text-sm text-slate-500">Se borrarán también su historial productivo, sanitario, objetivos, riego, documentos y observaciones.</p><div className="mt-5 flex gap-2"><button onClick={()=>setConfirmDel(null)} className="flex-1 rounded-xl border py-2 font-bold">Cancelar</button><button onClick={delLot} className="flex-1 rounded-xl bg-red-600 py-2 font-bold text-white">Eliminar</button></div></div></div>}
+    {confirmDel && <div className="fixed inset-0 z-[2000] grid place-items-center bg-black/50 p-4"><div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl"><h3 className="text-lg font-bold">Eliminar {confirmDel.name}</h3><p className="mt-2 text-sm text-slate-500">Se borrarán también su historial productivo, sanitario, objetivos, riego, documentos y observaciones.</p><div className="mt-5 flex gap-2"><button onClick={()=>setConfirmDel(null)} className="flex-1 rounded-xl border py-2 font-bold">Cancelar</button><button onClick={delLot} className="flex-1 rounded-xl bg-red-600 py-2 font-bold text-white">Eliminar</button></div></div></div>}
   </div>;
 }

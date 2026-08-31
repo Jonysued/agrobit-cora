@@ -2,9 +2,6 @@
   "name": "Lot",
   "type": "object",
   "properties": {
-    "code": {
-      "type": "string"
-    },
     "name": {
       "type": "string"
     },
@@ -56,7 +53,6 @@
     }
   },
   "required": [
-    "code",
     "name",
     "farm",
     "area_ha",
