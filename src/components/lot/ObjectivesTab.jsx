@@ -54,17 +54,17 @@ export default function ObjectivesTab({lot,data}){
             <select value={form.campaign} onChange={e=>set('campaign',e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500">{data.Campaign.map(c=><option key={c.id}>{c.name}</option>)}</select>
           </div>
 
-          <div className="rounded-xl bg-emerald-50/60 p-4">
-            <p className="mb-3 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Rendimiento</p>
+          <fieldset className="rounded-xl border border-emerald-200 p-4">
+            <legend className="px-2 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Rendimiento</legend>
             <div className="grid grid-cols-2 gap-3">{field('kg_ha','kg/ha objetivo','number')}{field('estimated_kg_ha','kg/ha estimado','number')}</div>
             <div className="mt-3 grid grid-cols-2 gap-3">{field('total_kg','Total kg','number',true)}{field('kg_plant','kg/planta','number',true)}</div>
-          </div>
+          </fieldset>
 
-          <div className="rounded-xl bg-sand-light/60 p-4">
-            <p className="mb-3 text-[11px] font-bold uppercase tracking-wide text-charcoal">Calidad</p>
+          <fieldset className="rounded-xl border border-sand p-4">
+            <legend className="px-2 text-[11px] font-bold uppercase tracking-wide text-charcoal">Calidad</legend>
             <div className="grid grid-cols-2 gap-3">{field('category_1_pct','Cat. 1 %','number',true)}{field('max_discard_pct','Descarte máx. %','number',true)}</div>
             <div className="mt-3 grid grid-cols-2 gap-3">{field('caliber','Calibre','number',true)}{field('brix','Brix','number',true)}</div>
-          </div>
+          </fieldset>
 
           <div className="grid gap-1.5">
             <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Comentarios</label>
