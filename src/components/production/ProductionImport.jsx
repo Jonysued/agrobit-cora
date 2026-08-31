@@ -2,14 +2,19 @@ import React, { useState } from 'react';
 import { Upload, Download, LoaderCircle } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
-const HEADERS = ['lote', 'campaña', 'total_kg', 'kg_ha', 'kg_plant', 'categoria_1_pct', 'descarte_pct', 'brix'];
+const HEADERS = ['lote', 'campaña', 'total_kg', 'kg_ha', 'kg_planta', 'categoria_1_pct', 'descarte_pct'];
 
 export default function ProductionImport({ lots, onImported }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
 
   const downloadTemplate = () => {
-    const rows = [HEADERS.join(','), `${lots[0]?.name || 'Ejemplo'},2023/24,185000,12300,12.3,82,6,16.5`];
+    const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = [
+      HEADERS.join(','),
+      `${esc('EJEMPLO (borrar esta fila)')},2023/24,185000,12300,12.3,82,6`,
+      ...lots.map(l => `${esc(l.name)},,,,,,,`)
+    ];
     const blob = new Blob(['\ufeff' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -38,10 +43,9 @@ export default function ProductionImport({ lots, onImported }) {
                   campaña: { type: 'string' },
                   total_kg: { type: 'number' },
                   kg_ha: { type: 'number' },
-                  kg_plant: { type: 'number' },
+                  kg_planta: { type: 'number' },
                   categoria_1_pct: { type: 'number' },
-                  descarte_pct: { type: 'number' },
-                  brix: { type: 'number' }
+                  descarte_pct: { type: 'number' }
                 }
               }
             }
@@ -58,10 +62,9 @@ export default function ProductionImport({ lots, onImported }) {
           campaign: r.campaña || r.campaign,
           total_kg: Number(r.total_kg) || 0,
           kg_ha: Number(r.kg_ha) || 0,
-          kg_plant: Number(r.kg_plant) || 0,
+          kg_plant: Number(r.kg_planta ?? r.kg_plant) || 0,
           category_1_pct: r.categoria_1_pct != null ? Number(r.categoria_1_pct) : undefined,
           discard_pct: r.descarte_pct != null ? Number(r.descarte_pct) : undefined,
-          average_brix: r.brix != null ? Number(r.brix) : undefined,
           estimated: false
         };
       }).filter(Boolean);
