@@ -51,7 +51,6 @@ export default function MapPage(){
       <div className="min-w-0 flex-1"><b className="truncate">{selected.name} · {selected.name}</b><p className="truncate text-sm text-slate-500">{selected.crop} {selected.variety} · {selected.area_ha} ha</p></div>
       <Btn onClick={()=>nav(`/lotes/${selected.id}`)}><FileText size={15}/>Ficha</Btn>
       <Btn onClick={()=>startEdit(selected)}><Pencil size={15}/>Editar</Btn>
-      <Btn danger onClick={()=>setConfirmDel(selected)}><Trash2 size={15}/></Btn>
       <Btn onClick={()=>setSelected(null)}><X size={15}/></Btn>
     </div>}
 
