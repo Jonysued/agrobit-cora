@@ -4,7 +4,7 @@ import { densityOf } from '@/lib/farmCalculations';
 import { Droplets, Plus, Save, Pencil } from 'lucide-react';
 
 const EMPTY={
-  water_source:'',well:'',pump:'',reservoir:'',irrigation_sector:'',valve_code:'',
+  well:'',
   irrigation_type:'',sector_area_ha:'',drip_lines_per_row:'',lateral_diameter_mm:'',
   average_lateral_length_m:'',emitter_spacing_m:'',emitter_flow_lh:'',emitters_per_plant:'',
   design_pressure_bar:'',emitter_model:'',filtration_type:'',installation_year:'',plan_url:'',notes:''
@@ -22,8 +22,7 @@ export default function IrrigationTab({lot,data}){
     const num=k=>form[k]===''||form[k]==null?undefined:Number(form[k]);
     const payload={
       lot_id:lot.id,
-      water_source:form.water_source||undefined,well:form.well||undefined,pump:form.pump||undefined,
-      reservoir:form.reservoir||undefined,irrigation_sector:form.irrigation_sector||undefined,valve_code:form.valve_code||undefined,
+      well:form.well||undefined,
       irrigation_type:form.irrigation_type||undefined,sector_area_ha:num('sector_area_ha'),drip_lines_per_row:num('drip_lines_per_row'),
       lateral_diameter_mm:num('lateral_diameter_mm'),average_lateral_length_m:num('average_lateral_length_m'),
       emitter_spacing_m:num('emitter_spacing_m'),emitter_flow_lh:num('emitter_flow_lh'),emitters_per_plant:autoEmitters!=null?autoEmitters:num('emitters_per_plant'),
@@ -51,8 +50,8 @@ export default function IrrigationTab({lot,data}){
 
   if(!editing && existing){
     const fields=[
-      ['Fuente de agua',existing.water_source],['Pozo',existing.well],['Bomba',existing.pump],['Reservorio',existing.reservoir],
-      ['Sector de riego',existing.irrigation_sector],['Código válvula',existing.valve_code],['Tipo de riego',existing.irrigation_type],
+      ['Pozo',existing.well],
+      ['Tipo de riego',existing.irrigation_type],
       ['Superficie sector',existing.sector_area_ha!=null?`${existing.sector_area_ha} ha`:'-'],
       ['Líneas por fila',existing.drip_lines_per_row],['Diámetro lateral',existing.lateral_diameter_mm!=null?`${existing.lateral_diameter_mm} mm`:'-'],
       ['Longitud lateral prom.',existing.average_lateral_length_m!=null?`${existing.average_lateral_length_m} m`:'-'],
@@ -102,12 +101,7 @@ export default function IrrigationTab({lot,data}){
             </select>
           </div>
           {f('sector_area_ha','Superficie sector (ha)','number',true)}
-          {f('water_source','Fuente de agua',undefined,true)}
           {f('well','Pozo',undefined,true)}
-          {f('pump','Bomba',undefined,true)}
-          {f('reservoir','Reservorio',undefined,true)}
-          {f('irrigation_sector','Sector de riego',undefined,true)}
-          {f('valve_code','Código válvula',undefined,true)}
         </div>
       </fieldset>
 
