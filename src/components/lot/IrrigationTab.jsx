@@ -102,6 +102,12 @@ export default function IrrigationTab({lot,data}){
             </select>
           </div>
           {f('sector_area_ha','Superficie sector (ha)','number',true)}
+          {f('water_source','Fuente de agua',undefined,true)}
+          {f('well','Pozo',undefined,true)}
+          {f('pump','Bomba',undefined,true)}
+          {f('reservoir','Reservorio',undefined,true)}
+          {f('irrigation_sector','Sector de riego',undefined,true)}
+          {f('valve_code','Código válvula',undefined,true)}
         </div>
       </fieldset>
 
