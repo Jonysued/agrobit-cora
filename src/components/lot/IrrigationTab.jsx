@@ -26,7 +26,7 @@ export default function IrrigationTab({lot,data}){
       reservoir:form.reservoir||undefined,irrigation_sector:form.irrigation_sector||undefined,valve_code:form.valve_code||undefined,
       irrigation_type:form.irrigation_type||undefined,sector_area_ha:num('sector_area_ha'),drip_lines_per_row:num('drip_lines_per_row'),
       lateral_diameter_mm:num('lateral_diameter_mm'),average_lateral_length_m:num('average_lateral_length_m'),
-      emitter_spacing_m:num('emitter_spacing_m'),emitter_flow_lh:num('emitter_flow_lh'),emitters_per_plant:num('emitters_per_plant'),
+      emitter_spacing_m:num('emitter_spacing_m'),emitter_flow_lh:num('emitter_flow_lh'),emitters_per_plant:autoEmitters!=null?autoEmitters:num('emitters_per_plant'),
       design_pressure_bar:num('design_pressure_bar'),emitter_model:form.emitter_model||undefined,
       filtration_type:form.filtration_type||undefined,installation_year:num('installation_year'),
       plan_url:form.plan_url||undefined,notes:form.notes||undefined,
@@ -47,6 +47,7 @@ export default function IrrigationTab({lot,data}){
   const lph=(form.emitter_flow_lh||0)*(form.emitters_per_plant||0);
   const lha=lph*densityOf(lot);
   const ltotal=lha*(form.sector_area_ha||lot.area_ha);
+  const autoEmitters=(form.drip_lines_per_row&&form.emitter_spacing_m&&lot.plant_spacing)?Math.round((lot.plant_spacing/form.emitter_spacing_m)*form.drip_lines_per_row*10)/10:null;
 
   if(!editing && existing){
     const fields=[
@@ -112,7 +113,12 @@ export default function IrrigationTab({lot,data}){
           {f('average_lateral_length_m','Longitud lateral (m)','number',true)}
           {f('emitter_spacing_m','Separación goteros (m)','number')}
           {f('emitter_flow_lh','Caudal gotero (l/h)','number')}
-          {f('emitters_per_plant','Goteros por planta','number')}
+          {autoEmitters!=null?(
+            <div className="grid gap-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-wide text-emerald-700">Goteros por planta · calculado</label>
+              <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{autoEmitters}</div>
+            </div>
+          ):f('emitters_per_plant','Goteros por planta','number',true)}
         </div>
       </fieldset>
 
