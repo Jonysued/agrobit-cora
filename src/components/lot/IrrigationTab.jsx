@@ -7,7 +7,7 @@ const EMPTY={
   well:'',
   irrigation_type:'',sector_area_ha:'',drip_lines_per_row:'',lateral_diameter_mm:'',
   average_lateral_length_m:'',emitter_spacing_m:'',emitter_flow_lh:'',emitters_per_plant:'',
-  design_pressure_bar:'',emitter_model:'',filtration_type:'',installation_year:'',plan_url:'',notes:''
+  design_pressure_bar:'',installation_year:'',notes:''
 };
 
 export default function IrrigationTab({lot,data}){
@@ -26,9 +26,8 @@ export default function IrrigationTab({lot,data}){
       irrigation_type:form.irrigation_type||undefined,sector_area_ha:num('sector_area_ha'),drip_lines_per_row:num('drip_lines_per_row'),
       lateral_diameter_mm:num('lateral_diameter_mm'),average_lateral_length_m:num('average_lateral_length_m'),
       emitter_spacing_m:num('emitter_spacing_m'),emitter_flow_lh:num('emitter_flow_lh'),emitters_per_plant:autoEmitters!=null?autoEmitters:num('emitters_per_plant'),
-      design_pressure_bar:num('design_pressure_bar'),emitter_model:form.emitter_model||undefined,
-      filtration_type:form.filtration_type||undefined,installation_year:num('installation_year'),
-      plan_url:form.plan_url||undefined,notes:form.notes||undefined,
+      design_pressure_bar:num('design_pressure_bar'),installation_year:num('installation_year'),
+      notes:form.notes||undefined,
     };
     if(existing) await base44.entities.IrrigationDesign.update(existing.id,payload);
     else await base44.entities.IrrigationDesign.create(payload);
@@ -59,7 +58,6 @@ export default function IrrigationTab({lot,data}){
       ['Separación goteros',existing.emitter_spacing_m!=null?`${existing.emitter_spacing_m} m`:'-'],
       ['Caudal gotero',existing.emitter_flow_lh!=null?`${existing.emitter_flow_lh} l/h`:'-'],['Goteros por planta',existing.emitters_per_plant],
       ['Presión de diseño',existing.design_pressure_bar!=null?`${existing.design_pressure_bar} bar`:'-'],
-      ['Modelo gotero',existing.emitter_model],['Filtrado',existing.filtration_type],
       ['Año de instalación (mangueras)',existing.installation_year],
     ];
     return (
@@ -127,10 +125,7 @@ export default function IrrigationTab({lot,data}){
         <legend className="px-2 text-[11px] font-bold uppercase tracking-wide text-charcoal">Presión, modelo e instalación</legend>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {f('design_pressure_bar','Presión diseño (bar)','number',true)}
-          {f('emitter_model','Modelo gotero',undefined,true)}
-          {f('filtration_type','Filtrado',undefined,true)}
           {f('installation_year','Año mangueras','number')}
-          {f('plan_url','URL plano',undefined,true)}
         </div>
       </fieldset>
 
