@@ -50,7 +50,6 @@ export default function MapPage(){
     {selected && mode==='view' && <div className="absolute bottom-5 left-4 z-[1000] flex w-[min(420px,calc(100%-2rem))] items-center gap-3 rounded-2xl bg-white p-4 shadow-2xl">
       <div className="min-w-0 flex-1"><b className="truncate">{selected.name} · {selected.name}</b><p className="truncate text-sm text-slate-500">{selected.crop} {selected.variety} · {selected.area_ha} ha</p></div>
       <Btn onClick={()=>nav(`/lotes/${selected.id}`)}><FileText size={15}/>Ficha</Btn>
-      <Btn onClick={()=>startEdit(selected)}><Pencil size={15}/>Editar</Btn>
       <Btn onClick={()=>setSelected(null)}><X size={15}/></Btn>
     </div>}
 
