@@ -46,6 +46,7 @@ export default function IrrigationTab({lot,data}){
   const lph=(form.emitter_flow_lh||0)*(form.emitters_per_plant||0);
   const lha=lph*densityOf(lot);
   const ltotal=lha*(form.sector_area_ha||lot.area_ha);
+  const lamina=lha?Math.round(lha/10000*10)/10:0;
   const autoEmitters=(form.drip_lines_per_row&&form.emitter_spacing_m&&lot.plant_spacing)?Math.round((lot.plant_spacing/form.emitter_spacing_m)*form.drip_lines_per_row*10)/10:null;
 
   if(!editing && existing){
@@ -67,8 +68,8 @@ export default function IrrigationTab({lot,data}){
           <p className="text-sm text-slate-500">Diseño de riego registrado para este lote.</p>
           <button onClick={()=>setEditing(true)} className="flex items-center gap-2 rounded-xl bg-emerald-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-800"><Pencil size={15}/>Editar diseño</button>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {[['Litros/planta/hora',lph],['Caudal teórico/ha',`${Math.round(lha).toLocaleString()} l/h`],['Caudal total sector',`${Math.round(ltotal).toLocaleString()} l/h`]].map(([a,b])=>(
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[['Litros/planta/hora',lph],['Caudal teórico/ha',`${Math.round(lha).toLocaleString()} l/h`],['Caudal total sector',`${Math.round(ltotal).toLocaleString()} l/h`],['Lámina aplicada',`${lamina} mm/h`]].map(([a,b])=>(
             <div className="rounded-2xl bg-emerald-950 p-5 text-white" key={a}><p className="text-xs text-white/60">{a}</p><b className="text-2xl">{b||'-'}</b></div>
           ))}
         </div>
