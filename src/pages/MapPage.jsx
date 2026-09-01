@@ -18,7 +18,7 @@ export default function MapPage(){
   const [mode,setMode]=useState('view'); // view | draw | edit
   const [draft,setDraft]=useState([]),[selected,setSelected]=useState(null),[editLot,setEditLot]=useState(null),[showForm,setShowForm]=useState(false),[confirmDel,setConfirmDel]=useState(null);
   const ranges=JSON.parse(localStorage.getItem('mapRanges')||'{"low":30000,"high":38000}');
-  const lots=useMemo(()=> (d.Lot||[]).filter(l=>Object.entries(filters).every(([k,v])=>!v||(k==='age'?String(new Date().getFullYear()-l.planting_year)===v:String(l[k])===v))),[d.Lot,filters]);
+  const lots=useMemo(()=> (d.Lot||[]).filter(l=>Object.entries(filters).every(([k,v])=>!v||(k==='age'?String(new Date().getFullYear()-l.planting_year)===v:k==='campaign'?(d.ProductionRecord||[]).some(p=>p.lot_id===l.id&&p.campaign===v):String(l[k])===v))),[d.Lot,d.ProductionRecord,filters]);
   if(d.loading)return <LoadingState/>;
   const lerp=(a,b,t)=>Math.round(a+(b-a)*t),toHex=x=>x.toString(16).padStart(2,'0');
   const gradColor=(mn,mx,v)=>{if(!mx||mx===mn||v==null)return '#eab308';const t=(v-mn)/(mx-mn);const r=t<=.5?lerp(220,234,t*2):lerp(234,22,(t-.5)*2),g=t<=.5?lerp(38,179,t*2):lerp(179,163,(t-.5)*2),b=t<=.5?lerp(38,8,t*2):lerp(8,74,(t-.5)*2);return `#${toHex(r)}${toHex(g)}${toHex(b)}`};
@@ -44,7 +44,7 @@ export default function MapPage(){
       {mode==='edit'&&editLot&&<EditLayer points={draft} setPoints={setDraft}/>}
     </MapContainer>
 
-    {mode==='view' && <div className="absolute left-4 top-4 z-[1000] w-[min(360px,calc(100%-2rem))]"><MapFilters view={view} setView={setView} filters={filters} setFilters={setFilters} lots={d.Lot||[]}/></div>}
+    {mode==='view' && <div className="absolute left-4 top-4 z-[1000] w-[min(360px,calc(100%-2rem))]"><MapFilters view={view} setView={setView} filters={filters} setFilters={setFilters} lots={d.Lot||[]} campaigns={(d.Campaign||[]).map(c=>c.name).sort()}/></div>}
 
     <div className="absolute right-4 top-4 z-[1000] flex gap-2">
       {mode==='view' && <Btn onClick={startDraw} primary><Plus size={16}/>Nuevo lote</Btn>}
