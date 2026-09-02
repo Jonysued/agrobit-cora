@@ -12,7 +12,7 @@ export default function ObjectivesTab({lot,data}){
   const rows=[...(data.Objective||[])].filter(x=>x.lot_id===lot.id).sort((a,b)=>b.campaign.localeCompare(a.campaign));
   const plants=theoreticalPlants(lot);
   const set=(k,v)=>setForm({...form,[k]:v});
-  const setKgHa=v=>{const n=Number(v)||0;setForm({...form,kg_ha:v,estimated_kg_ha:String(n),total_kg:String(Math.round(n*lot.area_ha)),kg_plant:String(Math.round(n*lot.area_ha/plants*100)/100)});};
+  const setKgHa=v=>{const n=Number(v)||0;setForm({...form,kg_ha:v,total_kg:String(Math.round(n*lot.area_ha)),kg_plant:String(Math.round(n*lot.area_ha/plants*100)/100)});};
   const startEdit=o=>{setEditId(o.id);setForm({campaign:o.campaign,kg_ha:String(o.kg_ha??''),estimated_kg_ha:String(o.estimated_kg_ha??''),total_kg:String(o.total_kg??''),kg_plant:String(o.kg_plant??''),category_1_pct:o.category_1_pct!=null?String(o.category_1_pct):'',max_discard_pct:o.max_discard_pct!=null?String(o.max_discard_pct):'',caliber:o.caliber!=null?String(o.caliber):'',brix:o.brix!=null?String(o.brix):'',comments:o.comments||''});};
   const cancelEdit=()=>{setEditId(null);setForm(blank(current));};
   const del=async o=>{await base44.entities.Objective.delete(o.id);await data.refetch();if(editId===o.id)cancelEdit();};
