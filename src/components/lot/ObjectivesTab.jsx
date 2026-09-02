@@ -8,7 +8,9 @@ export default function ObjectivesTab({lot,data}){
   const [form,setForm]=useState({campaign:current,kg_ha:'',estimated_kg_ha:'',total_kg:'',kg_plant:'',category_1_pct:'',max_discard_pct:'',caliber:'',brix:'',comments:''});
   const [busy,setBusy]=useState(false);
   const rows=[...(data.Objective||[])].filter(x=>x.lot_id===lot.id).sort((a,b)=>b.campaign.localeCompare(a.campaign));
+  const plants=theoreticalPlants(lot);
   const set=(k,v)=>setForm({...form,[k]:v});
+  const setKgHa=v=>{const n=Number(v)||0;setForm({...form,kg_ha:v,estimated_kg_ha:String(n),total_kg:String(Math.round(n*lot.area_ha)),kg_plant:String(Math.round(n*lot.area_ha/plants*100)/100)});};
   const add=async e=>{
     e.preventDefault();setBusy(true);
     const plants=theoreticalPlants(lot);
@@ -29,10 +31,10 @@ export default function ObjectivesTab({lot,data}){
     setBusy(false);
   };
 
-  const field=(k,label,type='text',opt=false)=>(
+  const field=(k,label,type='text',opt=false,onChange)=>(
     <div className="grid gap-1.5">
       <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}{opt&&<span className="ml-1 font-normal normal-case text-slate-400">· opcional</span>}</label>
-      <input type={type} value={form[k]??''} onChange={e=>set(k,e.target.value)} required={!opt} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-200"/>
+      <input type={type} value={form[k]??''} onChange={onChange?e=>onChange(e.target.value):e=>set(k,e.target.value)} required={!opt} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-200"/>
     </div>
   );
 
@@ -56,7 +58,7 @@ export default function ObjectivesTab({lot,data}){
 
           <fieldset className="rounded-xl border border-emerald-200 p-4">
             <legend className="px-2 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Rendimiento</legend>
-            <div className="grid grid-cols-2 gap-3">{field('kg_ha','kg/ha objetivo','number')}{field('estimated_kg_ha','kg/ha estimado','number')}</div>
+            <div className="grid grid-cols-2 gap-3">{field('kg_ha','kg/ha objetivo','number',false,setKgHa)}{field('estimated_kg_ha','kg/ha estimado','number')}</div>
             <div className="mt-3 grid grid-cols-2 gap-3">{field('total_kg','Total kg','number',true)}{field('kg_plant','kg/planta','number',true)}</div>
           </fieldset>
 
