@@ -70,11 +70,13 @@ export default function ObjectivesTab({lot,data}){
             <div className="mt-3 grid grid-cols-2 gap-3">{field('total_kg','Total kg','number',true)}{field('kg_plant','kg/planta','number',true)}</div>
           </fieldset>
 
+          {lot.crop!=='Olivos' && (
           <fieldset className="rounded-xl border border-sand p-4">
             <legend className="px-2 text-[11px] font-bold uppercase tracking-wide text-charcoal">Calidad</legend>
             <div className="grid grid-cols-2 gap-3">{field('category_1_pct','Cat. 1 %','number',true)}{field('max_discard_pct','Descarte máx. %','number',true)}</div>
             <div className="mt-3 grid grid-cols-2 gap-3">{field('caliber','Calibre','number',true)}{field('brix','Brix','number',true)}</div>
           </fieldset>
+          )}
 
           <div className="grid gap-1.5">
             <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Comentarios</label>
@@ -105,10 +107,12 @@ export default function ObjectivesTab({lot,data}){
                 {k:'kg/ha estimado',v:o.estimated_kg_ha?.toLocaleString(),pri:true},
                 {k:'Total kg',v:o.total_kg?o.total_kg.toLocaleString():'-'},
                 {k:'kg/planta',v:o.kg_plant?o.kg_plant.toFixed(1):'-'},
-                {k:'Cat. 1',v:o.category_1_pct!=null?`${o.category_1_pct}%`:'-'},
-                {k:'Descarte máx.',v:o.max_discard_pct!=null?`${o.max_discard_pct}%`:'-'},
-                {k:'Calibre',v:o.caliber??'-'},
-                {k:'Brix',v:o.brix??'-'},
+                ...(lot.crop!=='Olivos'?[
+                  {k:'Cat. 1',v:o.category_1_pct!=null?`${o.category_1_pct}%`:'-'},
+                  {k:'Descarte máx.',v:o.max_discard_pct!=null?`${o.max_discard_pct}%`:'-'},
+                  {k:'Calibre',v:o.caliber??'-'},
+                  {k:'Brix',v:o.brix??'-'},
+                ]:[]),
               ];
               return (
                 <article key={o.id} className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${editId===o.id?'ring-2 ring-emerald-700':''}`}>
