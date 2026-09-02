@@ -1,21 +1,25 @@
 import React,{useState} from 'react';
 import { base44 } from '@/api/base44Client';
 import { theoreticalPlants } from '@/lib/farmCalculations';
-import { Target, Plus, TrendingUp } from 'lucide-react';
+import { Target, Plus, TrendingUp, Pencil, Trash2, X } from 'lucide-react';
+
+const blank=campaign=>({campaign,kg_ha:'',estimated_kg_ha:'',total_kg:'',kg_plant:'',category_1_pct:'',max_discard_pct:'',caliber:'',brix:'',comments:''});
 
 export default function ObjectivesTab({lot,data}){
   const current=data.Campaign.find(c=>c.is_current)?.name||data.Campaign[data.Campaign.length-1]?.name||'';
-  const [form,setForm]=useState({campaign:current,kg_ha:'',estimated_kg_ha:'',total_kg:'',kg_plant:'',category_1_pct:'',max_discard_pct:'',caliber:'',brix:'',comments:''});
-  const [busy,setBusy]=useState(false);
+  const [form,setForm]=useState(blank(current));
+  const [busy,setBusy]=useState(false),[editId,setEditId]=useState(null);
   const rows=[...(data.Objective||[])].filter(x=>x.lot_id===lot.id).sort((a,b)=>b.campaign.localeCompare(a.campaign));
   const plants=theoreticalPlants(lot);
   const set=(k,v)=>setForm({...form,[k]:v});
   const setKgHa=v=>{const n=Number(v)||0;setForm({...form,kg_ha:v,estimated_kg_ha:String(n),total_kg:String(Math.round(n*lot.area_ha)),kg_plant:String(Math.round(n*lot.area_ha/plants*100)/100)});};
-  const add=async e=>{
+  const startEdit=o=>{setEditId(o.id);setForm({campaign:o.campaign,kg_ha:String(o.kg_ha??''),estimated_kg_ha:String(o.estimated_kg_ha??''),total_kg:String(o.total_kg??''),kg_plant:String(o.kg_plant??''),category_1_pct:o.category_1_pct!=null?String(o.category_1_pct):'',max_discard_pct:o.max_discard_pct!=null?String(o.max_discard_pct):'',caliber:o.caliber!=null?String(o.caliber):'',brix:o.brix!=null?String(o.brix):'',comments:o.comments||''});};
+  const cancelEdit=()=>{setEditId(null);setForm(blank(current));};
+  const del=async o=>{await base44.entities.Objective.delete(o.id);await data.refetch();if(editId===o.id)cancelEdit();};
+  const submit=async e=>{
     e.preventDefault();setBusy(true);
-    const plants=theoreticalPlants(lot);
     const payload={
-      lot_id:lot.id,campaign:form.campaign,
+      campaign:form.campaign,
       kg_ha:Number(form.kg_ha),estimated_kg_ha:Number(form.estimated_kg_ha),
       total_kg:Number(form.total_kg)||Number(form.kg_ha)*lot.area_ha,
       kg_plant:Number(form.kg_plant)||Number(form.kg_ha)*lot.area_ha/plants,
@@ -25,10 +29,11 @@ export default function ObjectivesTab({lot,data}){
       brix:form.brix?Number(form.brix):undefined,
       comments:form.comments||undefined,
     };
-    await base44.entities.Objective.create(payload);
+    if(editId) await base44.entities.Objective.update(editId,payload);
+    else await base44.entities.Objective.create({lot_id:lot.id,...payload});
     await data.refetch();
-    setForm({...form,kg_ha:'',estimated_kg_ha:'',total_kg:'',kg_plant:'',category_1_pct:'',max_discard_pct:'',caliber:'',brix:'',comments:''});
     setBusy(false);
+    if(editId)cancelEdit();else setForm(blank(form.campaign));
   };
 
   const field=(k,label,type='text',opt=false,onChange)=>(
@@ -41,13 +46,16 @@ export default function ObjectivesTab({lot,data}){
   return (
     <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
       {/* Formulario */}
-      <form onSubmit={add} className="h-fit self-start rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-900 text-white"><Target size={18}/></span>
-          <div>
-            <h2 className="text-base font-bold text-charcoal">Definir objetivo</h2>
-            <p className="text-xs text-slate-500">Meta productiva y de calidad por campaña</p>
+      <form onSubmit={submit} className="h-fit self-start rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-900 text-white"><Target size={18}/></span>
+            <div>
+              <h2 className="text-base font-bold text-charcoal">{editId?'Editar objetivo':'Definir objetivo'}</h2>
+              <p className="text-xs text-slate-500">Meta productiva y de calidad por campaña</p>
+            </div>
           </div>
+          {editId&&<button type="button" onClick={cancelEdit} className="text-slate-400 hover:text-slate-600"><X size={18}/></button>}
         </div>
 
         <div className="mt-5 space-y-4">
@@ -74,7 +82,7 @@ export default function ObjectivesTab({lot,data}){
           </div>
         </div>
 
-        <button disabled={busy} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy?'Guardando…':<><Plus size={16}/>Guardar objetivo</>}</button>
+        <button disabled={busy} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy?'Guardando…':editId?<><Pencil size={16}/>Guardar cambios</>:<><Plus size={16}/>Guardar objetivo</>}</button>
       </form>
 
       {/* Listado */}
@@ -103,7 +111,7 @@ export default function ObjectivesTab({lot,data}){
                 {k:'Brix',v:o.brix??'-'},
               ];
               return (
-                <article key={o.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <article key={o.id} className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${editId===o.id?'ring-2 ring-emerald-700':''}`}>
                   <header className="flex items-center justify-between bg-emerald-950 px-5 py-4 text-white">
                     <div className="flex items-center gap-3">
                       <TrendingUp size={18}/>
@@ -118,6 +126,10 @@ export default function ObjectivesTab({lot,data}){
                         <p className="text-2xl font-bold leading-none">{compl}%</p>
                       </div>
                       <span className={`rounded-full px-3 py-1 text-xs font-bold text-white ${status.cls}`}>{status.label}</span>
+                      <div className="ml-1 flex gap-2">
+                        <button onClick={()=>startEdit(o)} className="text-emerald-200 hover:text-white"><Pencil size={16}/></button>
+                        <button onClick={()=>del(o)} className="text-emerald-200 hover:text-rose-400"><Trash2 size={16}/></button>
+                      </div>
                     </div>
                   </header>
                   <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4">
