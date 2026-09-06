@@ -9,11 +9,21 @@ const blank=()=>({lot_ids:[],days:[],start_time:'06:00',end_time:'',well:'',stat
 const toMin=t=>{const [h,m]=t.split(':').map(Number);return h*60+m;};
 const endDefault=d=>{if(!d?.start_time||d?.duration_min==null)return '';const e=(toMin(d.start_time)+Number(d.duration_min))%1440;return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;};
 
-export default function ProgramForm({lots,edit,onSaved,onCancel}){
+export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
   const [form,setForm]=useState(edit?{
     lot_ids:edit.lot_ids||[],days:edit.days||[],start_time:edit.start_time||'06:00',end_time:endDefault(edit),well:edit.well||'',status:edit.status||'Programado',notes:edit.notes||''
   }:blank());
   const [busy,setBusy]=useState(false);
+  const wellConflict=w=>{
+    if(!w||!form.end_time||!form.days.length)return false;
+    const s=toMin(form.start_time),dur=((toMin(form.end_time)-s)%1440+1440)%1440;
+    if(dur<=0)return false;
+    return (programs||[]).some(p=>p.id!==edit?.id&&p.well===w&&(p.status==='Programado'||p.status==='Activo')
+      &&(p.days||[]).some(day=>form.days.includes(day))
+      &&p.start_time&&p.duration_min
+      &&toMin(p.start_time)<s+dur&&s<toMin(p.start_time)+p.duration_min);
+  };
+  const conflict=wellConflict(form.well);
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const toggleLot=id=>setForm(f=>({...f,lot_ids:f.lot_ids.includes(id)?f.lot_ids.filter(x=>x!==id):[...f.lot_ids,id]}));
   const toggleDay=n=>setForm(f=>({...f,days:f.days.includes(n)?f.days.filter(x=>x!==n):[...f.days,n]}));
@@ -65,8 +75,9 @@ export default function ProgramForm({lots,edit,onSaved,onCancel}){
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Pozo</label>
           <select value={form.well} onChange={e=>set('well',e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500">
             <option value="">Seleccionar…</option>
-            {WELLS.map(w=><option key={w}>{w}</option>)}
+            {WELLS.map(w=><option key={w} disabled={wellConflict(w)}>{wellConflict(w)?`${w} · ocupado`:w}</option>)}
           </select>
+          {conflict&&<p className="text-xs font-semibold text-red-600">{form.well} ya está asignado a otro programa en ese día y horario.</p>}
         </div>
         <div className="grid grid-cols-2 gap-3">{field('start_time','Hora inicio','time')}{field('end_time','Hora fin','time')}</div>
         <div className="grid gap-1.5">
@@ -80,7 +91,7 @@ export default function ProgramForm({lots,edit,onSaved,onCancel}){
           <textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows="2" placeholder="Observaciones del programa…" className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500"/>
         </div>
       </div>
-      <button disabled={busy||!form.days.length||!form.lot_ids.length} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy?'Guardando…':edit?<><Pencil size={16}/>Guardar cambios</>:<><Plus size={16}/>Crear programa</>}</button>
+      <button disabled={busy||conflict||!form.days.length||!form.lot_ids.length} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy?'Guardando…':edit?<><Pencil size={16}/>Guardar cambios</>:<><Plus size={16}/>Crear programa</>}</button>
     </form>
   );
 }

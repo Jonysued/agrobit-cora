@@ -24,7 +24,7 @@ export default function Irrigation(){
       <h1 className="text-3xl font-bold tracking-tight">Riego</h1>
     </div>
     <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-      <ProgramForm key={edit?.id||'new'} lots={lots} designs={designs} edit={edit}
+      <ProgramForm key={edit?.id||'new'} lots={lots} designs={designs} programs={programs} edit={edit}
         onSaved={async()=>{setEdit(null);await d.refetch();}}
         onCancel={()=>setEdit(null)}/>
       <div className="space-y-6">
