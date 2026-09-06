@@ -18,10 +18,16 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
     if(p.id===edit?.id||!(p.status==='Programado'||p.status==='Activo')||!p.start_time||!p.duration_min)return false;
     if(!form.end_time||!form.days.length)return false;
     const s=toMin(form.start_time),dur=((toMin(form.end_time)-s)%1440+1440)%1440;
-    return dur>0&&(p.days||[]).some(day=>form.days.includes(day))&&toMin(p.start_time)<s+dur&&s<toMin(p.start_time)+p.duration_min;
+    const pd=Number(p.duration_min);
+    if(dur<=0||!(pd>0))return false;
+    const formDays=form.days.map(String);
+    return (p.days||[]).some(day=>formDays.includes(String(day)))&&toMin(p.start_time)<s+dur&&s<toMin(p.start_time)+pd;
   };
-  const wellConflict=w=>w&&(programs||[]).some(p=>p.well===w&&busyOverlap(p));
-  const lotConflict=id=>(programs||[]).some(p=>(p.lot_ids||[]).includes(id)&&busyOverlap(p));
+  const busyWell=w=>w&&(programs||[]).find(p=>p.well===w&&busyOverlap(p));
+  const busyLot=id=>(programs||[]).find(p=>(p.lot_ids||[]).includes(id)&&busyOverlap(p));
+  const wellConflict=w=>!!busyWell(w);
+  const lotConflict=id=>!!busyLot(id);
+  const endTime=p=>{const [h,m]=p.start_time.split(':').map(Number);const e=(h*60+m+Number(p.duration_min))%1440;return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;};
   const conflict=wellConflict(form.well)||form.lot_ids.some(lotConflict);
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const toggleLot=id=>setForm(f=>({...f,lot_ids:f.lot_ids.includes(id)?f.lot_ids.filter(x=>x!==id):[...f.lot_ids,id]}));
@@ -56,11 +62,11 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
         <div className="grid gap-1.5">
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Lotes</label>
           <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
-            {lots.map(l=>{const c=lotConflict(l.id);return (
-              <label key={l.id} className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-800 ${c?'cursor-not-allowed opacity-50':'cursor-pointer hover:bg-slate-100'}`}>
-                <input type="checkbox" checked={form.lot_ids.includes(l.id)} disabled={c} onChange={()=>toggleLot(l.id)} className="h-4 w-4 accent-emerald-700"/>
+            {lots.map(l=>{const b=busyLot(l.id),checked=form.lot_ids.includes(l.id);return (
+              <label key={l.id} className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-800 ${b&&!checked?'cursor-not-allowed opacity-50':'cursor-pointer hover:bg-slate-100'}`}>
+                <input type="checkbox" checked={checked} disabled={!!b&&!checked} onChange={()=>toggleLot(l.id)} className="h-4 w-4 accent-emerald-700"/>
                 <span className="font-semibold">{l.name}</span><span className="text-xs text-slate-400">{l.crop}</span>
-                {c&&<span className="ml-auto text-[11px] font-bold text-red-600">ocupado</span>}
+                {b&&<span className="ml-auto text-[11px] font-bold text-red-600">ocupado {b.start_time}–{endTime(b)}</span>}
               </label>
             );})}
           </div>
@@ -76,9 +82,9 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Pozo</label>
           <select value={form.well} onChange={e=>set('well',e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500">
             <option value="">Seleccionar…</option>
-            {WELLS.map(w=><option key={w} disabled={wellConflict(w)}>{wellConflict(w)?`${w} · ocupado`:w}</option>)}
+            {WELLS.map(w=>{const b=busyWell(w);return <option key={w} disabled={!!b} className="text-slate-800">{b?`${w} · ocupado ${b.start_time}–${endTime(b)}`:w}</option>;})}
           </select>
-          {conflict&&<p className="text-xs font-semibold text-red-600">{form.well} ya está asignado a otro programa en ese día y horario.</p>}
+          {conflict&&<p className="text-xs font-semibold text-red-600">{busyWell(form.well)?`${form.well} ya está asignado a otro programa (${busyWell(form.well).start_time}–${endTime(busyWell(form.well))}) en ese día y horario.`:'Hay lotes seleccionados ya asignados a otro programa en ese día y horario.'}</p>}
         </div>
         <div className="grid grid-cols-2 gap-3">{field('start_time','Hora inicio','time')}{field('end_time','Hora fin','time')}</div>
         <div className="grid gap-1.5">
