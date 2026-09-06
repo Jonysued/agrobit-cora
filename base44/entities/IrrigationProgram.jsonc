@@ -17,6 +17,9 @@
     "start_time": {
       "type": "string"
     },
+    "well": {
+      "type": "string"
+    },
     "duration_min": {
       "type": "number"
     },
