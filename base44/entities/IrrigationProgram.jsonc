@@ -1,0 +1,64 @@
+{
+  "name": "IrrigationProgram",
+  "type": "object",
+  "properties": {
+    "lot_id": {
+      "type": "string"
+    },
+    "sector": {
+      "type": "string"
+    },
+    "valve_code": {
+      "type": "string"
+    },
+    "water_source": {
+      "type": "string"
+    },
+    "days": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      }
+    },
+    "start_time": {
+      "type": "string"
+    },
+    "duration_min": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Activo",
+        "Pausado"
+      ],
+      "default": "Activo"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "lot_id",
+    "days",
+    "start_time"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
