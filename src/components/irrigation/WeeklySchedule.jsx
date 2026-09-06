@@ -11,6 +11,7 @@ export default function WeeklySchedule({programs,logs,lots,onToggle}){
   const iso=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
   const logMap={};(logs||[]).forEach(l=>logMap[`${l.program_id}_${l.date}`]=l);
   const lotNames=p=>(p.lot_ids||[]).map(id=>lots.find(l=>l.id===id)?.name).filter(Boolean).join(', ')||'—';
+  const fmt=(t,min)=>{const [h,m]=t.split(':').map(Number);const e=(h*60+m+min)%1440;return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;};
   const active=programs.filter(p=>p.status!=='Pausado');
   const total=active.reduce((a,p)=>a+(p.days||[]).length,0);
   const minutes=active.reduce((a,p)=>a+(p.days||[]).length*(p.duration_min||0),0);
@@ -36,7 +37,7 @@ export default function WeeklySchedule({programs,logs,lots,onToggle}){
                   return (
                     <button key={p.id} onClick={()=>onToggle(p,dt,l)} className={`flex w-full flex-col gap-0.5 rounded-lg border px-2.5 py-2 text-left text-xs transition ${l?'border-emerald-600 bg-emerald-600 text-white':'border-slate-200 bg-white text-slate-700 hover:border-emerald-500'}`}>
                       <b className="flex items-center gap-1">{l&&<Check size={12}/>}{lotNames(p)}</b>
-                      <span className={l?'text-emerald-50':'text-slate-500'}>{p.start_time}{p.duration_min?` · ${p.duration_min}'`:''}</span>
+                      <span className={l?'text-emerald-50':'text-slate-500'}>{p.start_time}{p.duration_min?`–${fmt(p.start_time,p.duration_min)}`:''}</span>
                     </button>
                   );
                 }):<p className="text-xs text-slate-400">Sin riego</p>}
