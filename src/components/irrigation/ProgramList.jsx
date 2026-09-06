@@ -23,7 +23,6 @@ export default function ProgramList({programs,lots,onEdit,onChange}){
             <article key={p.id} className="grid items-center gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-[130px_1fr_auto_auto]">
               <b className="text-emerald-800">{lotName(p.lot_id)}</b>
               <div className="text-sm text-slate-600">
-                <p>{p.sector||'Sin sector'}{p.valve_code?` · Válv. ${p.valve_code}`:''}{p.water_source?` · ${p.water_source}`:''}</p>
                 <p className="text-xs text-slate-400">{p.start_time}{p.duration_min?` · ${p.duration_min} min`:''}{p.notes?` · ${p.notes}`:''}</p>
               </div>
               <div className="flex gap-1">

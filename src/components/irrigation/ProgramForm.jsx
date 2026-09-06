@@ -3,21 +3,22 @@ import { base44 } from '@/api/base44Client';
 import { Droplets, Plus, Pencil, X } from 'lucide-react';
 
 const DAYS=[[1,'L'],[2,'M'],[3,'X'],[4,'J'],[5,'V'],[6,'S'],[0,'D']];
-const blank=()=>({lot_id:'',sector:'',valve_code:'',water_source:'',days:[],start_time:'06:00',duration_min:'',status:'Activo',notes:''});
+const blank=()=>({lot_id:'',days:[],start_time:'06:00',end_time:'',status:'Activo',notes:''});
+const toMin=t=>{const [h,m]=t.split(':').map(Number);return h*60+m;};
+const endDefault=d=>{if(!d?.start_time||d?.duration_min==null)return '';const e=(toMin(d.start_time)+Number(d.duration_min))%1440;return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;};
 
 export default function ProgramForm({lots,designs,edit,onSaved,onCancel}){
   const [form,setForm]=useState(edit?{
-    lot_id:edit.lot_id,sector:edit.sector||'',valve_code:edit.valve_code||'',water_source:edit.water_source||'',
-    days:edit.days||[],start_time:edit.start_time||'06:00',duration_min:edit.duration_min??'',status:edit.status||'Activo',notes:edit.notes||''
+    lot_id:edit.lot_id,days:edit.days||[],start_time:edit.start_time||'06:00',end_time:endDefault(edit),status:edit.status||'Activo',notes:edit.notes||''
   }:blank());
   const [busy,setBusy]=useState(false);
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
-  const pickLot=id=>{const dg=designs.find(x=>x.lot_id===id);setForm(f=>({...f,lot_id:id,
-    sector:dg?.irrigation_sector||f.sector,valve_code:dg?.valve_code||f.valve_code,water_source:dg?.water_source||f.water_source}));};
+  const pickLot=id=>set('lot_id',id);
   const toggleDay=n=>setForm(f=>({...f,days:f.days.includes(n)?f.days.filter(x=>x!==n):[...f.days,n]}));
   const submit=async e=>{
     e.preventDefault();setBusy(true);
-    const payload={...form,duration_min:form.duration_min?Number(form.duration_min):undefined};
+    const mins=form.end_time?((toMin(form.end_time)-toMin(form.start_time))%1440+1440)%1440:undefined;
+    const payload={lot_id:form.lot_id,days:form.days,start_time:form.start_time,duration_min:mins,status:form.status,notes:form.notes};
     if(edit) await base44.entities.IrrigationProgram.update(edit.id,payload);
     else await base44.entities.IrrigationProgram.create(payload);
     setBusy(false);onSaved();
@@ -48,15 +49,13 @@ export default function ProgramForm({lots,designs,edit,onSaved,onCancel}){
             {lots.map(l=><option key={l.id} value={l.id}>{l.name} · {l.crop}</option>)}
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-3">{field('sector','Sector')}{field('valve_code','Válvula','text',true)}</div>
-        {field('water_source','Fuente de agua','text',true)}
         <div className="grid gap-1.5">
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Días de riego</label>
           <div className="grid grid-cols-7 gap-1">
             {DAYS.map(([n,label])=><button type="button" key={n} onClick={()=>toggleDay(n)} className={`rounded-lg border py-2 text-xs font-bold transition ${form.days.includes(n)?'border-emerald-700 bg-emerald-900 text-white':'border-slate-200 bg-slate-50 text-slate-600 hover:border-emerald-400'}`}>{label}</button>)}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">{field('start_time','Hora inicio','time')}{field('duration_min','Duración (min)','number',true)}</div>
+        <div className="grid grid-cols-2 gap-3">{field('start_time','Hora inicio','time')}{field('end_time','Hora fin','time')}</div>
         <div className="grid gap-1.5">
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Estado</label>
           <select value={form.status} onChange={e=>set('status',e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500">
