@@ -29,7 +29,9 @@ export default function ProgramList({programs,lots,onEdit,onChange}){
                 {DAY_ORDER.map(n=><span key={n} className={`grid h-6 w-6 place-items-center rounded-md text-[11px] font-bold ${(p.days||[]).includes(n)?'bg-emerald-900 text-white':'bg-slate-100 text-slate-400'}`}>{DAY_LABEL[n]}</span>)}
               </div>
               <div className="flex items-center gap-1.5">
-                <button onClick={()=>toggleStatus(p)} className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${p.status==='Pausado'?'bg-slate-200 text-slate-600':'bg-emerald-100 text-emerald-800'}`}>{p.status==='Pausado'?<Play size={12}/>:<Pause size={12}/>}{p.status==='Pausado'?'Reanudar':'Pausar'}</button>
+                {p.status==='Activo'||p.status==='Pausado'?
+                  <button onClick={()=>toggleStatus(p)} className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${p.status==='Pausado'?'bg-slate-200 text-slate-600':'bg-emerald-100 text-emerald-800'}`}>{p.status==='Pausado'?<Play size={12}/>:<Pause size={12}/>}{p.status==='Pausado'?'Reanudar':'Pausar'}</button>
+                :<span className={`rounded-full px-3 py-1.5 text-xs font-bold ${p.status==='Programado'?'bg-amber-100 text-amber-800':'bg-slate-100 text-slate-500'}`}>{p.status}</span>}
                 <button onClick={()=>onEdit(p)} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"><Pencil size={15}/></button>
                 <button onClick={()=>del(p)} className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600"><Trash2 size={15}/></button>
               </div>

@@ -3,13 +3,14 @@ import { base44 } from '@/api/base44Client';
 import { Droplets, Plus, Pencil, X } from 'lucide-react';
 
 const DAYS=[[1,'L'],[2,'M'],[3,'X'],[4,'J'],[5,'V'],[6,'S'],[0,'D']];
-const blank=()=>({lot_id:'',days:[],start_time:'06:00',end_time:'',status:'Activo',notes:''});
+const STATUSES=['Programado','Activo','Pausado','Finalizado'];
+const blank=()=>({lot_id:'',days:[],start_time:'06:00',end_time:'',status:'Programado',notes:''});
 const toMin=t=>{const [h,m]=t.split(':').map(Number);return h*60+m;};
 const endDefault=d=>{if(!d?.start_time||d?.duration_min==null)return '';const e=(toMin(d.start_time)+Number(d.duration_min))%1440;return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;};
 
 export default function ProgramForm({lots,designs,edit,onSaved,onCancel}){
   const [form,setForm]=useState(edit?{
-    lot_id:edit.lot_id,days:edit.days||[],start_time:edit.start_time||'06:00',end_time:endDefault(edit),status:edit.status||'Activo',notes:edit.notes||''
+    lot_id:edit.lot_id,days:edit.days||[],start_time:edit.start_time||'06:00',end_time:endDefault(edit),status:edit.status||'Programado',notes:edit.notes||''
   }:blank());
   const [busy,setBusy]=useState(false);
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
@@ -59,7 +60,7 @@ export default function ProgramForm({lots,designs,edit,onSaved,onCancel}){
         <div className="grid gap-1.5">
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Estado</label>
           <select value={form.status} onChange={e=>set('status',e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500">
-            <option>Activo</option><option>Pausado</option>
+            {STATUSES.map(s=><option key={s}>{s}</option>)}
           </select>
         </div>
         <div className="grid gap-1.5">
