@@ -6,7 +6,7 @@ const DAY_ORDER=[1,2,3,4,5,6,0];
 const DAY_LABEL={1:'L',2:'M',3:'X',4:'J',5:'V',6:'S',0:'D'};
 
 export default function ProgramList({programs,lots,onEdit,onChange}){
-  const lotName=id=>lots.find(l=>l.id===id)?.name||'—';
+  const lotNames=p=>(p.lot_ids||[]).map(id=>lots.find(l=>l.id===id)?.name).filter(Boolean).join(', ')||'—';
   const toggleStatus=async p=>{await base44.entities.IrrigationProgram.update(p.id,{status:p.status==='Pausado'?'Activo':'Pausado'});onChange();};
   const del=async p=>{await base44.entities.IrrigationProgram.delete(p.id);await base44.entities.IrrigationLog.deleteMany({program_id:p.id});onChange();};
   return (
@@ -21,7 +21,7 @@ export default function ProgramList({programs,lots,onEdit,onChange}){
         <div className="space-y-3">
           {programs.map(p=>(
             <article key={p.id} className="grid items-center gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-[130px_1fr_auto_auto]">
-              <b className="text-emerald-800">{lotName(p.lot_id)}</b>
+              <b className="text-emerald-800">{lotNames(p)}</b>
               <div className="text-sm text-slate-600">
                 <p className="text-xs text-slate-400">{p.start_time}{p.duration_min?` · ${p.duration_min} min`:''}{p.notes?` · ${p.notes}`:''}</p>
               </div>

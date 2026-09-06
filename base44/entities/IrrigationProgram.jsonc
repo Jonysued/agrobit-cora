@@ -2,8 +2,11 @@
   "name": "IrrigationProgram",
   "type": "object",
   "properties": {
-    "lot_id": {
-      "type": "string"
+    "lot_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "days": {
       "type": "array",
@@ -32,7 +35,7 @@
     }
   },
   "required": [
-    "lot_id",
+    "lot_ids",
     "days",
     "start_time"
   ],
