@@ -4,6 +4,7 @@ import { Droplets, Plus, Pencil, X } from 'lucide-react';
 
 const DAYS=[[1,'L'],[2,'M'],[3,'X'],[4,'J'],[5,'V'],[6,'S'],[0,'D']];
 const STATUSES=['Programado','Activo','Pausado','Finalizado'];
+const WELLS=['Pozo 1','Pozo 2','Pozo 3','Pozo 4','Pozo 5','Pozo 6','Pozo 7','Glonet 1','Glonet 2'];
 const blank=()=>({lot_ids:[],days:[],start_time:'06:00',end_time:'',well:'',status:'Programado',notes:''});
 const toMin=t=>{const [h,m]=t.split(':').map(Number);return h*60+m;};
 const endDefault=d=>{if(!d?.start_time||d?.duration_min==null)return '';const e=(toMin(d.start_time)+Number(d.duration_min))%1440;return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;};
@@ -60,7 +61,13 @@ export default function ProgramForm({lots,edit,onSaved,onCancel}){
             {DAYS.map(([n,label])=><button type="button" key={n} onClick={()=>toggleDay(n)} className={`rounded-lg border py-2 text-xs font-bold transition ${form.days.includes(n)?'border-emerald-700 bg-emerald-900 text-white':'border-slate-200 bg-slate-50 text-slate-600 hover:border-emerald-400'}`}>{label}</button>)}
           </div>
         </div>
-        {field('well','Pozo','text',true)}
+        <div className="grid gap-1.5">
+          <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Pozo</label>
+          <select value={form.well} onChange={e=>set('well',e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500">
+            <option value="">Seleccionar…</option>
+            {WELLS.map(w=><option key={w}>{w}</option>)}
+          </select>
+        </div>
         <div className="grid grid-cols-2 gap-3">{field('start_time','Hora inicio','time')}{field('end_time','Hora fin','time')}</div>
         <div className="grid gap-1.5">
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Estado</label>
