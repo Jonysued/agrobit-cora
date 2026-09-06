@@ -14,16 +14,15 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
     lot_ids:edit.lot_ids||[],days:edit.days||[],start_time:edit.start_time||'06:00',end_time:endDefault(edit),well:edit.well||'',status:edit.status||'Programado',notes:edit.notes||''
   }:blank());
   const [busy,setBusy]=useState(false);
-  const wellConflict=w=>{
-    if(!w||!form.end_time||!form.days.length)return false;
+  const busyOverlap=p=>{
+    if(p.id===edit?.id||!(p.status==='Programado'||p.status==='Activo')||!p.start_time||!p.duration_min)return false;
+    if(!form.end_time||!form.days.length)return false;
     const s=toMin(form.start_time),dur=((toMin(form.end_time)-s)%1440+1440)%1440;
-    if(dur<=0)return false;
-    return (programs||[]).some(p=>p.id!==edit?.id&&p.well===w&&(p.status==='Programado'||p.status==='Activo')
-      &&(p.days||[]).some(day=>form.days.includes(day))
-      &&p.start_time&&p.duration_min
-      &&toMin(p.start_time)<s+dur&&s<toMin(p.start_time)+p.duration_min);
+    return dur>0&&(p.days||[]).some(day=>form.days.includes(day))&&toMin(p.start_time)<s+dur&&s<toMin(p.start_time)+p.duration_min;
   };
-  const conflict=wellConflict(form.well);
+  const wellConflict=w=>w&&(programs||[]).some(p=>p.well===w&&busyOverlap(p));
+  const lotConflict=id=>(programs||[]).some(p=>(p.lot_ids||[]).includes(id)&&busyOverlap(p));
+  const conflict=wellConflict(form.well)||form.lot_ids.some(lotConflict);
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const toggleLot=id=>setForm(f=>({...f,lot_ids:f.lot_ids.includes(id)?f.lot_ids.filter(x=>x!==id):[...f.lot_ids,id]}));
   const toggleDay=n=>setForm(f=>({...f,days:f.days.includes(n)?f.days.filter(x=>x!==n):[...f.days,n]}));
@@ -57,13 +56,15 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
         <div className="grid gap-1.5">
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Lotes</label>
           <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
-            {lots.map(l=>(
-              <label key={l.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-800 hover:bg-slate-100">
-                <input type="checkbox" checked={form.lot_ids.includes(l.id)} onChange={()=>toggleLot(l.id)} className="h-4 w-4 accent-emerald-700"/>
+            {lots.map(l=>{const c=lotConflict(l.id);return (
+              <label key={l.id} className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-800 ${c?'cursor-not-allowed opacity-50':'cursor-pointer hover:bg-slate-100'}`}>
+                <input type="checkbox" checked={form.lot_ids.includes(l.id)} disabled={c} onChange={()=>toggleLot(l.id)} className="h-4 w-4 accent-emerald-700"/>
                 <span className="font-semibold">{l.name}</span><span className="text-xs text-slate-400">{l.crop}</span>
+                {c&&<span className="ml-auto text-[11px] font-bold text-red-600">ocupado</span>}
               </label>
-            ))}
+            );})}
           </div>
+          {form.lot_ids.some(lotConflict)&&<p className="text-xs font-semibold text-red-600">Hay lotes seleccionados ya asignados a otro programa en ese día y horario.</p>}
         </div>
         <div className="grid gap-1.5">
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Días de riego</label>
