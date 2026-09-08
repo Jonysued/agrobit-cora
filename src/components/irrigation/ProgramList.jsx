@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { Pencil, Trash2, Pause, Play, Droplets } from 'lucide-react';
 
 const fmtDate=s=>s?new Date(`${s}T00:00:00`).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}):'—';
+const fmtRange=p=>{if(!p.start_time)return '—';if(!p.duration_min)return p.start_time;const [h,m]=p.start_time.split(':').map(Number);const e=(h*60+m+p.duration_min)%1440;return `${p.start_time} – ${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;};
 
 export default function ProgramList({programs,lots,onEdit,onChange}){
   const lotNames=p=>(p.lot_ids||[]).map(id=>lots.find(l=>l.id===id)?.name).filter(Boolean).join(', ')||'—';
@@ -22,7 +23,8 @@ export default function ProgramList({programs,lots,onEdit,onChange}){
             <article key={p.id} className="grid items-center gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-[130px_1fr_auto_auto]">
               <b className="text-emerald-800">{lotNames(p)}</b>
               <div className="text-sm text-slate-600">
-                <p className="text-xs text-slate-400">{p.start_time}{p.duration_min?` · ${p.duration_min} min`:''}{p.notes?` · ${p.notes}`:''}</p>
+                <p className="font-semibold text-slate-700">{fmtRange(p)}</p>
+                <p className="text-xs text-slate-400">{p.duration_min?`${p.duration_min} min`:''}{p.notes?` · ${p.notes}`:''}</p>
               </div>
               <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-center text-xs font-bold text-slate-600">{fmtDate(p.date)}</span>
               <div className="flex items-center gap-1.5">
