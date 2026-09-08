@@ -67,7 +67,7 @@ export default function IrrigationTab({lot,data}){
           <button onClick={()=>setEditing(true)} className="flex items-center gap-2 rounded-xl bg-emerald-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-800"><Pencil size={15}/>Editar diseño</button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[['Litros/planta/hora',lph],['Caudal teórico/ha',`${Math.round(lha).toLocaleString()} l/h`],['Caudal total sector',`${Math.round(ltotal).toLocaleString()} l/h`],['Lámina aplicada',`${lamina} mm/h`]].map(([a,b])=>(
+          {[['Litros/planta/hora',lph?lph.toFixed(2):lph],['Caudal teórico/ha',`${Math.round(lha).toLocaleString()} l/h`],['Caudal total sector',`${Math.round(ltotal).toLocaleString()} l/h`],['Lámina aplicada',`${lamina} mm/h`]].map(([a,b])=>(
             <div className="rounded-2xl bg-emerald-950 p-5 text-white" key={a}><p className="text-xs text-white/60">{a}</p><b className="text-2xl">{b||'-'}</b></div>
           ))}
         </div>
