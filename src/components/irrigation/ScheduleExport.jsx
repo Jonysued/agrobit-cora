@@ -58,15 +58,6 @@ export default function ScheduleExport({programs,logs,lots}){
     ],calRows):38;
     if(!monthProgs.length){doc.setFontSize(10);doc.setTextColor(130);doc.text('Sin programas configurados para este mes.',12,40);}
 
-    const detailRows=monthProgs.map(p=>[fmtDate(p.date),fmtRange(p),p.duration_min?`${p.duration_min} min`:'—',p.well||'—',p.status||'—',p.notes||'—']);
-    if(detailRows.length){
-      if(y+30>280){doc.addPage('a4','landscape');y=20;}
-      y+=12;doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(...EMERALD);
-      doc.text('Detalle de programas configurados',12,y);y+=3;
-      y=drawTable(y+4,[
-        {t:'Fecha',w:26},{t:'Horario',w:32},{t:'Duración',w:24},{t:'Pozo',w:26},{t:'Estado',w:24},{t:'Notas',w:141}
-      ],detailRows);
-    }
     doc.save(`cronograma-riego-${mm}-${year}.pdf`);
     setBusy(false);setOpen(false);
   };
