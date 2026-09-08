@@ -29,7 +29,7 @@ export default function Irrigation(){
         onCancel={()=>setEdit(null)}/>
       <div className="space-y-6">
         <MonthlySchedule programs={programs} logs={d.IrrigationLog||[]} lots={lots} onToggle={toggle}/>
-        <ProgramList programs={programs} lots={lots} onEdit={setEdit} onChange={d.refetch}/>
+        <ProgramList programs={programs} lots={lots} onEdit={p=>{setEdit(p);window.scrollTo({top:0,behavior:'smooth'});}} onChange={d.refetch}/>
       </div>
     </div>
   </div>;
