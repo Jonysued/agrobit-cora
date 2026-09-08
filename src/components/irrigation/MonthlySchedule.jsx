@@ -1,5 +1,6 @@
 import React,{useState} from 'react';
 import { Check, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import ScheduleExport from '@/components/irrigation/ScheduleExport';
 
 const DAY_NAMES=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 const JS_DAYS=[1,2,3,4,5,6,0];
@@ -31,6 +32,7 @@ export default function MonthlySchedule({programs,logs,lots,onToggle}){
           <button onClick={()=>setOffset(o=>o-1)} className="rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:border-emerald-500 hover:text-emerald-700"><ChevronLeft size={15}/></button>
           <b className="w-40 text-center text-sm capitalize">{MONTHS[view.getMonth()]} {view.getFullYear()}</b>
           <button onClick={()=>setOffset(o=>o+1)} className="rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:border-emerald-500 hover:text-emerald-700"><ChevronRight size={15}/></button>
+          <ScheduleExport programs={programs} logs={logs} lots={lots}/>
         </div>
       </div>
       <div className="mb-1 grid grid-cols-7 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">
