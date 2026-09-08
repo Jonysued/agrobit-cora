@@ -4,7 +4,7 @@ import { base44 } from '@/api/base44Client';
 import LoadingState from '@/components/LoadingState';
 import ProgramForm from '@/components/irrigation/ProgramForm';
 import ProgramList from '@/components/irrigation/ProgramList';
-import WeeklySchedule from '@/components/irrigation/WeeklySchedule';
+import MonthlySchedule from '@/components/irrigation/MonthlySchedule';
 
 export default function Irrigation(){
   const d=useFarm();
@@ -28,7 +28,7 @@ export default function Irrigation(){
         onSaved={async()=>{setEdit(null);await d.refetch();}}
         onCancel={()=>setEdit(null)}/>
       <div className="space-y-6">
-        <WeeklySchedule programs={programs} logs={d.IrrigationLog||[]} lots={lots} onToggle={toggle}/>
+        <MonthlySchedule programs={programs} logs={d.IrrigationLog||[]} lots={lots} onToggle={toggle}/>
         <ProgramList programs={programs} lots={lots} onEdit={setEdit} onChange={d.refetch}/>
       </div>
     </div>
