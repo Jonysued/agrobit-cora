@@ -8,11 +8,9 @@
         "type": "string"
       }
     },
-    "days": {
-      "type": "array",
-      "items": {
-        "type": "integer"
-      }
+    "date": {
+      "type": "string",
+      "format": "date"
     },
     "start_time": {
       "type": "string"
@@ -39,7 +37,7 @@
   },
   "required": [
     "lot_ids",
-    "days",
+    "date",
     "start_time"
   ],
   "rls": {

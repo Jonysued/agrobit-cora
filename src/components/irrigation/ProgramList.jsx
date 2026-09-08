@@ -2,8 +2,7 @@ import React from 'react';
 import { base44 } from '@/api/base44Client';
 import { Pencil, Trash2, Pause, Play, Droplets } from 'lucide-react';
 
-const DAY_ORDER=[1,2,3,4,5,6,0];
-const DAY_LABEL={1:'L',2:'M',3:'X',4:'J',5:'V',6:'S',0:'D'};
+const fmtDate=s=>s?new Date(`${s}T00:00:00`).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}):'—';
 
 export default function ProgramList({programs,lots,onEdit,onChange}){
   const lotNames=p=>(p.lot_ids||[]).map(id=>lots.find(l=>l.id===id)?.name).filter(Boolean).join(', ')||'—';
@@ -25,9 +24,7 @@ export default function ProgramList({programs,lots,onEdit,onChange}){
               <div className="text-sm text-slate-600">
                 <p className="text-xs text-slate-400">{p.start_time}{p.duration_min?` · ${p.duration_min} min`:''}{p.notes?` · ${p.notes}`:''}</p>
               </div>
-              <div className="flex gap-1">
-                {DAY_ORDER.map(n=><span key={n} className={`grid h-6 w-6 place-items-center rounded-md text-[11px] font-bold ${(p.days||[]).includes(n)?'bg-emerald-900 text-white':'bg-slate-100 text-slate-400'}`}>{DAY_LABEL[n]}</span>)}
-              </div>
+              <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-center text-xs font-bold text-slate-600">{fmtDate(p.date)}</span>
               <div className="flex items-center gap-1.5">
                 {p.status==='Activo'||p.status==='Pausado'?
                   <button onClick={()=>toggleStatus(p)} className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${p.status==='Pausado'?'bg-slate-200 text-slate-600':'bg-emerald-100 text-emerald-800'}`}>{p.status==='Pausado'?<Play size={12}/>:<Pause size={12}/>}{p.status==='Pausado'?'Reanudar':'Pausar'}</button>

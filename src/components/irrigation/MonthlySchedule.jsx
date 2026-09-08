@@ -14,14 +14,14 @@ export default function MonthlySchedule({programs,logs,lots,onToggle}){
   const lotNames=p=>(p.lot_ids||[]).map(id=>lots.find(l=>l.id===id)?.name).filter(Boolean).join(', ')||'—';
   const fmt=(t,min)=>{const [h,m]=t.split(':').map(Number);const e=(h*60+m+min)%1440;return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;};
   const active=programs.filter(p=>p.status!=='Pausado');
-  const eventsFor=d=>active.filter(p=>(p.days||[]).includes(d));
+  const eventsFor=dt=>active.filter(p=>p.date===iso(dt));
   // celdas del mes: lunes primero
   const first=new Date(view);const lead=(first.getDay()+6)%7;
   const daysInMonth=new Date(view.getFullYear(),view.getMonth()+1,0).getDate();
   const cells=[...Array(lead)].map(()=>null).concat([...Array(daysInMonth)].map((_,i)=>new Date(view.getFullYear(),view.getMonth(),i+1)));
   while(cells.length%7)cells.push(null);
-  const monthEvents=cells.reduce((a,dt)=>dt?a+eventsFor(dt.getDay()).length:a,0);
-  const monthMinutes=cells.reduce((a,dt)=>dt?a+eventsFor(dt.getDay()).reduce((x,p)=>x+(p.duration_min||0),0):a,0);
+  const monthEvents=cells.reduce((a,dt)=>dt?a+eventsFor(dt).length:a,0);
+  const monthMinutes=cells.reduce((a,dt)=>dt?a+eventsFor(dt).reduce((x,p)=>x+(p.duration_min||0),0):a,0);
   return (
     <section className="rounded-2xl border bg-white p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -40,7 +40,7 @@ export default function MonthlySchedule({programs,logs,lots,onToggle}){
         {cells.map((dt,i)=>{
           if(!dt)return <div key={i} className="min-h-[90px] rounded-xl bg-slate-50/60"/>;
           const isToday=dt.getTime()===today.getTime(),isPast=dt<today;
-          const items=eventsFor(dt.getDay());
+          const items=eventsFor(dt);
           return (
             <div key={i} className={`min-h-[90px] rounded-xl border p-2 ${isToday?'border-emerald-600 bg-emerald-50/50':isPast?'border-slate-100 bg-slate-50':'border-slate-200 bg-white'}`}>
               <div className="mb-1.5 flex items-baseline justify-between">
