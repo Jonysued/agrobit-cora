@@ -17,6 +17,10 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
     lot_ids:edit.lot_ids||[],date:toDate(edit.date),start_time:edit.start_time||'06:00',end_time:endDefault(edit),well:edit.well||'',status:edit.status||'Programado',notes:edit.notes||''
   }:blank());
   const [busy,setBusy]=useState(false);
+  const [crop,setCrop]=useState(''),[variety,setVariety]=useState('');
+  const crops=[...new Set(lots.map(l=>l.crop).filter(Boolean))].sort();
+  const varieties=[...new Set(lots.filter(l=>!crop||l.crop===crop).map(l=>l.variety).filter(Boolean))].sort();
+  const shownLots=lots.filter(l=>(!crop||l.crop===crop)&&(!variety||l.variety===variety));
   const busyOverlap=p=>{
     if(p.id===edit?.id||!(p.status==='Programado'||p.status==='Activo')||!p.start_time||!p.duration_min||!p.date)return false;
     if(!form.end_time||!form.date)return false;
@@ -62,11 +66,22 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
       <div className="mt-5 space-y-4">
         <div className="grid gap-1.5">
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Lotes</label>
+          <div className="mb-2 grid grid-cols-2 gap-2">
+            <select value={crop} onChange={e=>{setCrop(e.target.value);setVariety('');}} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-emerald-500">
+              <option value="">Cultivo: todos</option>
+              {crops.map(c=><option key={c}>{c}</option>)}
+            </select>
+            <select value={variety} onChange={e=>setVariety(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-emerald-500">
+              <option value="">Variedad: todas</option>
+              {varieties.map(v=><option key={v}>{v}</option>)}
+            </select>
+          </div>
           <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
-            {lots.map(l=>{const b=busyLot(l.id),checked=form.lot_ids.includes(l.id);return (
+            {shownLots.length===0&&<p className="px-2 py-1.5 text-xs text-slate-400">No hay lotes con ese filtro.</p>}
+            {shownLots.map(l=>{const b=busyLot(l.id),checked=form.lot_ids.includes(l.id);return (
               <label key={l.id} className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-800 ${b&&!checked?'cursor-not-allowed opacity-50':'cursor-pointer hover:bg-slate-100'}`}>
                 <input type="checkbox" checked={checked} disabled={!!b&&!checked} onChange={()=>toggleLot(l.id)} className="h-4 w-4 accent-emerald-700"/>
-                <span className="font-semibold">{l.name}</span><span className="text-xs text-slate-400">{l.crop}</span>
+                <span className="font-semibold">{l.name}</span><span className="text-xs text-slate-400">{[l.crop,l.variety].filter(Boolean).join(' · ')}</span>
                 {b&&<span className="ml-auto text-[11px] font-bold text-red-600">ocupado {b.start_time}–{endTime(b)}</span>}
               </label>
             );})}
