@@ -2,32 +2,33 @@ import React,{useState} from 'react';
 import { base44 } from '@/api/base44Client';
 import { Droplets, Plus, Pencil, X } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
-import { WELL_TURNOS } from '@/lib/irrigationTurnos';
+import { WELL_TURNOS, PORTION_LABELS, factorOf } from '@/lib/irrigationTurnos';
 import { es } from 'date-fns/locale';
 
 const STATUSES=['Programado','Activo','Pausado','Finalizado'];
 const WELLS=['Pozo 1','Pozo 2','Pozo 3','Pozo 4','Pozo 5','Pozo 6','Pozo 7','Glonet 1','Glonet 2'];
 const isoDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const toDate=s=>s?new Date(`${s}T00:00:00`):null;
-const blank=()=>({date:null,start_time:'06:00',end_time:'',well:'',turno:'',status:'Programado',notes:''});
+const blank=()=>({date:null,start_time:'06:00',end_time:'',well:'',turno:'',mm:'',status:'Programado',notes:''});
 const toMin=t=>{const [h,m]=t.split(':').map(Number);return h*60+m;};
 const endDefault=d=>{if(!d?.start_time||d?.duration_min==null)return '';const e=(toMin(d.start_time)+Number(d.duration_min))%1440;return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;};
 
 export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
   const [form,setForm]=useState(edit?{
-    date:toDate(edit.date),start_time:edit.start_time||'06:00',end_time:endDefault(edit),well:edit.well||'',turno:edit.turno||'',status:edit.status||'Programado',notes:edit.notes||''
+    date:toDate(edit.date),start_time:edit.start_time||'06:00',end_time:endDefault(edit),well:edit.well||'',turno:edit.turno||'',mm:edit.mm??'',status:edit.status||'Programado',notes:edit.notes||''
   }:blank());
   const [busy,setBusy]=useState(false);
   const turnos=WELL_TURNOS[form.well]||[];
   const selectedTurno=turnos.find(t=>t.value===form.turno);
-  const resolveLot=codes=>codes.map(code=>{
+  const resolveLot=code=>{
     const k=code.toLowerCase().trim();
     return lots.find(l=>(l.name||'').toLowerCase().trim()===k)||lots.find(l=>{
       const n=(l.name||'').toLowerCase().trim();
       return n.startsWith(k+' ')||n.startsWith(k+'-');
     });
-  }).filter(Boolean);
-  const assignedLots=selectedTurno?resolveLot(selectedTurno.lotCodes):[];
+  };
+  const items=selectedTurno?selectedTurno.lots.map(({lot,portion})=>({code:lot,portion,lotRec:resolveLot(lot)})):[];
+  const mmNum=Number(form.mm)||0;
   const busyOverlap=p=>{
     if(p.id===edit?.id||!(p.status==='Programado'||p.status==='Activo')||!p.start_time||!p.duration_min||!p.date)return false;
     if(!form.end_time||!form.date||p.well!==form.well)return false;
@@ -43,15 +44,17 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
   const submit=async e=>{
     e.preventDefault();setBusy(true);
     const mins=form.end_time?((toMin(form.end_time)-toMin(form.start_time))%1440+1440)%1440:undefined;
-    const payload={lot_ids:assignedLots.map(l=>l.id),date:isoDate(form.date),start_time:form.start_time,duration_min:mins,well:form.well,turno:form.turno||undefined,status:form.status,notes:form.notes};
+    const itemsOut=selectedTurno?items.map(({code,portion,lotRec})=>({lot_id:lotRec?.id||null,lot_name:code,portion:PORTION_LABELS[portion],factor:factorOf(portion)})):(edit?.items||[]);
+    const lotIds=selectedTurno?[...new Set(itemsOut.map(i=>i.lot_id).filter(Boolean))]:[...(edit?.lot_ids||[])];
+    const payload={lot_ids:lotIds,items:itemsOut,mm:mmNum||undefined,date:isoDate(form.date),start_time:form.start_time,duration_min:mins,well:form.well,turno:form.turno||undefined,status:form.status,notes:form.notes};
     if(edit) await base44.entities.IrrigationProgram.update(edit.id,payload);
     else await base44.entities.IrrigationProgram.create(payload);
     setBusy(false);onSaved();
   };
-  const field=(k,label,type='text',opt=false)=>(
+  const field=(k,label,type='text')=>(
     <div className="grid gap-1.5">
-      <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}{opt&&<span className="ml-1 font-normal normal-case text-slate-400">· opcional</span>}</label>
-      <input type={type} value={form[k]??''} onChange={e=>set(k,e.target.value)} required={!opt} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-200"/>
+      <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}</label>
+      <input type={type} value={form[k]??''} onChange={e=>set(k,e.target.value)} required className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-200"/>
     </div>
   );
   return (
@@ -61,7 +64,7 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-900 text-white"><Droplets size={18}/></span>
           <div>
             <h2 className="text-base font-bold text-charcoal">{edit?'Editar programa':'Programar riego'}</h2>
-            <p className="text-xs text-slate-500">Elegí pozo, turno, fecha y horario</p>
+            <p className="text-xs text-slate-500">Elegí pozo y turno; cargá mm, fecha y horario</p>
           </div>
         </div>
         {edit&&<button type="button" onClick={onCancel} className="text-slate-400 hover:text-slate-600"><X size={18}/></button>}
@@ -80,15 +83,32 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
             <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Turno</label>
             <select value={form.turno} onChange={e=>set('turno',e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500">
               <option value="">Seleccionar turno…</option>
-              {turnos.map(t=><option key={t.value} value={t.value}>{t.value} — {t.detail}</option>)}
+              {turnos.map(t=><option key={t.value} value={t.value}>{t.value}</option>)}
             </select>
           </div>
         )}
         {selectedTurno&&(
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Lotes del turno</p>
-            <p className="mt-1 text-sm text-slate-700">{assignedLots.length?assignedLots.map(l=>l.name).join(' · '):selectedTurno.detail}</p>
-            {!assignedLots.length&&<p className="mt-1 text-[11px] text-slate-400">No se encontraron lotes con estos nombres; se guardará solo el turno.</p>}
+            <ul className="mt-2 space-y-1.5">
+              {items.map((it,i)=>(
+                <li key={i} className="flex items-center justify-between gap-2 text-sm">
+                  <span className={it.lotRec?'text-slate-700':'text-slate-400'}>{it.code}{!it.lotRec&&' · sin lote registrado'}</span>
+                  <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">{PORTION_LABELS[it.portion]}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3 grid gap-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Lámina del programa (mm)</label>
+              <input type="number" step="0.1" min="0" value={form.mm} onChange={e=>set('mm',e.target.value)} placeholder="20" className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-200"/>
+            </div>
+            {mmNum>0&&(
+              <div className="mt-2 space-y-1 rounded-lg border border-emerald-100 bg-emerald-50 p-2.5">
+                {items.map((it,i)=>{const f=factorOf(it.portion);return(
+                  <p key={i} className="text-xs text-emerald-900">Se regará {it.code}{it.portion?` ${PORTION_LABELS[it.portion]}`:''}. Al lote {it.code} se le cargarán {(mmNum*f).toFixed(1)} mm ({Math.round(f*100)}% de {mmNum} mm).</p>
+                );})}
+              </div>
+            )}
           </div>
         )}
         <div className="grid gap-1.5">
@@ -107,7 +127,7 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
           <textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows="2" placeholder="Observaciones del programa…" className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500"/>
         </div>
       </div>
-      <button disabled={busy||conflict||!form.date||!form.well||(turnos.length>0&&!form.turno)} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy?'Guardando…':edit?<><Pencil size={16}/>Guardar cambios</>:<><Plus size={16}/>Crear programa</>}</button>
+      <button disabled={busy||conflict||!form.date||!form.well||(turnos.length>0&&!form.turno)||(selectedTurno&&!(mmNum>0))} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy?'Guardando…':edit?<><Pencil size={16}/>Guardar cambios</>:<><Plus size={16}/>Crear programa</>}</button>
     </form>
   );
 }

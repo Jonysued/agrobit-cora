@@ -8,6 +8,36 @@
         "type": "string"
       }
     },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "lot_id": {
+            "type": "string"
+          },
+          "lot_name": {
+            "type": "string"
+          },
+          "portion": {
+            "type": "string",
+            "enum": [
+              "Completo",
+              "Norte",
+              "Sur",
+              "Este",
+              "Oeste"
+            ]
+          },
+          "factor": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "mm": {
+      "type": "number"
+    },
     "date": {
       "type": "string",
       "format": "date"
