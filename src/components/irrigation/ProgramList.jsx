@@ -21,12 +21,12 @@ export default function ProgramList({programs,lots,onEdit,onChange}){
         <div className="space-y-3">
           {programs.map(p=>(
             <article key={p.id} className="grid items-center gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-[130px_1fr_auto_auto]">
-              <b className="text-emerald-800">{lotNames(p)}</b>
+              <b className="text-emerald-800">{fmtDate(p.date)}</b>
               <div className="text-sm text-slate-600">
                 <p className="font-semibold text-slate-700">{fmtRange(p)}</p>
-                <p className="text-xs text-slate-400">{[p.duration_min?`${p.duration_min} min`:'',p.well,p.turno?`Turno ${p.turno}`:'',p.notes].filter(Boolean).join(' · ')}</p>
+                <p className="text-xs text-slate-400">{[p.duration_min?`${p.duration_min} min`:'',lotNames(p)!=='—'?lotNames(p):'',p.turno?`Turno ${p.turno}`:'',p.notes].filter(Boolean).join(' · ')}</p>
               </div>
-              <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-center text-xs font-bold text-slate-600">{fmtDate(p.date)}</span>
+              <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-center text-xs font-bold text-slate-600">{p.well||'—'}</span>
               <div className="flex items-center gap-1.5">
                 {p.status==='Activo'||p.status==='Pausado'?
                   <button onClick={()=>toggleStatus(p)} className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${p.status==='Pausado'?'bg-slate-200 text-slate-600':'bg-emerald-100 text-emerald-800'}`}>{p.status==='Pausado'?<Play size={12}/>:<Pause size={12}/>}{p.status==='Pausado'?'Reanudar':'Pausar'}</button>
