@@ -10,23 +10,23 @@ export const WELL_TURNOS = {
     { value: 'T6', detail: 'C12 N · C14 N · C16', lotCodes: ['C12', 'C14', 'C16'] },
   ],
   'Pozo 1': [
-    { value: 'T1', detail: 'C3 O·E · C4 O·E · Int C 3', lotCodes: ['C3', 'C4', 'Int C 3'] },
-    { value: 'T2', detail: 'P3 O·E · P4 O·E · Int C 4', lotCodes: ['P3', 'P4', 'Int C 4'] },
-    { value: 'T3', detail: 'P1 O·E · P2 O·E · Int C 2', lotCodes: ['P1', 'P2', 'Int C 2'] },
+    { value: 'T1', detail: 'C3 O · C3 E · C4 O · C4 E · Int C 3', lotCodes: ['C3 O', 'C3 E', 'C4 O', 'C4 E', 'Int C 3'] },
+    { value: 'T2', detail: 'P3 O · P3 E · P4 O · P4 E · Int C 4', lotCodes: ['P3 O', 'P3 E', 'P4 O', 'P4 E', 'Int C 4'] },
+    { value: 'T3', detail: 'P1 O · P1 E · P2 O · P2 E · Int C 2', lotCodes: ['P1 O', 'P1 E', 'P2 O', 'P2 E', 'Int C 2'] },
   ],
   'Pozo 2': [
     { value: 'T1', detail: 'Op1 NO · Op1 NE · Op2 NO', lotCodes: ['Op1 NO', 'Op1 NE', 'Op2 NO'] },
     { value: 'T2', detail: 'Op1 SO · Op1 SE · Op2 SO', lotCodes: ['Op1 SO', 'Op1 SE', 'Op2 SO'] },
   ],
   'Pozo 3': [
-    { value: 'T1', detail: 'H3 O·E · H4 O·E · Int A 4', lotCodes: ['H3', 'H4', 'Int A 4'] },
-    { value: 'T2', detail: 'B3 O·E · B4 O·E · Int A 3', lotCodes: ['B3', 'B4', 'Int A 3'] },
+    { value: 'T1', detail: 'H3 O · H3 E · H4 O · H4 E · Int A 4', lotCodes: ['H3 O', 'H3 E', 'H4 O', 'H4 E', 'Int A 4'] },
+    { value: 'T2', detail: 'B3 O · B3 E · B4 O · B4 E · Int A 3', lotCodes: ['B3 O', 'B3 E', 'B4 O', 'B4 E', 'Int A 3'] },
     { value: 'T3', detail: 'Int BS Completo', lotCodes: ['Int BS'] },
   ],
   'Pozo 4': [
-    { value: 'T1', detail: 'H1 O·E · H2 O·E · Int A 2', lotCodes: ['H1', 'H2', 'Int A 2'] },
-    { value: 'T2', detail: 'B1 O·E · B2 O·E · Int A 1', lotCodes: ['B1', 'B2', 'Int A 1'] },
-    { value: 'T3', detail: 'C1 O·E · C2 O·E · Int C 1', lotCodes: ['C1', 'C2', 'Int C 1'] },
+    { value: 'T1', detail: 'H1 O · H1 E · H2 O · H2 E · Int A 2', lotCodes: ['H1 O', 'H1 E', 'H2 O', 'H2 E', 'Int A 2'] },
+    { value: 'T2', detail: 'B1 O · B1 E · B2 O · B2 E · Int A 1', lotCodes: ['B1 O', 'B1 E', 'B2 O', 'B2 E', 'Int A 1'] },
+    { value: 'T3', detail: 'C1 O · C1 E · C2 O · C2 E · Int C 1', lotCodes: ['C1 O', 'C1 E', 'C2 O', 'C2 E', 'Int C 1'] },
   ],
   'Pozo 5': [
     { value: 'T3', detail: 'Op2 NE · Op3 NO · Op3 NE', lotCodes: ['Op2 NE', 'Op3 NO', 'Op3 NE'] },
