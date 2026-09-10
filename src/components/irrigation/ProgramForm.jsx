@@ -83,7 +83,7 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
             <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Turno</label>
             <select value={form.turno} onChange={e=>set('turno',e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500">
               <option value="">Seleccionar turno…</option>
-              {turnos.map(t=><option key={t.value} value={t.value}>{t.value}</option>)}
+              {turnos.map(t=><option key={t.value} value={t.value}>{t.value} — {t.lots.map(({lot,portion})=>lot+(portion?` ${portion}`:'')).join(' · ')}</option>)}
             </select>
           </div>
         )}
