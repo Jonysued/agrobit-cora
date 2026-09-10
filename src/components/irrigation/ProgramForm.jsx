@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { Droplets, Plus, Pencil, X } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { WELL_TURNOS, PORTION_LABELS, factorOf } from '@/lib/irrigationTurnos';
+import { densityOf } from '@/lib/farmCalculations';
 import { es } from 'date-fns/locale';
 
 const STATUSES=['Programado','Activo','Pausado','Finalizado'];
@@ -13,9 +14,9 @@ const blank=()=>({date:null,start_time:'06:00',end_time:'',well:'',turno:'',mm:'
 const toMin=t=>{const [h,m]=t.split(':').map(Number);return h*60+m;};
 const endDefault=d=>{if(!d?.start_time||d?.duration_min==null)return '';const e=(toMin(d.start_time)+Number(d.duration_min))%1440;return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;};
 
-export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
+export default function ProgramForm({lots,designs=[],programs=[],edit,onSaved,onCancel}){
   const [form,setForm]=useState(edit?{
-    date:toDate(edit.date),start_time:edit.start_time||'06:00',end_time:endDefault(edit),well:edit.well||'',turno:edit.turno||'',mm:edit.mm??'',status:edit.status||'Programado',notes:edit.notes||''
+    date:toDate(edit.date),start_time:edit.start_time||'06:00',end_time:endDefault(edit),well:edit.well||'',turno:edit.turno||'',status:edit.status||'Programado',notes:edit.notes||''
   }:blank());
   const [busy,setBusy]=useState(false);
   const turnos=WELL_TURNOS[form.well]||[];
@@ -28,7 +29,7 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
     });
   };
   const items=selectedTurno?selectedTurno.lots.map(({lot,portion})=>({code:lot,portion,lotRec:resolveLot(lot)})):[];
-  const mmNum=Number(form.mm)||0;
+  const hours=form.end_time?(((toMin(form.end_time)-toMin(form.start_time))%1440+1440)%1440)/60:0;
   const busyOverlap=p=>{
     if(p.id===edit?.id||!(p.status==='Programado'||p.status==='Activo')||!p.start_time||!p.duration_min||!p.date)return false;
     if(!form.end_time||!form.date||p.well!==form.well)return false;
@@ -46,7 +47,7 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
     const mins=form.end_time?((toMin(form.end_time)-toMin(form.start_time))%1440+1440)%1440:undefined;
     const itemsOut=selectedTurno?items.map(({code,portion,lotRec})=>({lot_id:lotRec?.id||null,lot_name:code,portion:PORTION_LABELS[portion],factor:factorOf(portion)})):(edit?.items||[]);
     const lotIds=selectedTurno?[...new Set(itemsOut.map(i=>i.lot_id).filter(Boolean))]:[...(edit?.lot_ids||[])];
-    const payload={lot_ids:lotIds,items:itemsOut,mm:mmNum||undefined,date:isoDate(form.date),start_time:form.start_time,duration_min:mins,well:form.well,turno:form.turno||undefined,status:form.status,notes:form.notes};
+    const payload={lot_ids:lotIds,items:itemsOut,date:isoDate(form.date),start_time:form.start_time,duration_min:mins,well:form.well,turno:form.turno||undefined,status:form.status,notes:form.notes};
     if(edit) await base44.entities.IrrigationProgram.update(edit.id,payload);
     else await base44.entities.IrrigationProgram.create(payload);
     setBusy(false);onSaved();
@@ -98,14 +99,10 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
                 </li>
               ))}
             </ul>
-            <div className="mt-3 grid gap-1.5">
-              <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Lámina del programa (mm)</label>
-              <input type="number" step="0.1" min="0" value={form.mm} onChange={e=>set('mm',e.target.value)} placeholder="20" className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-200"/>
-            </div>
-            {mmNum>0&&(
+            {hours>0&&(
               <div className="mt-2 space-y-1 rounded-lg border border-emerald-100 bg-emerald-50 p-2.5">
-                {items.map((it,i)=>{const f=factorOf(it.portion);return(
-                  <p key={i} className="text-xs text-emerald-900">Se regará {it.code}{it.portion?` ${PORTION_LABELS[it.portion]}`:''}. Al lote {it.code} se le cargarán {(mmNum*f).toFixed(1)} mm ({Math.round(f*100)}% de {mmNum} mm).</p>
+                {items.reduce((acc,it)=>{const f=factorOf(it.portion);const g=acc.find(x=>x.code===it.code);if(g){g.factor+=f;g.portions.push(PORTION_LABELS[it.portion]);}else acc.push({code:it.code,lotRec:it.lotRec,factor:f,portions:[PORTION_LABELS[it.portion]]});return acc;},[]).map((g,i)=>{const d=designs.find(x=>x.lot_id===g.lotRec?.id);const mmh=g.lotRec&&d?(d.emitter_flow_lh||0)*(d.emitters_per_plant||0)*densityOf(g.lotRec)/10000:0;const full=mmh*hours;return(
+                  <p key={i} className="text-xs text-emerald-900">{mmh?<>Se regará {g.code} ({g.portions.join(' + ')}). Al lote {g.code} se le cargarán {(full*g.factor).toFixed(1)} mm ({Math.round(g.factor*100)}% de {full.toFixed(1)} mm en {hours} h de riego).</>:`Lote ${g.code}: sin diseño de riego cargado, no se pueden calcular los mm.`}</p>
                 );})}
               </div>
             )}
@@ -127,7 +124,7 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
           <textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows="2" placeholder="Observaciones del programa…" className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500"/>
         </div>
       </div>
-      <button disabled={busy||conflict||!form.date||!form.well||(turnos.length>0&&!form.turno)||(selectedTurno&&!(mmNum>0))} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy?'Guardando…':edit?<><Pencil size={16}/>Guardar cambios</>:<><Plus size={16}/>Crear programa</>}</button>
+      <button disabled={busy||conflict||!form.date||!form.well||(turnos.length>0&&!form.turno)} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy?'Guardando…':edit?<><Pencil size={16}/>Guardar cambios</>:<><Plus size={16}/>Crear programa</>}</button>
     </form>
   );
 }
