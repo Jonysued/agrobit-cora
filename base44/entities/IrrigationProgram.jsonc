@@ -39,7 +39,6 @@
     }
   },
   "required": [
-    "lot_ids",
     "date",
     "start_time"
   ],
