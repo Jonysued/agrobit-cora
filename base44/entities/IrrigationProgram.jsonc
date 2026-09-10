@@ -18,6 +18,9 @@
     "well": {
       "type": "string"
     },
+    "turno": {
+      "type": "string"
+    },
     "duration_min": {
       "type": "number"
     },

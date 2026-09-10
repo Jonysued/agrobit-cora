@@ -24,7 +24,7 @@ export default function ProgramList({programs,lots,onEdit,onChange}){
               <b className="text-emerald-800">{lotNames(p)}</b>
               <div className="text-sm text-slate-600">
                 <p className="font-semibold text-slate-700">{fmtRange(p)}</p>
-                <p className="text-xs text-slate-400">{p.duration_min?`${p.duration_min} min`:''}{p.notes?` · ${p.notes}`:''}</p>
+                <p className="text-xs text-slate-400">{[p.duration_min?`${p.duration_min} min`:'',p.well,p.turno?`Turno ${p.turno}`:'',p.notes].filter(Boolean).join(' · ')}</p>
               </div>
               <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-center text-xs font-bold text-slate-600">{fmtDate(p.date)}</span>
               <div className="flex items-center gap-1.5">

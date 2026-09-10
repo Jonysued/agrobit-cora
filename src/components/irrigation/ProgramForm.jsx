@@ -2,19 +2,20 @@ import React,{useState} from 'react';
 import { base44 } from '@/api/base44Client';
 import { Droplets, Plus, Pencil, X } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
+import { WELL_TURNOS } from '@/lib/irrigationTurnos';
 import { es } from 'date-fns/locale';
 
 const STATUSES=['Programado','Activo','Pausado','Finalizado'];
 const WELLS=['Pozo 1','Pozo 2','Pozo 3','Pozo 4','Pozo 5','Pozo 6','Pozo 7','Glonet 1','Glonet 2'];
 const isoDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const toDate=s=>s?new Date(`${s}T00:00:00`):null;
-const blank=()=>({lot_ids:[],date:null,start_time:'06:00',end_time:'',well:'',status:'Programado',notes:''});
+const blank=()=>({lot_ids:[],date:null,start_time:'06:00',end_time:'',well:'',turno:'',status:'Programado',notes:''});
 const toMin=t=>{const [h,m]=t.split(':').map(Number);return h*60+m;};
 const endDefault=d=>{if(!d?.start_time||d?.duration_min==null)return '';const e=(toMin(d.start_time)+Number(d.duration_min))%1440;return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;};
 
 export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
   const [form,setForm]=useState(edit?{
-    lot_ids:edit.lot_ids||[],date:toDate(edit.date),start_time:edit.start_time||'06:00',end_time:endDefault(edit),well:edit.well||'',status:edit.status||'Programado',notes:edit.notes||''
+    lot_ids:edit.lot_ids||[],date:toDate(edit.date),start_time:edit.start_time||'06:00',end_time:endDefault(edit),well:edit.well||'',turno:edit.turno||'',status:edit.status||'Programado',notes:edit.notes||''
   }:blank());
   const [busy,setBusy]=useState(false);
   const [crop,setCrop]=useState(''),[variety,setVariety]=useState('');
@@ -40,7 +41,7 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
   const submit=async e=>{
     e.preventDefault();setBusy(true);
     const mins=form.end_time?((toMin(form.end_time)-toMin(form.start_time))%1440+1440)%1440:undefined;
-    const payload={lot_ids:form.lot_ids,date:isoDate(form.date),start_time:form.start_time,duration_min:mins,well:form.well||undefined,status:form.status,notes:form.notes};
+    const payload={lot_ids:form.lot_ids,date:isoDate(form.date),start_time:form.start_time,duration_min:mins,well:form.well||undefined,turno:form.turno||undefined,status:form.status,notes:form.notes};
     if(edit) await base44.entities.IrrigationProgram.update(edit.id,payload);
     else await base44.entities.IrrigationProgram.create(payload);
     setBusy(false);onSaved();
@@ -94,12 +95,22 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
         </div>
         <div className="grid gap-1.5">
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Pozo</label>
-          <select value={form.well} onChange={e=>set('well',e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500">
+          <select value={form.well} onChange={e=>{set('well',e.target.value);set('turno','');}} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500">
             <option value="">Seleccionar…</option>
             {WELLS.map(w=>{const b=busyWell(w);return <option key={w} disabled={!!b} className="text-slate-800">{b?`${w} · ocupado ${b.start_time}–${endTime(b)}`:w}</option>;})}
           </select>
           {conflict&&<p className="text-xs font-semibold text-red-600">{busyWell(form.well)?`${form.well} ya está asignado a otro programa (${busyWell(form.well).start_time}–${endTime(busyWell(form.well))}) en esa fecha y horario.`:'Hay lotes seleccionados ya asignados a otro programa en esa fecha y horario.'}</p>}
         </div>
+        {(WELL_TURNOS[form.well]||[]).length>0&&(
+          <div className="grid gap-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Turno</label>
+            <select value={form.turno} onChange={e=>set('turno',e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500">
+              <option value="">Seleccionar turno…</option>
+              {WELL_TURNOS[form.well].map(t=><option key={t.value} value={t.value}>{t.value} — {t.detail}</option>)}
+            </select>
+            {form.turno&&<p className="text-[11px] text-slate-400">{WELL_TURNOS[form.well].find(t=>t.value===form.turno)?.detail}</p>}
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">{field('start_time','Hora inicio','time')}{field('end_time','Hora fin','time')}</div>
         <div className="grid gap-1.5">
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Estado</label>
@@ -112,7 +123,7 @@ export default function ProgramForm({lots,programs=[],edit,onSaved,onCancel}){
           <textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows="2" placeholder="Observaciones del programa…" className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500"/>
         </div>
       </div>
-      <button disabled={busy||conflict||!form.date||!form.lot_ids.length} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy?'Guardando…':edit?<><Pencil size={16}/>Guardar cambios</>:<><Plus size={16}/>Crear programa</>}</button>
+      <button disabled={busy||conflict||!form.date||!form.lot_ids.length||((WELL_TURNOS[form.well]||[]).length>0&&!form.turno)} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy?'Guardando…':edit?<><Pencil size={16}/>Guardar cambios</>:<><Plus size={16}/>Crear programa</>}</button>
     </form>
   );
 }
