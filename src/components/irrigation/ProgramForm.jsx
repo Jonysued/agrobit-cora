@@ -21,12 +21,12 @@ export default function ProgramForm({lots,designs=[],programs=[],edit,onSaved,on
   const [busy,setBusy]=useState(false);
   const turnos=WELL_TURNOS[form.well]||[];
   const selectedTurno=turnos.find(t=>t.value===form.turno);
+  const sq=s=>(s||'').toLowerCase().replace(/\s+/g,'');
   const resolveLot=code=>{
-    const k=code.toLowerCase().trim();
-    return lots.find(l=>(l.name||'').toLowerCase().trim()===k)||lots.find(l=>{
-      const n=(l.name||'').toLowerCase().trim();
-      return n.startsWith(k+' ')||n.startsWith(k+'-');
-    });
+    const k=sq(code),m=/^c(\d+)$/.exec(k),alts=m?[k,`cuadro${m[1]}`]:[k];
+    const farm=form.well.startsWith('Glonet')?'Glonet':'Las 500';
+    const pool=[...lots.filter(l=>l.farm===farm),...lots.filter(l=>l.farm!==farm)];
+    return pool.find(l=>alts.includes(sq(l.name)))||pool.find(l=>alts.some(a=>sq(l.name).startsWith(a)));
   };
   const items=selectedTurno?selectedTurno.lots.map(({lot,portion})=>({code:lot,portion,lotRec:resolveLot(lot)})):[];
   const hours=form.end_time?(((toMin(form.end_time)-toMin(form.start_time))%1440+1440)%1440)/60:0;
