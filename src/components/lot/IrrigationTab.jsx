@@ -28,7 +28,7 @@ export default function IrrigationTab({lot,data}){
       emitter_spacing_m:num('emitter_spacing_m'),emitter_flow_lh:num('emitter_flow_lh'),
       emitters_per_plant:form.emitters_per_plant!==''&&form.emitters_per_plant!=null?num('emitters_per_plant'):(autoEmitters!=null?autoEmitters:undefined),
       design_pressure_bar:num('design_pressure_bar'),installation_year:num('installation_year'),
-      notes:form.notes||undefined,
+      notes:form.notes,
     };
     if(existing) await base44.entities.IrrigationDesign.update(existing.id,payload);
     else await base44.entities.IrrigationDesign.create(payload);
