@@ -25,7 +25,8 @@ export default function IrrigationTab({lot,data}){
       well:form.well||undefined,
       irrigation_type:form.irrigation_type||undefined,sector_area_ha:num('sector_area_ha'),drip_lines_per_row:num('drip_lines_per_row'),
       lateral_diameter_mm:num('lateral_diameter_mm'),average_lateral_length_m:num('average_lateral_length_m'),
-      emitter_spacing_m:num('emitter_spacing_m'),emitter_flow_lh:num('emitter_flow_lh'),emitters_per_plant:autoEmitters!=null?autoEmitters:num('emitters_per_plant'),
+      emitter_spacing_m:num('emitter_spacing_m'),emitter_flow_lh:num('emitter_flow_lh'),
+      emitters_per_plant:form.emitters_per_plant!==''&&form.emitters_per_plant!=null?num('emitters_per_plant'):(autoEmitters!=null?autoEmitters:undefined),
       design_pressure_bar:num('design_pressure_bar'),installation_year:num('installation_year'),
       notes:form.notes||undefined,
     };
@@ -112,13 +113,9 @@ export default function IrrigationTab({lot,data}){
           {f('average_lateral_length_m','Longitud lateral (m)','number',true)}
           {f('emitter_spacing_m','Separación goteros (m)','number')}
           {f('emitter_flow_lh','Caudal gotero (l/h)','number')}
-          {autoEmitters!=null?(
-            <div className="grid gap-1.5">
-              <label className="text-[11px] font-bold uppercase tracking-wide text-emerald-700">Goteros por planta · calculado</label>
-              <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{autoEmitters}</div>
-            </div>
-          ):f('emitters_per_plant','Goteros por planta','number',true)}
+          {f('emitters_per_plant','Goteros por planta','number',true)}
         </div>
+        {autoEmitters!=null&&<p className="mt-2 text-xs font-semibold text-emerald-700">Sugerido según líneas y separación: {autoEmitters} goteros por planta</p>}
       </fieldset>
 
       <fieldset className="rounded-xl border border-sand p-4">
