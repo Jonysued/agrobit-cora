@@ -26,6 +26,8 @@ import WaterEnergy from '@/pages/WaterEnergy';
 import WaterEnergyLot from '@/pages/WaterEnergyLot';
 import WaterEnergyEnergy from '@/pages/WaterEnergyEnergy';
 import WaterEnergyConfig from '@/pages/WaterEnergyConfig';
+import WaterEnergySoil from '@/pages/WaterEnergySoil';
+import WaterEnergySoilPoint from '@/pages/WaterEnergySoilPoint';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -68,6 +70,8 @@ const AuthenticatedApp = () => {
           <Route path="/riego" element={<Irrigation />} />
           <Route path="/water-energy" element={<WaterEnergy />} />
           <Route path="/water-energy/energia" element={<WaterEnergyEnergy />} />
+          <Route path="/water-energy/suelo" element={<WaterEnergySoil />} />
+          <Route path="/water-energy/suelo/:pointId" element={<WaterEnergySoilPoint />} />
           <Route path="/water-energy/configuracion" element={<WaterEnergyConfig />} />
           <Route path="/water-energy/lote/:lotId" element={<WaterEnergyLot />} />
           <Route path="/documentos" element={<Documents />} />

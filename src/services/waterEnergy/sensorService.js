@@ -1,10 +1,14 @@
 import { base44 } from '@/api/base44Client';
 
 // ============================================================
-// sensorService — lectura de sensores y series temporales.
-// Fuente actual: entidades Base44 (Sensor / SensorReading).
-// FUTURO: reemplazar la lectura por una API IoT externa —
-// solo cambia este archivo, la interfaz se mantiene.
+// sensorService — lectura de sondas y series temporales.
+// Estructura: FINCA → LOTE → PUNTO DE MONITOREO → SONDA →
+//             CANALES/PROFUNDIDADES → LECTURAS.
+// Las profundidades NUNCA están hardcodeadas: se generan
+// dinámicamente desde los canales de cada sonda.
+// FUTURO: conectar proveedores externos (WiseConn, IrriMAX,
+// CropX, …) reemplazando la lectura por adapters — solo cambia
+// este archivo, la interfaz se mantiene.
 // ============================================================
 const DAY_MS = 86400000;
 
@@ -18,8 +22,70 @@ export const sensorService = {
     return base44.entities.Sensor.delete(id);
   },
 
-  // Lecturas recientes de sensores de humedad, agrupadas por lote y orden ascendente.
-  // Devuelve Map<lot_id, [{id, timestamp, value, depth_cm}]>
+  // ---- Puntos de monitoreo (ubicación física, sin profundidad fija) ----
+  async getMonitoringPoints(lotId) {
+    const points = await base44.entities.SoilMonitoringPoint.list();
+    return lotId ? points.filter(p => p.lot_id === lotId) : points;
+  },
+
+  // ---- Sondas de un punto (cada modelo puede tener distinta
+  //      cantidad de sensores y distintas profundidades) ----
+  async getProbesForMonitoringPoint(monitoringPointId) {
+    const probes = await base44.entities.SoilProbe.filter({ monitoring_point_id: monitoringPointId });
+    return probes.filter(p => p.active !== false);
+  },
+
+  // ---- Canales/profundidades reales de una sonda (ordenadas por profundidad) ----
+  async getProbeChannels(probeId) {
+    const channels = await base44.entities.SoilProbeChannel.filter({ probe_id: probeId });
+    return channels
+      .filter(c => c.active !== false && c.sensor_type === 'soil_moisture')
+      .sort((a, b) => a.depth_cm - b.depth_cm);
+  },
+
+  // ---- Lecturas de una sonda dentro de un rango (ascendentes) ----
+  async getProbeReadings(probeId, from, to) {
+    const rows = await base44.entities.SensorReading.filter({ probe_id: probeId }, '-timestamp', 5000);
+    return rows
+      .filter(r => {
+        const t = new Date(r.timestamp).getTime();
+        return (!from || t >= from) && (!to || t <= to);
+      })
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  },
+
+  // ---- Última lectura de cada canal de la sonda ----
+  async getLatestProbeReadings(probeId) {
+    const [channels, readings] = await Promise.all([
+      this.getProbeChannels(probeId),
+      base44.entities.SensorReading.filter({ probe_id: probeId }, '-timestamp', 300),
+    ]);
+    return channels.map(c => ({ channel: c, reading: readings.find(r => r.probe_channel_id === c.id) || null }));
+  },
+
+  // ---- Serie histórica de una profundidad específica ----
+  async getReadingsByDepth(probeId, depthCm, from, to) {
+    const channels = await this.getProbeChannels(probeId);
+    const target = channels.find(c => c.depth_cm === depthCm);
+    if (!target) return [];
+    const readings = await this.getProbeReadings(probeId, from, to);
+    return readings.filter(r => r.probe_channel_id === target.id);
+  },
+
+  // ---- Sincronización con proveedores externos (preparado, sin API aún) ----
+  // Cuando se conecten WiseConn / IrriMAX / CropX, este método traerá
+  // lecturas de la API del proveedor y las persistirá evitando
+  // duplicados por probe_channel_id + timestamp.
+  async refreshSensorData(probeId) {
+    return {
+      probeId,
+      status: 'not_connected',
+      message: 'Sin proveedor externo conectado todavía. Se muestran los datos cargados (manual, CSV o demo).',
+    };
+  },
+
+  // ---- Lecturas del esquema anterior (sensores simples por lote) ----
+  // Map<lot_id, [{id, timestamp, value, depth_cm}]>
   async getRecentSoilReadings(days = 8) {
     const [sensors, readings] = await Promise.all([
       this.getSensors(),

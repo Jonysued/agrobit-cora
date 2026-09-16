@@ -1,8 +1,8 @@
 {
-  "name": "SensorReading",
+  "name": "SoilProbe",
   "type": "object",
   "properties": {
-    "sensor_id": {
+    "monitoring_point_id": {
       "type": "string"
     },
     "farm_id": {
@@ -11,52 +11,39 @@
     "lot_id": {
       "type": "string"
     },
-    "monitoring_point_id": {
+    "name": {
       "type": "string"
     },
-    "probe_id": {
+    "provider": {
       "type": "string"
     },
-    "probe_channel_id": {
+    "brand": {
       "type": "string"
     },
-    "timestamp": {
+    "model": {
+      "type": "string"
+    },
+    "external_device_id": {
+      "type": "string"
+    },
+    "installation_depth_cm": {
+      "type": "number"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    },
+    "connection_status": {
+      "type": "string"
+    },
+    "last_reading_at": {
       "type": "string",
       "format": "date-time"
-    },
-    "value": {
-      "type": "number"
-    },
-    "depth_cm": {
-      "type": "number"
-    },
-    "unit": {
-      "type": "string"
-    },
-    "source": {
-      "type": "string",
-      "enum": [
-        "LIVE",
-        "CSV",
-        "MANUAL",
-        "DEMO"
-      ],
-      "default": "MANUAL"
-    },
-    "quality_status": {
-      "type": "string",
-      "enum": [
-        "ok",
-        "suspicious",
-        "invalid"
-      ],
-      "default": "ok"
     }
   },
   "required": [
-    "lot_id",
-    "timestamp",
-    "value"
+    "monitoring_point_id",
+    "name"
   ],
   "rls": {
     "read": {},
