@@ -86,7 +86,7 @@ export default function WaterEnergyLot() {
                 <MetricCard label="Riego recomendado" value={detail.recommendation ? `${detail.recommendation.recommended_irrigation_mm} mm` : detail.kc_missing ? 'Falta Kc' : 'No requerido'} tone={detail.recommendation ? 'amber' : 'light'} />
               </div>
               <MoistureChart detail={detail} />
-              <RecommendationCard detail={detail} />
+              <div id="recomendacion"><RecommendationCard detail={detail} /></div>
               {detail.forecast_confidence === 'partial' && (
                 <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">Confianza del forecast: parcial — el modelo de suelo de referencia todavía no está calibrado con suficientes eventos (se usa la eficiencia de recarga por defecto).</p>
               )}
@@ -94,7 +94,7 @@ export default function WaterEnergyLot() {
               <p className="text-center text-xs text-slate-400">Curva hídrica CALCULADA del lote (riegos propios, clima y cultivo) sobre el comportamiento del modelo de suelo de referencia · modelo EXPERIMENTAL. No constituye una predicción agronómica validada.</p>
             </>
           )}
-          <InitialStateConfig detail={detail} onSaved={() => setReloadKey(k => k + 1)} />
+          <div id="estado-inicial"><InitialStateConfig detail={detail} onSaved={() => setReloadKey(k => k + 1)} /></div>
         </>
       )}
     </div>
