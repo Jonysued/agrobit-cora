@@ -22,6 +22,7 @@ import Health from '@/pages/Health';
 import Irrigation from '@/pages/Irrigation';
 import Documents from '@/pages/Documents';
 import Settings from '@/pages/Settings';
+import WaterEnergy from '@/pages/WaterEnergy';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -62,6 +63,7 @@ const AuthenticatedApp = () => {
           <Route path="/produccion" element={<Production />} />
           <Route path="/sanidad" element={<Health />} />
           <Route path="/riego" element={<Irrigation />} />
+          <Route path="/water-energy" element={<WaterEnergy />} />
           <Route path="/documentos" element={<Documents />} />
           <Route path="/configuracion" element={<Settings />} />
         </Route>
