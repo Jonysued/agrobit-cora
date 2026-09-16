@@ -200,6 +200,39 @@ export const soilWaterService = {
     return map;
   },
 
+  // ---- Historial diario de VWC de la zona radicular según la sonda
+  // vinculada al perfil del lote (Vinculación de perfiles).
+  // Devuelve [{date, vwc}] (última lectura de cada día) o null si el
+  // lote no tiene sonda vinculada con lecturas.
+  async getLinkedProbeVwcHistory(lotId) {
+    const state = await this._lotState(lotId);
+    if (!state || state.missing || !state.probe) return null;
+    const [channels, readings] = await Promise.all([
+      sensorService.getProbeChannels(state.probe.id),
+      sensorService.getProbeReadings(state.probe.id, Date.now() - 95 * DAY_MS, Date.now()),
+    ]);
+    if (!channels.length || !readings.length) return null;
+    const { inside, layers } = layerSplit(channels.map(c => c.depth_cm).sort((a, b) => a - b), state.rootDepth);
+    const depthByChannel = new Map(channels.map(c => [c.id, c.depth_cm]));
+    const byTs = new Map();
+    for (const r of readings) {
+      const d = depthByChannel.get(r.probe_channel_id);
+      if (d == null || !inside.includes(d)) continue;
+      const t = new Date(r.timestamp).getTime();
+      if (!byTs.has(t)) byTs.set(t, new Map());
+      byTs.get(t).set(d, r.value / 100);
+    }
+    // Último valor de cada día: VWC promedio de la zona radicular
+    const byDay = new Map();
+    [...byTs.entries()].sort((a, b) => a[0] - b[0]).forEach(([t, vals]) => {
+      if (vals.size < inside.length) return;
+      let mm = 0;
+      inside.forEach((d, i) => { mm += (vals.get(d) || 0) * layers[i] * 10; });
+      byDay.set(new Date(t).toISOString().slice(0, 10), mm / (state.rootDepth * 10));
+    });
+    return [...byDay.entries()].map(([date, vwc]) => ({ date, vwc }));
+  },
+
   // ---- Getters conceptuales por lote (consultados por la UI, nunca calculados en componentes) ----
   async _lotState(lotId) {
     const [lots, profiles, probes] = await Promise.all([

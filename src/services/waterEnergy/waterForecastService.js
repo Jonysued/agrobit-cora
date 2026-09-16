@@ -106,6 +106,9 @@ export const waterForecastService = {
       soilWaterService.getLinkedProbeStates([lot.id]),
     ]);
     const row = buildRow(lot, profile, hist, weather.get(lot.id) || [], pumps, tariffs, linkedStates.get(lot.id));
-    return { ...row, history };
+    // Histórico según la vinculación del lote: lecturas reales de la sonda
+    // vinculada al perfil (Vinculación de perfiles); sin vinculación, lecturas locales.
+    const probeHistory = await soilWaterService.getLinkedProbeVwcHistory(lotId);
+    return { ...row, history: probeHistory || history, probeLinked: !!probeHistory };
   },
 };

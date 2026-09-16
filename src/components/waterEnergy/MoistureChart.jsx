@@ -21,7 +21,9 @@ export default function MoistureChart({ detail }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <h3 className="font-bold text-charcoal">Humedad del suelo · histórico y forecast a 7 días</h3>
-      <p className="mt-0.5 text-xs text-slate-500">Banda verde: zona objetivo · líneas: capacidad de campo y umbral de riego</p>
+      <p className="mt-0.5 text-xs text-slate-500">
+        Banda verde: zona objetivo · líneas: capacidad de campo y umbral de riego{detail.probeLinked ? ' · histórico medido por la sonda vinculada' : ''}
+      </p>
       <div className="mt-3 h-72">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
