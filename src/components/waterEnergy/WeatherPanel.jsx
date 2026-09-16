@@ -77,7 +77,7 @@ export default function WeatherPanel({ farms: farmsProp, farmId: farmIdProp, onF
             <p className="mt-2 text-sm text-slate-400">Cargando…</p>
           ) : (
             <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-              {combined.forecast.map(d => (
+              {(combined?.forecast || []).map(d => (
                 <div key={d.date} className="w-[76px] shrink-0 rounded-xl border border-slate-200 bg-slate-50 p-2 text-center">
                   <p className="text-[10px] font-bold uppercase text-slate-500">{dayLabel(d.date)}</p>
                   <p className="mt-1 text-sm font-bold text-charcoal">{Math.round(d.temperature_max_c)}° / {Math.round(d.temperature_min_c)}°</p>

@@ -70,7 +70,7 @@ export default function WaterEnergySoil() {
                   </div>
                   <div className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-xs text-slate-600">
                     <p>Estado hídrico: <b>{row.status || 'Sin configurar'}</b></p>
-                    <p>Agua útil en zona radicular: <b>{row.current_available_water_mm} mm</b></p>
+                    <p>Agua útil del perfil: <b>{row.current_available_water_mm} mm</b></p>
                     <p>Déficit hasta objetivo: <b>{row.water_deficit_mm != null ? `${row.water_deficit_mm} mm` : 'Sin configurar'}</b></p>
                     <p>Última lectura: <b>{rel(row.lastReadingAt)}</b></p>
                     {row.missing_configuration?.length > 0 && <p className="text-amber-700">Falta configurar: {missingLabels(row)}</p>}

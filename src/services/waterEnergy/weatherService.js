@@ -130,7 +130,9 @@ export const weatherService = {
     } catch { return null; } // estación caída → se usa el último dato guardado
   },
   async getObservedWeather(farmId, limit = 96) {
-    await this.refreshIfStale(farmId);
+    // SOLO LECTURA: el histórico nunca dispara la sincronización con la
+    // estación (esa acción vive en getLatestObservation, con límite de
+    // frescura de 30 min, y en los botones de Configuración).
     return base44.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', limit);
   },
   async getLatestObservation(farmId) {

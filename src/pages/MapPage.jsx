@@ -67,7 +67,7 @@ export default function MapPage(){
     {mode==='view' && <div className="absolute bottom-5 right-4 z-[1000] rounded-xl bg-white/95 px-4 py-3 text-xs shadow-xl"><b>{lots.length} lotes visibles</b><p className="mt-1 text-slate-500">Clic en un lote para ver opciones.</p>{view==='Riego activo/programado'&&<p className="mt-2 flex flex-col gap-1 border-t pt-2"><span className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded" style={{background:'#2563eb'}}/>Riego en curso</span><span className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded" style={{background:'#eab308'}}/>Programado hoy (más tarde)</span><span className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded" style={{background:'#94a3b8'}}/>Sin riego hoy</span></p>}</div>}
 
     {selected && mode==='view' && <div className="absolute bottom-5 left-4 z-[1000] flex w-[min(420px,calc(100%-2rem))] items-center gap-3 rounded-2xl bg-white p-4 shadow-2xl">
-      <div className="min-w-0 flex-1"><b className="truncate">{selected.name} · {selected.name}</b><p className="truncate text-sm text-slate-500">{selected.crop} {selected.variety} · {selected.area_ha} ha</p></div>
+      <div className="min-w-0 flex-1"><b className="truncate">{selected.name} · {selected.farm}</b><p className="truncate text-sm text-slate-500">{selected.crop} {selected.variety} · {selected.area_ha} ha</p></div>
       <Btn onClick={()=>nav(`/lotes/${selected.id}`)}><FileText size={15}/>Ficha</Btn>
       <Btn onClick={()=>setSelected(null)}><X size={15}/></Btn>
     </div>}

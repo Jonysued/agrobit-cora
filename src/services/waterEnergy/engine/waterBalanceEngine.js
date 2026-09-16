@@ -16,10 +16,10 @@
 //    se marca below_wilting = true.
 //
 // Las decisiones se basan SOLO en:
-//  · recharge_threshold_mm (umbral de recarga, derivado del MAD)
-//  · target_water_mm (objetivo de recarga)
+//  · recharge_threshold_mm (umbral de recarga = Target mín del perfil)
+//  · target_water_mm (objetivo de recarga = Target máx del perfil)
 //  · total_available_water_capacity_mm (TAW)
-// Nunca en VWC promedio, target_min_vwc ni target_max_vwc.
+// Nunca en VWC promedio.
 // ============================================================
 const round1 = n => Math.round(n * 10) / 10;
 
