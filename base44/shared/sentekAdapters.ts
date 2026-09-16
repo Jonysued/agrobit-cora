@@ -87,7 +87,8 @@ export async function fetchSentekReadings(probe, fromIso) {
   const pad = n => String(n).padStart(2, "0");
   // Ventana incremental: desde la última lectura menos 2 h de margen.
   const fromMs = (fromIso ? new Date(fromIso).getTime() : Date.now() - 14 * 86400000) - 2 * 3600000;
-  const local = new Date(fromMs + 3 * 3600000); // UTC → hora local del sitio
+  // Hora local del sitio (UTC-3): componentes de pared locales de un instante UTC.
+  const local = new Date(fromMs - 3 * 3600000);
   const from = `${local.getUTCFullYear()}${pad(local.getUTCMonth() + 1)}${pad(local.getUTCDate())}${pad(local.getUTCHours())}${pad(local.getUTCMinutes())}${pad(local.getUTCSeconds())}`;
   try {
     const res = await fetch(`${API}?cmd=getreadings&key=${encodeURIComponent(key)}&name=${encodeURIComponent(probe.external_device_id)}&from=${from}`);
