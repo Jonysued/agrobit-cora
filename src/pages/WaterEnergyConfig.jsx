@@ -6,6 +6,7 @@ import ProfileSection from '@/components/waterEnergy/config/ProfileSection';
 import SensorSection from '@/components/waterEnergy/config/SensorSection';
 import PumpSection from '@/components/waterEnergy/config/PumpSection';
 import TariffSection from '@/components/waterEnergy/config/TariffSection';
+import LinkSection from '@/components/waterEnergy/config/LinkSection';
 
 export default function WaterEnergyConfig() {
   const [data, setData] = useState(null);
@@ -30,6 +31,7 @@ export default function WaterEnergyConfig() {
         <SensorSection lots={data.lots} sensors={data.sensors} onChange={refresh} />
         <PumpSection lots={data.lots} pumps={data.pumps} onChange={refresh} />
         <TariffSection tariffs={data.tariffs} onChange={refresh} />
+        <LinkSection lots={data.lots} profiles={data.profiles} sensors={data.sensors} pumps={data.pumps} tariffs={data.tariffs} onChange={refresh} />
       </div>
     </div>
   );

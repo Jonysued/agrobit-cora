@@ -16,7 +16,13 @@ import { runScenario, waterAvailablePercent, statusForVwc } from './engine/water
 // ============================================================
 
 // Fila de análisis de un lote (compartida por dashboard y detalle)
-function buildRow(lot, profile, hist, weatherDays, pump, tariff) {
+function buildRow(lot, profile, allHist, weatherDays, pumps, tariffs) {
+  // Vinculación del perfil: sensor, bomba y tarifa definidos en configuración
+  const hist = profile.sensor_id ? allHist.filter(r => r.sensor_id === profile.sensor_id) : allHist;
+  const pump = energyService.getPumpForLot(pumps, lot, profile);
+  const tariff = profile.tariff_id
+    ? (tariffs.find(t => t.id === profile.tariff_id) || energyService.getActiveTariff(tariffs))
+    : energyService.getActiveTariff(tariffs);
   const currentVwc = hist.length ? hist[hist.length - 1].value : profile.initial_vwc;
   const inputs = weatherDays.map(w => ({ date: w.date, etcMm: w.etc_mm, rainMm: w.effective_rainfall_mm }));
   const scenarioA = runScenario(profile, currentVwc, inputs); // sin riego
@@ -62,7 +68,7 @@ export const waterForecastService = {
     const rows = lots.map(lot => {
       const profile = profiles.find(p => p.lot_id === lot.id);
       if (!profile) return { lot, profile: null, status: 'sin-perfil' };
-      return buildRow(lot, profile, readings.get(lot.id) || [], weather.get(lot.id) || [], energyService.getPumpForLot(pumps, lot), tariff);
+      return buildRow(lot, profile, readings.get(lot.id) || [], weather.get(lot.id) || [], pumps, tariffs);
     });
     const withProfile = rows.filter(r => r.profile);
     const totals = {
@@ -89,11 +95,12 @@ export const waterForecastService = {
       energyService.getTariffs(),
     ]);
     const profile = profiles.find(p => p.lot_id === lotId);
-    const hist = readings.get(lotId) || [];
+    const allHist = readings.get(lotId) || [];
+    const hist = profile?.sensor_id ? allHist.filter(r => r.sensor_id === profile.sensor_id) : allHist;
     const history = hist.slice(0, -1).map(r => ({ date: r.timestamp.slice(0, 10), vwc: r.value }));
     if (!profile) return { lot, profile: null, history };
     const weather = await weatherService.getFarmForecast([lot]);
-    const row = buildRow(lot, profile, hist, weather.get(lot.id) || [], energyService.getPumpForLot(pumps, lot), energyService.getActiveTariff(tariffs));
+    const row = buildRow(lot, profile, hist, weather.get(lot.id) || [], pumps, tariffs);
     return { ...row, history };
   },
 };

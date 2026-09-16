@@ -31,6 +31,15 @@
     },
     "notes": {
       "type": "string"
+    },
+    "sensor_id": {
+      "type": "string"
+    },
+    "pump_id": {
+      "type": "string"
+    },
+    "tariff_id": {
+      "type": "string"
     }
   },
   "required": [
