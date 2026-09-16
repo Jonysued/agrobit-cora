@@ -390,6 +390,42 @@ export const soilWaterService = {
     return [...byDay.entries()].map(([date, vwc]) => ({ date, vwc }));
   },
 
+  // ---- Estados hídricos (agua útil) de los lotes indicados ----
+  // Map<lot_id, estado>: sonda vinculada al perfil del lote
+  // (Vinculación de perfiles) o, en su defecto, la primera sonda
+  // activa del lote. Es el insumo del forecast hídrico
+  // (waterForecastService): estado inicial en mm de agua útil.
+  async getStateForLots(lotIds) {
+    const [lots, profiles, probes] = await Promise.all([
+      base44.entities.Lot.list(),
+      base44.entities.SoilProfile.list(),
+      sensorService.getProbes(),
+    ]);
+    const map = new Map();
+    for (const profile of profiles) {
+      if (!lotIds.includes(profile.lot_id)) continue;
+      const probe = profile.probe_id
+        ? probes.find(p => p.id === profile.probe_id)
+        : probes.find(p => p.lot_id === profile.lot_id && p.active !== false);
+      if (probe) map.set(profile.lot_id, await stateForProbe(probe, lots, profiles));
+    }
+    return map;
+  },
+
+  // ---- Historial de AGUA ÚTIL (mm) del lote según su sonda ----
+  // Serie [{t, mm}] (últimos ~95 días) para el gráfico de agua en
+  // la zona radicular. Devuelve null si no hay sonda o lecturas.
+  async getUsefulWaterHistory(lotId) {
+    const state = await this._lotState(lotId);
+    if (!state || state.missing || !state._model) return null;
+    const [channels, readings] = await Promise.all([
+      sensorService.getProbeChannels(state.probe.id),
+      sensorService.getProbeReadings(state.probe.id, Date.now() - 95 * DAY_MS, Date.now()),
+    ]);
+    if (!channels.length || !readings.length) return null;
+    return usefulWaterSeries(readings, channels, state._model);
+  },
+
   // ---- Estado por lote (sonda vinculada al perfil o primera del lote) ----
   async _lotState(lotId) {
     const [lots, profiles, probes] = await Promise.all([

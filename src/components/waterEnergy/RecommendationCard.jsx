@@ -2,13 +2,32 @@ import React from 'react';
 
 const fmtDate = s => new Date(`${s}T00:00:00`).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 
+// Tarjeta de recomendación de riego (agua útil en mm).
+// Sin Kc configurado o con cobertura de sonda insuficiente no se
+// genera recomendación automática — se informa el motivo.
 export default function RecommendationCard({ detail }) {
-  const { lot, recommendation, energy } = detail;
+  const { lot, recommendation, energy, kc_missing, state, forecast_confidence } = detail;
+  if (kc_missing) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+        <h3 className="font-bold text-amber-900">Recomendación</h3>
+        <p className="mt-1 text-sm text-amber-800">Falta configurar Kc — definí el Kc del cultivo en Water & Energy → Configuración → Perfiles de suelo para generar la recomendación de riego.</p>
+      </section>
+    );
+  }
+  if (state?.coverage_status === 'insufficient') {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+        <h3 className="font-bold text-amber-900">Recomendación</h3>
+        <p className="mt-1 text-sm text-amber-800">Cobertura de la sonda insuficiente sobre la zona radicular — no se genera recomendación automática. El forecast se muestra solo como referencia.</p>
+      </section>
+    );
+  }
   if (!recommendation) {
     return (
       <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
         <h3 className="font-bold text-emerald-900">Recomendación</h3>
-        <p className="mt-1 text-sm text-emerald-800">No se requiere riego en los próximos 7 días: el modelo estima que la humedad se mantiene sobre el umbral mínimo.</p>
+        <p className="mt-1 text-sm text-emerald-800">No se requiere riego en los próximos 7 días: el modelo estima que el agua útil se mantiene sobre el umbral de recarga.</p>
       </section>
     );
   }
@@ -23,7 +42,7 @@ export default function RecommendationCard({ detail }) {
     <section className="rounded-2xl bg-emerald-950 p-6 text-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-lg font-bold">Recomendación · Regar {lot.name}</h3>
-        <span className="rounded-full bg-amber-400/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-300">Estimación · modelo experimental</span>
+        <span className="rounded-full bg-amber-400/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-300">Estimación · modelo experimental{forecast_confidence === 'partial' ? ' · confianza parcial' : ''}</span>
       </div>
       <div className="mt-4 grid items-center gap-5 md:grid-cols-[auto_1fr]">
         <div className="text-center">

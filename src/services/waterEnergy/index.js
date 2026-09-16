@@ -12,4 +12,4 @@ export { soilWaterService, CONFIG_LABELS } from './soilWaterService';
 export { weatherService } from './weatherService';
 export { irrigationRecommendationService } from './irrigationRecommendationService';
 export { energyService } from './energyService';
-export { runScenario, stepDay, waterAvailablePercent, statusForVwc } from './engine/waterBalanceEngine';
+export { runUsefulWaterScenario, stepUsefulWaterDay } from './engine/waterBalanceEngine';

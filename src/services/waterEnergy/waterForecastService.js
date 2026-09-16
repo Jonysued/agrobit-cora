@@ -1,48 +1,91 @@
 import { base44 } from '@/api/base44Client';
-import { sensorService } from './sensorService';
 import { weatherService } from './weatherService';
 import { energyService } from './energyService';
 import { irrigationRecommendationService } from './irrigationRecommendationService';
 import { soilWaterService } from './soilWaterService';
-import { runScenario, waterAvailablePercent, statusForVwc } from './engine/waterBalanceEngine';
+import { runUsefulWaterScenario } from './engine/waterBalanceEngine';
 
 // ============================================================
 // waterForecastService — orquestador del módulo Water & Energy.
-// Resuelve internamente de dónde viene cada dato (sensores,
-// clima, perfiles) y devuelve el análisis listo para la UI.
-// La interfaz solo llama: waterForecastService.getForecast(lotId)
-// FUTURO: el forecast puede provenir de una API externa
-// (https://api.[dominio]/water-forecast) — solo cambia este archivo.
+// FORECAST HÍDRICO V1 (AGUA ÚTIL EN MM):
+//  · Estado inicial: AGUA ÚTIL DISPONIBLE (mm) medida por la
+//    sonda, tomada directamente de soilWaterService — nunca VWC
+//    promedio. Junto al estado se propagan TAW, umbral de recarga,
+//    objetivo, cobertura y estado de configuración.
+//  · Balance diario: agua = agua + lluvia efectiva + riego − ETc,
+//    con ETc = ET0 (forecast meteorológico) × Kc (current_kc del
+//    perfil). Limitado por TAW: el exceso es drainage_mm; si cae
+//    bajo 0 se marca below_wilting.
+//  · V1: effective_rainfall_mm = rainfall_mm (sin coeficientes;
+//    se mantienen como variables separadas para evolucionar).
+//  · Recomendación: primer día que cruza recharge_threshold_mm,
+//    recargando hasta target_water_mm. Bloqueada si falta Kc
+//    ("Falta configurar Kc") o si la cobertura es insuficiente.
+//  · configuration_status incomplete → forecast no disponible;
+//    coverage partial → forecast con forecast_confidence "partial".
 // MODELO EXPERIMENTAL — no es una predicción agronómica validada.
 // ============================================================
 
+const round1 = n => Math.round(n * 10) / 10;
+
+// Insumos diarios del balance. V1: lluvia efectiva = lluvia
+// pronosticada tal cual (variables separadas para el futuro).
+function forecastInputs(weatherDays, kc) {
+  return (weatherDays || []).map(w => ({
+    date: w.date,
+    eto_mm: w.eto_mm ?? 0,
+    kc: kc != null ? kc : null,
+    etc_mm: kc != null ? round1((w.eto_mm ?? 0) * kc) : 0,
+    rainfall_mm: w.rainfall_mm ?? 0,
+    effective_rainfall_mm: w.rainfall_mm ?? 0,
+  }));
+}
+
 // Fila de análisis de un lote (compartida por dashboard y detalle)
-function buildRow(lot, profile, allHist, weatherDays, pumps, tariffs, probeState) {
-  // Vinculación del perfil: sensor de humedad y bomba definidos en configuración.
-  // La tarifa energética es global: la misma aplica a todos los lotes.
-  const hist = profile.sensor_id ? allHist.filter(r => r.sensor_id === profile.sensor_id) : allHist;
+function buildRow(lot, profile, weatherDays, pumps, tariffs, state) {
   const pump = energyService.getPumpForLot(pumps, lot, profile);
   const tariff = energyService.getActiveTariff(tariffs);
-  // Humedad actual: sonda vinculada al perfil (módulo Sensores) o lecturas locales
-  const currentVwc = probeState?.currentVwc != null ? probeState.currentVwc : (hist.length ? hist[hist.length - 1].value : profile.initial_vwc);
-  const inputs = weatherDays.map(w => ({ date: w.date, etcMm: w.etc_mm, rainMm: w.effective_rainfall_mm }));
-  const scenarioA = runScenario(profile, currentVwc, inputs); // sin riego
-  const { recommendation, scenarioB } = irrigationRecommendationService.withRecommendation(profile, lot, currentVwc, inputs, scenarioA);
-  const energy = recommendation ? energyService.compute(recommendation.recommended_irrigation_m3, pump, tariff) : null;
-  return {
+  // El estado inicial SIEMPRE es el agua útil medida (soilWaterService)
+  const usable = state && !state.missing
+    && state.configuration_status === 'complete'
+    && state.current_available_water_mm != null;
+  const row = {
     lot,
     profile,
-    currentVwc,
-    currentPct: Math.round(waterAvailablePercent(profile, currentVwc)),
-    scenarioA,
-    scenarioB,
-    recommendation,
-    energy,
     pump,
     tariff,
+    state: state || null,
     weather: weatherDays,
-    status: statusForVwc(profile, currentVwc),
-    belowWilting: scenarioA.some(p => p.belowWilting),
+    forecast_status: usable ? 'ok' : 'no_disponible',
+  };
+  if (!usable) return row;
+
+  const config = {
+    total_available_water_capacity_mm: state.total_available_water_capacity_mm,
+    recharge_threshold_mm: state.recharge_threshold_mm,
+    target_water_mm: state.target_water_mm,
+  };
+  const kc = profile.current_kc;
+  const kc_missing = kc == null;
+  const days = forecastInputs(weatherDays, kc);
+  const startMm = state.current_available_water_mm;
+  const scenarioWithoutIrrigation = runUsefulWaterScenario(startMm, config, days);
+  // Sin Kc configurado o cobertura insuficiente: sin recomendación
+  const canRecommend = !kc_missing && state.coverage_status !== 'insufficient';
+  const { recommendation, scenarioWithIrrigation } = canRecommend
+    ? irrigationRecommendationService.withRecommendation(config, lot, startMm, days, scenarioWithoutIrrigation)
+    : { recommendation: null, scenarioWithIrrigation: scenarioWithoutIrrigation };
+  const energy = recommendation ? energyService.compute(recommendation.recommended_irrigation_m3, pump, tariff) : null;
+  return {
+    ...row,
+    kc,
+    kc_missing,
+    forecast_confidence: state.coverage_status === 'partial' ? 'partial' : 'complete',
+    scenarioWithoutIrrigation,
+    scenarioWithIrrigation,
+    recommendation,
+    energy,
+    below_wilting: scenarioWithoutIrrigation.some(p => p.below_wilting),
   };
 }
 
@@ -57,30 +100,31 @@ export const waterForecastService = {
 
   // ---- Dashboard: filas por lote + totales de 7 días ----
   async getFarmOverview() {
-    const [lots, profiles, readings, pumps, tariffs] = await Promise.all([
+    const [lots, profiles, pumps, tariffs] = await Promise.all([
       this.getLots(),
       this.getProfiles(),
-      sensorService.getRecentSoilReadings(8),
       energyService.getPumps(),
       energyService.getTariffs(),
     ]);
     const tariff = energyService.getActiveTariff(tariffs);
     const weather = await weatherService.getFarmForecast(lots);
-    const linkedStates = await soilWaterService.getLinkedProbeStates(lots.map(l => l.id));
+    const states = await soilWaterService.getStateForLots(lots.map(l => l.id));
     const rows = lots.map(lot => {
       const profile = profiles.find(p => p.lot_id === lot.id);
-      if (!profile) return { lot, profile: null, status: 'sin-perfil' };
-      return buildRow(lot, profile, readings.get(lot.id) || [], weather.get(lot.id) || [], pumps, tariffs, linkedStates.get(lot.id));
+      if (!profile) return { lot, profile: null, forecast_status: 'no_disponible' };
+      return buildRow(lot, profile, weather.get(lot.id) || [], pumps, tariffs, states.get(lot.id));
     });
-    const withProfile = rows.filter(r => r.profile);
+    const withState = rows.filter(r => r.forecast_status === 'ok');
+    const withRecommendation = withState.filter(r => r.recommendation);
+    const pcts = withState.map(r => r.state.available_water_percent).filter(v => v != null);
     const totals = {
       lots: lots.length,
-      monitored: withProfile.length,
-      unprofiled: rows.length - withProfile.length,
-      avgPct: withProfile.length ? Math.round(withProfile.reduce((s, r) => s + r.currentPct, 0) / withProfile.length) : null,
-      volumeM3: Math.round(withProfile.reduce((s, r) => s + (r.recommendation?.recommended_irrigation_m3 || 0), 0)),
-      kwh: Math.round(withProfile.reduce((s, r) => s + (r.energy?.kwh || 0), 0)),
-      cost: Math.round(withProfile.reduce((s, r) => s + (r.energy?.cost || 0), 0)),
+      monitored: withState.length,
+      unprofiled: rows.length - rows.filter(r => r.profile).length,
+      avgPct: pcts.length ? Math.round(pcts.reduce((s, v) => s + v, 0) / pcts.length) : null,
+      volumeM3: Math.round(withRecommendation.reduce((s, r) => s + (r.recommendation?.recommended_irrigation_m3 || 0), 0)),
+      kwh: Math.round(withRecommendation.reduce((s, r) => s + (r.energy?.kwh || 0), 0)),
+      cost: Math.round(withRecommendation.reduce((s, r) => s + (r.energy?.cost || 0), 0)),
     };
     return { rows, totals, tariff };
   },
@@ -90,25 +134,20 @@ export const waterForecastService = {
     const lots = await this.getLots();
     const lot = lots.find(l => l.id === lotId);
     if (!lot) return null;
-    const [profiles, readings, pumps, tariffs] = await Promise.all([
+    const [profiles, pumps, tariffs] = await Promise.all([
       this.getProfiles(),
-      sensorService.getRecentSoilReadings(9),
       energyService.getPumps(),
       energyService.getTariffs(),
     ]);
     const profile = profiles.find(p => p.lot_id === lotId);
-    const allHist = readings.get(lotId) || [];
-    const hist = profile?.sensor_id ? allHist.filter(r => r.sensor_id === profile.sensor_id) : allHist;
-    const history = hist.slice(0, -1).map(r => ({ date: r.timestamp.slice(0, 10), vwc: r.value }));
-    if (!profile) return { lot, profile: null, history };
-    const [weather, linkedStates] = await Promise.all([
+    if (!profile) return { lot, profile: null, forecast_status: 'no_disponible' };
+    const [weather, state, history] = await Promise.all([
       weatherService.getFarmForecast([lot]),
-      soilWaterService.getLinkedProbeStates([lot.id]),
+      soilWaterService.getStateForLots([lotId]).then(m => m.get(lotId)),
+      soilWaterService.getUsefulWaterHistory(lotId),
     ]);
-    const row = buildRow(lot, profile, hist, weather.get(lot.id) || [], pumps, tariffs, linkedStates.get(lot.id));
-    // Histórico según la vinculación del lote: lecturas reales de la sonda
-    // vinculada al perfil (Vinculación de perfiles); sin vinculación, lecturas locales.
-    const probeHistory = await soilWaterService.getLinkedProbeVwcHistory(lotId);
-    return { ...row, history: probeHistory || history, probeLinked: !!probeHistory };
+    const row = buildRow(lot, profile, weather.get(lot.id) || [], pumps, tariffs, state);
+    // Histórico del agua útil (mm) medido por la sonda del lote
+    return { ...row, history: history || [], probeLinked: !!history };
   },
 };

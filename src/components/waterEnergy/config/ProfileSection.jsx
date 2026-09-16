@@ -5,7 +5,7 @@ import ProfileLayersEditor, { validateLayers } from './ProfileLayersEditor';
 import { waterForecastService } from '@/services/waterEnergy';
 import { base44 } from '@/api/base44Client';
 
-const EMPTY = { lot_id: '', name: '', soil_type: 'Franco', root_zone_depth_cm: 60, field_capacity_vwc: 0.28, wilting_point_vwc: 0.12, target_min_vwc: 0.17, target_max_vwc: 0.24, initial_vwc: 0.21, management_allowed_depletion_percent: '', target_refill_percent: '', notes: '' };
+const EMPTY = { lot_id: '', name: '', soil_type: 'Franco', root_zone_depth_cm: 60, field_capacity_vwc: 0.28, wilting_point_vwc: 0.12, target_min_vwc: 0.17, target_max_vwc: 0.24, initial_vwc: 0.21, management_allowed_depletion_percent: '', target_refill_percent: '', current_kc: '', notes: '' };
 const num = v => (v === '' || v == null ? null : Number(v));
 const pct = v => (v == null ? '—' : `${Math.round(v * 100)}%`);
 const pct100 = v => (v == null || v === '' ? '—' : `${v}%`);
@@ -64,6 +64,7 @@ export default function ProfileSection({ lots, profiles, onChange }) {
       initial_vwc: num(form.initial_vwc),
       management_allowed_depletion_percent: num(form.management_allowed_depletion_percent),
       target_refill_percent: num(form.target_refill_percent),
+      current_kc: num(form.current_kc),
     });
     const profileId = saved?.id || form.id;
     for (const l of layers) {
@@ -121,6 +122,10 @@ export default function ProfileSection({ lots, profiles, onChange }) {
             <Field label="Objetivo de recarga %">
               <input type="number" step="any" min="0" max="100" value={form.target_refill_percent ?? ''} onChange={e => set('target_refill_percent', e.target.value)} className={inputCls} placeholder="90" />
               <p className="text-[10px] leading-tight text-slate-400">Porcentaje de la capacidad útil al que se quiere recuperar el perfil después de regar.</p>
+            </Field>
+            <Field label="Kc del cultivo">
+              <input type="number" step="any" min="0" value={form.current_kc ?? ''} onChange={e => set('current_kc', e.target.value)} className={inputCls} placeholder="0.65" />
+              <p className="text-[10px] leading-tight text-slate-400">Coeficiente de cultivo usado por el forecast hídrico (ETc = ET0 × Kc). Sin Kc no se genera recomendación de riego.</p>
             </Field>
             <div className="sm:col-span-2"><Field label="Notas"><input value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} className={inputCls} placeholder="Observaciones…" /></Field></div>
           </div>

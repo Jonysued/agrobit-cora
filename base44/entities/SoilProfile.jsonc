@@ -35,6 +35,9 @@
     "target_refill_percent": {
       "type": "number"
     },
+    "current_kc": {
+      "type": "number"
+    },
     "notes": {
       "type": "string"
     },

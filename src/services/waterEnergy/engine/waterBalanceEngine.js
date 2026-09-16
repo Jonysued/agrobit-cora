@@ -1,64 +1,74 @@
 // ============================================================
-// WATER BALANCE ENGINE V0 — EXPERIMENTAL
-// Modelo simple de balance hídrico en la zona radicular.
-// Puro: sin Base44, sin UI, sin AI — solo matemática.
-// Balance diario: agua mañana = agua hoy + lluvia efectiva
-//                 + riego − ETc − drenaje
-// Trabajo interno en milímetros de agua sobre la zona radicular:
-//   mm = vwc (cm³/cm³) × profundidad (cm) × 10
-// La humedad proyectada nunca supera capacidad de campo (el
-// exceso se informa como drenaje) y nunca cae por debajo del
-// punto de marchitez (se marca belowWilting como advertencia).
+// WATER BALANCE ENGINE V1 — EXPERIMENTAL (AGUA ÚTIL EN MM)
+// Modelo de balance hídrico de la zona radicular expresado en
+// milímetros de AGUA ÚTIL (por encima del punto de marchitez).
+// Puro: sin Base44, sin UI — solo matemática.
+//
+// Balance diario:
+//   available_water_next_mm =
+//     available_water_mm + effective_rainfall_mm + irrigation_mm − ETc
+//   ETc = ET0 × Kc
+//
+// Límites:
+//  · El agua útil nunca supera la capacidad útil total (TAW):
+//    el exceso se informa como drainage_mm.
+//  · El agua útil nunca cae por debajo de 0:
+//    se marca below_wilting = true.
+//
+// Las decisiones se basan SOLO en:
+//  · recharge_threshold_mm (umbral de recarga, derivado del MAD)
+//  · target_water_mm (objetivo de recarga)
+//  · total_available_water_capacity_mm (TAW)
+// Nunca en VWC promedio, target_min_vwc ni target_max_vwc.
 // ============================================================
+const round1 = n => Math.round(n * 10) / 10;
 
-export const mmOfVwc = (vwc, depthCm) => vwc * depthCm * 10;
-export const vwcOfMm = (mm, depthCm) => mm / (depthCm * 10);
-
-// Un día de balance
-export function stepDay(profile, vwc, { etcMm = 0, rainMm = 0, irrMm = 0 } = {}) {
-  const depth = profile.root_zone_depth_cm;
-  let mm = mmOfVwc(vwc, depth) + rainMm + irrMm - etcMm;
-  const fcMm = mmOfVwc(profile.field_capacity_vwc, depth);
-  const wpMm = mmOfVwc(profile.wilting_point_vwc, depth);
+// Un día de balance sobre la zona radicular
+export function stepUsefulWaterDay(availableMm, config, day) {
+  const kc = day.kc != null ? day.kc : 0;
+  const etcMm = round1((day.eto_mm || 0) * kc);
+  const rainMm = day.effective_rainfall_mm ?? day.rainfall_mm ?? 0;
+  const irrMm = day.irrigation_mm || 0;
+  let next = availableMm + rainMm + irrMm - etcMm;
   let drainageMm = 0;
+  const taw = config.total_available_water_capacity_mm;
+  if (taw != null && next > taw) {
+    drainageMm = round1(next - taw);
+    next = taw;
+  }
   let belowWilting = false;
-  if (mm > fcMm) { drainageMm = mm - fcMm; mm = fcMm; }
-  if (mm < wpMm) { belowWilting = true; mm = wpMm; }
-  return { vwc: vwcOfMm(mm, depth), drainageMm, belowWilting };
+  if (next < 0) {
+    next = 0;
+    belowWilting = true;
+  }
+  return { availableMm: round1(next), drainageMm, belowWilting, etcMm };
 }
 
-// Agua disponible como % entre marchitez y capacidad de campo
-export function waterAvailablePercent(profile, vwc) {
-  const { field_capacity_vwc: fc, wilting_point_vwc: wp } = profile;
-  return Math.max(0, Math.min(100, ((vwc - wp) / (fc - wp)) * 100));
-}
-
-// Escenario de N días. dailyInputs: [{date, etcMm, rainMm, irrMm}]
-export function runScenario(profile, startVwc, dailyInputs) {
-  let vwc = startVwc;
-  const points = [];
-  dailyInputs.forEach((d, idx) => {
-    const r = stepDay(profile, vwc, d);
-    points.push({
+// Escenario de N días en mm de agua útil.
+// config: { total_available_water_capacity_mm, recharge_threshold_mm, target_water_mm }
+// days:   [{ date, eto_mm, kc, rainfall_mm, effective_rainfall_mm, irrigation_mm }]
+export function runUsefulWaterScenario(startMm, config, days) {
+  let available = startMm;
+  const taw = config.total_available_water_capacity_mm;
+  return (days || []).map((d, idx) => {
+    const r = stepUsefulWaterDay(available, config, d);
+    available = r.availableMm;
+    return {
       day: idx + 1,
       date: d.date,
-      vwc: r.vwc,
-      drainageMm: r.drainageMm,
-      belowWilting: r.belowWilting,
-      etcMm: d.etcMm || 0,
-      rainMm: d.rainMm || 0,
-      irrigationMm: d.irrMm || 0,
-      waterAvailablePercent: Math.round(waterAvailablePercent(profile, r.vwc)),
-    });
-    vwc = r.vwc;
+      available_water_mm: r.availableMm,
+      available_water_percent: taw > 0 ? round1((r.availableMm / taw) * 100) : null,
+      eto_mm: round1(d.eto_mm || 0),
+      kc: d.kc != null ? d.kc : null,
+      etc_mm: r.etcMm,
+      rainfall_mm: round1(d.rainfall_mm ?? 0),
+      effective_rainfall_mm: round1(d.effective_rainfall_mm ?? 0),
+      irrigation_mm: round1(d.irrigation_mm || 0),
+      drainage_mm: r.drainageMm,
+      below_wilting: r.belowWilting,
+      below_recharge_threshold: config.recharge_threshold_mm != null
+        ? r.availableMm <= config.recharge_threshold_mm
+        : null,
+    };
   });
-  return points;
-}
-
-// Semáforo: rojo bajo el umbral, amarillo acercándose, verde normal
-export function statusForVwc(profile, vwc) {
-  if (vwc < profile.target_min_vwc) return 'rojo';
-  const band = (profile.target_max_vwc - profile.target_min_vwc) * 0.25;
-  if (vwc < profile.target_min_vwc + band) return 'amarillo';
-  return 'verde';
 }

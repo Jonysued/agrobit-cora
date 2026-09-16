@@ -1,44 +1,52 @@
 import React from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceArea, ReferenceLine } from 'recharts';
+import { Area, AreaChart, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, Legend, XAxis, YAxis } from 'recharts';
 
-const shortDate = d => new Date(`${d}T00:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
-const pctTick = v => `${Math.round(v * 100)}%`;
+// AGUA EN LA ZONA RADICULAR (mm de agua útil): histórico medido por
+// la sonda + HOY + forecast a 7 días sin riego y con riego
+// recomendado. Todo expresado en mm de agua útil.
+const fmtX = t => new Date(t).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+const fmtTip = t => new Date(t).toLocaleDateString('es-AR', { dateStyle: 'medium' });
+const dayT = d => new Date(`${d}T12:00:00`).getTime();
 
 export default function MoistureChart({ detail }) {
-  const { profile, currentVwc, scenarioA, scenarioB, history, recommendation } = detail;
+  const { state, scenarioWithoutIrrigation, scenarioWithIrrigation, history, recommendation, probeLinked } = detail;
   const hasRec = recommendation != null;
+  const currentMm = state.current_available_water_mm;
   const data = [
-    ...history.map(h => ({ label: shortDate(h.date), histórico: h.vwc })),
-    { label: 'HOY', histórico: currentVwc, 'Sin riego': currentVwc, ...(hasRec ? { 'Riego recomendado': currentVwc } : {}) },
-    ...scenarioA.map((p, i) => ({
-      label: shortDate(p.date),
-      'Sin riego': p.vwc,
-      ...(hasRec ? { 'Riego recomendado': scenarioB[i].vwc } : {}),
+    ...(history || []).map(h => ({ t: h.t, Histórico: h.mm })),
+    { t: Date.now(), Histórico: currentMm, 'Sin riego': currentMm, ...(hasRec ? { 'Riego recomendado': currentMm } : {}) },
+    ...(scenarioWithoutIrrigation || []).map((p, i) => ({
+      t: dayT(p.date),
+      'Sin riego': p.available_water_mm,
+      ...(hasRec ? { 'Riego recomendado': scenarioWithIrrigation?.[i]?.available_water_mm } : {}),
     })),
   ];
-  const yMin = Math.max(0.02, profile.wilting_point_vwc - 0.03);
-  const yMax = Math.min(0.55, profile.field_capacity_vwc + 0.05);
+  const taw = state.total_available_water_capacity_mm;
+  const rechargeMm = state.recharge_threshold_mm;
+  const targetMm = state.target_water_mm;
+  const yMax = Math.round(Math.max(taw || 0, currentMm || 0, ...data.map(d => d['Sin riego'] || 0), 10) * 1.1);
+  const hasRefs = rechargeMm != null && targetMm != null;
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="font-bold text-charcoal">Humedad del suelo · histórico y forecast a 7 días</h3>
+      <h3 className="font-bold text-charcoal">Agua en la zona radicular · histórico y forecast a 7 días</h3>
       <p className="mt-0.5 text-xs text-slate-500">
-        Banda verde: zona objetivo · líneas: capacidad de campo y umbral de riego{detail.probeLinked ? ' · histórico medido por la sonda vinculada' : ''}
+        Milímetros de agua útil (por encima del punto de marchitez){hasRefs ? ' · banda verde = zona objetivo' : ''}{probeLinked ? ' · histórico medido por la sonda vinculada' : ''}
       </p>
       <div className="mt-3 h-72">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: 10, right: 16, bottom: 0, left: -8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={pctTick} domain={[yMin, yMax]} />
-            <Tooltip formatter={v => `${Math.round(v * 1000) / 10}% VWC`} />
+            <XAxis dataKey="t" type="number" domain={['dataMin', 'dataMax']} tickFormatter={fmtX} stroke="#94a3b8" tickMargin={6} />
+            <YAxis domain={[0, yMax]} unit=" mm" stroke="#94a3b8" />
+            <Tooltip labelFormatter={fmtTip} formatter={v => [`${v} mm`]} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <ReferenceArea y1={profile.target_min_vwc} y2={profile.target_max_vwc} fill="#a7f3d0" fillOpacity={0.35} />
-            <ReferenceLine y={profile.field_capacity_vwc} stroke="#0284c7" strokeDasharray="2 2" label={{ value: 'Capacidad de campo', fontSize: 10, fill: '#0284c7', position: 'insideTopRight' }} />
-            <ReferenceLine y={profile.target_min_vwc} stroke="#dc2626" strokeDasharray="6 3" label={{ value: 'Umbral de riego', fontSize: 10, fill: '#dc2626', position: 'insideBottomRight' }} />
-            <Line type="monotone" dataKey="histórico" stroke="#94a3b8" strokeWidth={2} dot={{ r: 2 }} connectNulls />
-            <Line type="monotone" dataKey="Sin riego" stroke="#dc2626" strokeWidth={2.5} dot={{ r: 2.5 }} connectNulls />
-            {hasRec && <Line type="monotone" dataKey="Riego recomendado" stroke="#047857" strokeWidth={2.5} dot={{ r: 2.5 }} connectNulls />}
-          </LineChart>
+            {hasRefs && <ReferenceArea y1={rechargeMm} y2={targetMm} fill="#a7f3d0" fillOpacity={0.35} strokeOpacity={0} ifOverflow="visible" />}
+            {targetMm != null && <ReferenceLine y={targetMm} stroke="#1d4ed8" strokeDasharray="2 2" label={{ value: 'Objetivo de recarga', fontSize: 10, fill: '#1d4ed8', position: 'insideTopRight' }} />}
+            {rechargeMm != null && <ReferenceLine y={rechargeMm} stroke="#dc2626" strokeDasharray="6 3" label={{ value: 'Umbral de recarga', fontSize: 10, fill: '#dc2626', position: 'insideBottomRight' }} />}
+            <Area dataKey="Histórico" stroke="#94a3b8" strokeWidth={2} fillOpacity={0} dot={false} connectNulls />
+            <Area dataKey="Sin riego" stroke="#dc2626" strokeWidth={2.5} fill="#dc2626" fillOpacity={0.06} dot={{ r: 2.5 }} connectNulls />
+            {hasRec && <Area dataKey="Riego recomendado" stroke="#047857" strokeWidth={2.5} fill="#047857" fillOpacity={0.06} dot={{ r: 2.5 }} connectNulls />}
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </section>
