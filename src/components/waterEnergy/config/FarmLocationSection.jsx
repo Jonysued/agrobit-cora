@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Crosshair, Save } from 'lucide-react';
@@ -17,6 +17,13 @@ const pinIcon = L.divIcon({
 
 function MapClick({ onPick }) {
   useMapEvents({ click: e => onPick(e.latlng) });
+  return null;
+}
+
+// Mueve la vista del mapa (sin remontarlo) cuando cambia la ubicación.
+function Recenter({ center }) {
+  const map = useMap();
+  useEffect(() => { map.setView(center, Math.max(map.getZoom(), 12)); }, [center[0], center[1]]);
   return null;
 }
 
@@ -64,8 +71,9 @@ export default function FarmLocationSection({ lots, farms, onChange }) {
             </button>
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-200">
-            <MapContainer key={`${center[0]},${center[1]}`} center={center} zoom={12} scrollWheelZoom className="h-64 w-full">
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" />
+            <MapContainer center={center} zoom={13} scrollWheelZoom className="h-72 w-full">
+              <TileLayer attribution="&copy; Esri" url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" />
+              <Recenter center={center} />
               <MapClick onPick={pick} />
               {lat != null && lon != null && <Marker position={[lat, lon]} icon={pinIcon} draggable eventHandlers={{ dragend: e => pick(e.target.getLatLng()) }} />}
             </MapContainer>
