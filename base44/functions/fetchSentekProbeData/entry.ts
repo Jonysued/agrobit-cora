@@ -15,6 +15,9 @@ export default async function (req) {
     const { probe_id } = await req.json();
     if (!probe_id) return Response.json({ error: 'Falta probe_id' }, { status: 400 });
     const probe = await base44.entities.SoilProbe.get(probe_id);
+    if (!probe.lot_id) {
+      return Response.json({ ok: false, error: 'La sonda no tiene un lote vinculado — vinculá el lote en Configuración → Vinculación de perfiles antes de sincronizar.' }, { status: 400 });
+    }
     const result = await fetchSentekReadings(probe, probe.last_reading_at);
     if (!result.ok) {
       await base44.entities.SoilProbe.update(probe_id, { connection_status: result.status || 'error' });
@@ -51,18 +54,19 @@ export default async function (req) {
       for (const [depth, value] of Object.entries(row.values)) {
         const ch = channels.get(Number(depth));
         if (!ch) continue;
-        payload.push({
+        const rec = {
           probe_id,
           probe_channel_id: ch.id,
-          lot_id: probe.lot_id || null,
-          monitoring_point_id: probe.monitoring_point_id || null,
+          lot_id: probe.lot_id,
           timestamp: row.timestamp,
           value,
           depth_cm: Number(depth),
           unit: '%',
           source: 'LIVE',
           quality_status: 'ok',
-        });
+        };
+        if (probe.monitoring_point_id) rec.monitoring_point_id = probe.monitoring_point_id;
+        payload.push(rec);
       }
     }
     let ingested = 0;
