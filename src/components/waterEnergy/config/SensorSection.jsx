@@ -10,7 +10,7 @@ const PROVIDERS = [['sentek', 'Sentek · IrriMAX Live'], ['wiseconn', 'WiseConn'
 const EMPTY_PROBE = { name: '', provider: '', external_device_id: '', active: true };
 const rel = ts => { if (!ts) return '—'; const h = Math.round((Date.now() - new Date(ts).getTime()) / 3600000); return h < 1 ? 'hace instantes' : h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`; };
 const lotName = (lots, id) => lots.find(l => l.id === id)?.name || 'Sin vincular';
-const STATUS = { connected: '🟢 Conectada', error: '🔴 Error de conexión', missing_credentials: '🟡 Falta credencial', misconfigured: '🟡 Config. incompleta' };
+const STATUS = { connected: '🟢 Conectada', disconnected: '🔴 Desconectada', error: '🔴 Error de conexión', missing_credentials: '🟡 Falta credencial', misconfigured: '🟡 Config. incompleta' };
 
 export default function SensorSection({ lots, probes, onChange }) {
   const [form, setForm] = useState(null);

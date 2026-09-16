@@ -50,7 +50,10 @@ export default function WaterEnergySoil() {
                   <p className="truncate font-bold text-charcoal">{row.probe.name}</p>
                   <p className="text-xs text-slate-500">{row.lotName}</p>
                 </div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${SOURCE_BADGE[row.source] || SOURCE_BADGE.MANUAL}`}>{row.source}</span>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {row.connectionStatus === 'disconnected' && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-red-700">Desconectada</span>}
+                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${SOURCE_BADGE[row.source] || SOURCE_BADGE.MANUAL}`}>{row.source}</span>
+                </div>
               </div>
               {row.missing ? (
                 <p className="mt-5 text-xs text-slate-400">{row.missing}</p>

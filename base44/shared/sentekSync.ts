@@ -5,6 +5,11 @@
 // ============================================================
 import { fetchSentekReadings } from './sentekAdapters.ts';
 
+// Umbral de obsolesciedad: si el último dato disponible en IrriMAX
+// es más viejo que esto, la sonda aparece DESCONECTADA — el logger
+// dejó de transmitir por un problema externo, no de la app.
+export const STALE_MS = 12 * 3600000;
+
 // Sincroniza una sonda: descubre profundidades, crea canales y
 // persiste solo lecturas nuevas (incremental, sin duplicados).
 // `client` es un cliente Base44 (usuario admin o service role).
@@ -17,14 +22,23 @@ export async function syncSentekProbe(client, probe) {
   // Sin novedades: mensaje claro con la antigüedad del último dato
   // disponible en IrriMAX (guía al usuario hacia el logger si no reporta).
   const apiLastMs = result.rows.reduce((m, r) => Math.max(m, new Date(r.timestamp).getTime() || 0), 0);
+  const refMs = apiLastMs || (probe.last_reading_at ? new Date(probe.last_reading_at).getTime() : 0);
   const staleDataMessage = () => {
-    const refMs = apiLastMs || (probe.last_reading_at ? new Date(probe.last_reading_at).getTime() : 0);
     const when = refMs ? new Date(refMs).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
     const ageH = refMs ? Math.max(0, Math.round((Date.now() - refMs) / 3600000)) : null;
     return `Sin lecturas nuevas en IrriMAX Live — el último dato disponible es del ${when}${ageH ? ` (hace ${ageH} h)` : ''}. Si no se actualiza, verificá que el logger "${probe.name}" esté encendido y transmitiendo.`;
   };
+  // Sin lecturas nuevas: el estado de conexión refleja la antigüedad
+  // del último dato disponible — obsoleto (o inexistente) ⇒
+  // DESCONECTADA, dato fresco ⇒ conectada.
+  const markConnection = async () => {
+    const stale = !refMs || Date.now() - refMs > STALE_MS;
+    const connection_status = stale ? 'disconnected' : 'connected';
+    await client.entities.SoilProbe.update(probe.id, { connection_status });
+    return connection_status;
+  };
   if (!result.rows.length) {
-    return { ok: true, ingested: 0, message: staleDataMessage(), last_reading_at: probe.last_reading_at || null };
+    return { ok: true, ingested: 0, connection_status: await markConnection(), message: staleDataMessage(), last_reading_at: probe.last_reading_at || null };
   }
 
   // Canales reales de la sonda: uno por profundidad con sensor de humedad
@@ -70,7 +84,7 @@ export async function syncSentekProbe(client, probe) {
     }
   }
   if (!payload.length) {
-    return { ok: true, ingested: 0, message: staleDataMessage(), last_reading_at: probe.last_reading_at || null };
+    return { ok: true, ingested: 0, connection_status: await markConnection(), message: staleDataMessage(), last_reading_at: probe.last_reading_at || null };
   }
   let ingested = 0;
   for (let i = 0; i < payload.length; i += 500) {
