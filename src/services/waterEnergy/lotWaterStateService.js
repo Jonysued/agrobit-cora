@@ -120,7 +120,7 @@ async function loadContext(lots) {
   const farmIds = [...new Set([...farmByLot.values()].map(f => f?.id).filter(Boolean))];
   const observed = new Map(await Promise.all(farmIds.map(async id => [id, await dailyObservedWeather(id)])));
   const { executed, scheduled } = irrigationEventsFrom(logs, programs, lots);
-  return { profiles, models, probes, states, configs, farmByLot, observed, executed, scheduled };
+  return { profiles, models, states, configs, farmByLot, observed, executed, scheduled };
 }
 
 // ---- Estado de UN lote: ancla + reconstrucción diaria hasta hoy ----
