@@ -99,8 +99,12 @@ function sensorSegments(depths, rootDepth) {
 
 function coverageStatus(rootDepth, measuredDepth) {
   if (measuredDepth <= 0) return 'insufficient';
+  // "complete" SOLO si la cobertura medida alcanza toda la
+  // profundidad radicular configurada (root_zone_depth_cm).
+  if (measuredDepth >= rootDepth) return 'complete';
+  // No cubre todo el perfil: "partial" si la cobertura es representativa,
+  // "insufficient" si es claramente insuficiente para el perfil.
   const ratio = measuredDepth / rootDepth;
-  if (ratio >= 0.9) return 'complete';
   if (ratio >= 0.5) return 'partial';
   return 'insufficient';
 }
