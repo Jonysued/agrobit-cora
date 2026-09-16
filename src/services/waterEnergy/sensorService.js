@@ -86,6 +86,20 @@ export const sensorService = {
 
   // ---- Puntos de monitoreo y sondas: CRUD (Configuración → Sensores) ----
   async getProbes() { return base44.entities.SoilProbe.list(); },
+  // Vincula una sonda a un lote (Vinculación de perfiles): le asigna el
+  // lote y le asegura un punto de monitoreo en ese lote. Los puntos se
+  // gestionan automáticamente — la UI nunca los manipula.
+  async attachProbeToLot(probeId, lotId) {
+    const probe = await base44.entities.SoilProbe.get(probeId);
+    if (!probe) return null;
+    let pointId = probe.monitoring_point_id;
+    const lotPoints = await base44.entities.SoilMonitoringPoint.filter({ lot_id: lotId });
+    if (!pointId || !lotPoints.some(p => p.id === pointId)) {
+      pointId = lotPoints[0]?.id
+        || (await base44.entities.SoilMonitoringPoint.create({ lot_id: lotId, name: `Punto ${probe.name}`, active: true })).id;
+    }
+    return base44.entities.SoilProbe.update(probeId, { lot_id: lotId, monitoring_point_id: pointId });
+  },
   async createMonitoringPoint(data) { return base44.entities.SoilMonitoringPoint.create(data); },
   async updateMonitoringPoint(id, data) { return base44.entities.SoilMonitoringPoint.update(id, data); },
   async deleteMonitoringPoint(id) {

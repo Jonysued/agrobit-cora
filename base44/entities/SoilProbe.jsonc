@@ -42,7 +42,6 @@
     }
   },
   "required": [
-    "monitoring_point_id",
     "name"
   ],
   "rls": {

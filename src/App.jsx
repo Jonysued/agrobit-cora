@@ -71,7 +71,7 @@ const AuthenticatedApp = () => {
           <Route path="/water-energy" element={<WaterEnergy />} />
           <Route path="/water-energy/energia" element={<WaterEnergyEnergy />} />
           <Route path="/water-energy/sensores" element={<WaterEnergySoil />} />
-          <Route path="/water-energy/sensores/:pointId" element={<WaterEnergySoilPoint />} />
+          <Route path="/water-energy/sensores/:probeId" element={<WaterEnergySoilPoint />} />
           <Route path="/water-energy/configuracion" element={<WaterEnergyConfig />} />
           <Route path="/water-energy/lote/:lotId" element={<WaterEnergyLot />} />
           <Route path="/documentos" element={<Documents />} />

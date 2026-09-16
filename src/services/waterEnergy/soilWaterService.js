@@ -4,11 +4,12 @@ import { weatherService } from './weatherService';
 import { mmOfVwc } from './engine/waterBalanceEngine';
 
 // ============================================================
-// soilWaterService — SOLO MONITOREO del agua del perfil de suelo
-// a partir de sondas. Convierte lecturas VWC por profundidad en
-// mm de agua de la zona radicular, ponderando el espesor de suelo
-// que representa cada sensor (límites a mitad de camino entre
-// profundidades). No genera recomendaciones de riego.
+// soilWaterService — SOLO MONITOREO del agua del perfil de suelo,
+// centrado en SONDA (no en puntos de monitoreo: los puntos se
+// gestionan automáticamente al vincular la sonda a un lote).
+// Convierte lecturas VWC por profundidad en mm de agua de la zona
+// radicular, ponderando el espesor de suelo que representa cada
+// sensor. No genera recomendaciones de riego.
 // La UI consulta resultados: NUNCA calcula.
 // ESTIMACIÓN EXPERIMENTAL — no reemplaza criterio agronómico.
 // ============================================================
@@ -40,7 +41,7 @@ function layerSplit(depths, rootDepth) {
 
 // Estado hídrico del perfil a partir de las últimas lecturas de la sonda.
 // Orden-agnóstico: conserva el valor más reciente por canal.
-function buildState(lot, rawProfile, channels, readings) {
+function buildState(rawProfile, channels, readings) {
   const depths = channels.map(c => c.depth_cm).sort((a, b) => a - b);
   // Profundidad efectiva: zona radicular del perfil, recortada al alcance de la sonda
   const rootDepth = Math.min(rawProfile.root_zone_depth_cm || 120, Math.max(...depths));
@@ -88,52 +89,51 @@ function buildState(lot, rawProfile, channels, readings) {
   };
 }
 
-// Estado de un punto (compartido por listado, detalle y getters)
-async function stateForPoint(point, lots, profiles, preferredProbe) {
-  const lot = lots.find(l => l.id === point.lot_id);
-  if (!lot) return { point, missing: 'El lote del punto ya no existe.' };
-  const probe = preferredProbe || (await sensorService.getProbesForMonitoringPoint(point.id))[0];
-  if (!probe) return { point, lot, lotName: lot.name, missing: 'Sin sonda asociada.' };
+// Estado de una sonda (compartido por listado, detalle, forecast y getters)
+async function stateForProbe(probe, lots, profiles) {
+  const lot = probe.lot_id ? lots.find(l => l.id === probe.lot_id) : null;
+  if (!lot) {
+    return { probe, probeId: probe.id, lotName: 'Sin lote vinculado', missing: 'Sonda sin lote vinculado — vinculá el lote en Water & Energy → Configuración → Vinculación de perfiles.' };
+  }
   const channels = await sensorService.getProbeChannels(probe.id);
-  if (!channels.length) return { point, lot, lotName: lot.name, missing: 'Sonda sin canales configurados.' };
+  if (!channels.length) return { probe, probeId: probe.id, lot, lotName: lot.name, missing: 'Sonda sin canales/profundidades configurados.' };
   const readings = await base44.entities.SensorReading.filter({ probe_id: probe.id }, '-timestamp', 200);
-  if (!readings.length) return { point, lot, lotName: lot.name, missing: 'Sin lecturas cargadas.' };
+  if (!readings.length) return { probe, probeId: probe.id, lot, lotName: lot.name, missing: 'Sin lecturas — la sonda todavía no reporta datos.' };
   const profile = profiles.find(p => p.lot_id === lot.id) || { ...DEFAULT_PROFILE };
-  const state = buildState(lot, profile, channels, readings);
-  return { point, lot, lotName: lot.name, probeName: probe.name, probeProvider: probe.provider, connectionStatus: probe.connection_status, ...state };
+  const state = buildState(profile, channels, readings);
+  return { probe, probeId: probe.id, lot, lotName: lot.name, probeProvider: probe.provider, connectionStatus: probe.connection_status, ...state };
 }
 
 export const soilWaterService = {
-  // ---- Listado de puntos de monitoreo (pantalla Sensores) ----
-  async getPointSummaries() {
-    const [points, lots, profiles] = await Promise.all([
-      sensorService.getMonitoringPoints(),
+  // ---- Listado de sondas (pantalla Sensores) ----
+  async getProbeSummaries() {
+    const [probes, lots, profiles] = await Promise.all([
+      sensorService.getProbes(),
       base44.entities.Lot.list(),
       base44.entities.SoilProfile.list(),
     ]);
-    const summaries = [];
-    for (const point of points) {
-      summaries.push(await stateForPoint(point, lots, profiles));
+    const rows = [];
+    for (const probe of probes.filter(p => p.active !== false)) {
+      rows.push(await stateForProbe(probe, lots, profiles));
     }
-    return summaries;
+    return rows;
   },
 
-  // ---- Detalle completo de un punto (solo monitoreo) ----
-  async getPointAnalysis(pointId) {
-    const points = await sensorService.getMonitoringPoints();
-    const point = points.find(p => p.id === pointId);
-    if (!point) return null;
+  // ---- Detalle completo de una sonda (solo monitoreo) ----
+  async getProbeAnalysis(probeId) {
+    const probes = await sensorService.getProbes();
+    const probe = probes.find(p => p.id === probeId);
+    if (!probe) return null;
     const [lots, profiles] = await Promise.all([base44.entities.Lot.list(), base44.entities.SoilProfile.list()]);
-    const lot = lots.find(l => l.id === point.lot_id);
-    const probe = lot ? (await sensorService.getProbesForMonitoringPoint(pointId))[0] : null;
-    if (!lot || !probe) return { point, lot: lot || null, missing: 'El punto de monitoreo no tiene sonda asociada.' };
+    const lot = probe.lot_id ? lots.find(l => l.id === probe.lot_id) : null;
+    if (!lot) return { probe, lot: null, missing: 'Sonda sin lote vinculado — vinculá el lote en Water & Energy → Configuración → Vinculación de perfiles.' };
     const [channels, readings] = await Promise.all([
       sensorService.getProbeChannels(probe.id),
       sensorService.getProbeReadings(probe.id, Date.now() - 95 * DAY_MS, Date.now()),
     ]);
-    if (!channels.length) return { point, lot, missing: 'La sonda no tiene canales configurados.' };
+    if (!channels.length) return { probe, lot, missing: 'La sonda no tiene canales configurados.' };
     const profile = profiles.find(p => p.lot_id === lot.id) || { ...DEFAULT_PROFILE };
-    const state = buildState(lot, profile, channels, readings);
+    const state = buildState(profile, channels, readings);
     const { inside, layers } = layerSplit(channels.map(c => c.depth_cm).sort((a, b) => a - b), state.rootDepth);
 
     // ---- Historial: agua total de la zona radicular por timestamp ----
@@ -171,9 +171,8 @@ export const soilWaterService = {
     const rainEvents = [...rainByDay.entries()].map(([date, mm]) => ({ date, mm })).sort((a, b) => a.date.localeCompare(b.date));
 
     return {
-      point,
-      lot,
       probe,
+      lot,
       channels,
       readings,
       profile: profile.id ? profile : null,
@@ -187,40 +186,34 @@ export const soilWaterService = {
   // Map<lot_id, estado> — lo consulta el forecast para usar la humedad
   // real de la sonda vinculada al perfil (Configuración → Vinculación).
   async getLinkedProbeStates(lotIds) {
-    const [lots, profiles, probes, points] = await Promise.all([
+    const [lots, profiles, probes] = await Promise.all([
       base44.entities.Lot.list(),
       base44.entities.SoilProfile.list(),
       sensorService.getProbes(),
-      sensorService.getMonitoringPoints(),
     ]);
     const map = new Map();
     for (const profile of profiles) {
       if (!profile.probe_id || !lotIds.includes(profile.lot_id)) continue;
       const probe = probes.find(p => p.id === profile.probe_id);
-      if (!probe) continue;
-      const point = points.find(pt => pt.id === probe.monitoring_point_id);
-      if (!point) continue;
-      map.set(profile.lot_id, await stateForPoint(point, lots, profiles, probe));
+      if (probe) map.set(profile.lot_id, await stateForProbe(probe, lots, profiles));
     }
     return map;
   },
 
   // ---- Getters conceptuales por lote (consultados por la UI, nunca calculados en componentes) ----
   async _lotState(lotId) {
-    const [lots, profiles, probes, points] = await Promise.all([
+    const [lots, profiles, probes] = await Promise.all([
       base44.entities.Lot.list(),
       base44.entities.SoilProfile.list(),
       sensorService.getProbes(),
-      sensorService.getMonitoringPoints(lotId),
     ]);
     const profile = profiles.find(p => p.lot_id === lotId);
-    // Sonda vinculada al perfil en Configuración → Vinculación; si no, primer punto del lote
-    const linkedProbe = profile?.probe_id ? probes.find(p => p.id === profile.probe_id) : null;
-    const point = linkedProbe
-      ? points.find(pt => pt.id === linkedProbe.monitoring_point_id)
-      : points[0];
-    if (!point) return null;
-    return stateForPoint(point, lots, profiles, linkedProbe);
+    // Sonda vinculada al perfil en Configuración → Vinculación; si no, la primera del lote
+    const probe = profile?.probe_id
+      ? probes.find(p => p.id === profile.probe_id)
+      : probes.find(p => p.lot_id === lotId && p.active !== false);
+    if (!probe) return null;
+    return stateForProbe(probe, lots, profiles);
   },
   async getRootZoneWater(lotId) {
     const s = await this._lotState(lotId);
