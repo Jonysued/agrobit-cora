@@ -1,0 +1,55 @@
+{
+  "name": "Sensor",
+  "type": "object",
+  "properties": {
+    "lot_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "sensor_type": {
+      "type": "string",
+      "enum": [
+        "soil_moisture",
+        "soil_temperature",
+        "flow",
+        "pressure",
+        "energy"
+      ]
+    },
+    "depth_cm": {
+      "type": "number"
+    },
+    "unit": {
+      "type": "string"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "lot_id",
+    "name",
+    "sensor_type"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

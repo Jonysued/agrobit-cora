@@ -1,0 +1,57 @@
+{
+  "name": "SoilProfile",
+  "type": "object",
+  "properties": {
+    "lot_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "soil_type": {
+      "type": "string"
+    },
+    "root_zone_depth_cm": {
+      "type": "number"
+    },
+    "field_capacity_vwc": {
+      "type": "number"
+    },
+    "wilting_point_vwc": {
+      "type": "number"
+    },
+    "target_min_vwc": {
+      "type": "number"
+    },
+    "target_max_vwc": {
+      "type": "number"
+    },
+    "initial_vwc": {
+      "type": "number"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "lot_id"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

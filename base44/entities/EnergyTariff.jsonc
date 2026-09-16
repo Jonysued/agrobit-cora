@@ -1,0 +1,43 @@
+{
+  "name": "EnergyTariff",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "price_per_kwh": {
+      "type": "number"
+    },
+    "start_time": {
+      "type": "string"
+    },
+    "end_time": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "price_per_kwh"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

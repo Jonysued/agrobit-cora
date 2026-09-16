@@ -1,0 +1,46 @@
+{
+  "name": "SensorReading",
+  "type": "object",
+  "properties": {
+    "sensor_id": {
+      "type": "string"
+    },
+    "lot_id": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "value": {
+      "type": "number"
+    },
+    "depth_cm": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "sensor_id",
+    "lot_id",
+    "timestamp",
+    "value"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
