@@ -39,7 +39,7 @@ export default function MoistureChart({ detail }) {
   // y programados (futuro, aún no aplicados)
   const irrEvents = [
     ...(detail.events?.irrigation || []).map(e => ({ ...e, kind: 'ejecutado' })),
-    ...scheduled.map(e => ({ ...e, kind: 'programado' })),
+    ...scheduled.filter(e => e.mm > 0).map(e => ({ ...e, kind: 'programado' })),
   ];
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

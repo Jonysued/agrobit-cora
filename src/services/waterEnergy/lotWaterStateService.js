@@ -212,8 +212,11 @@ async function computeLot(lot, ctx, withHistory) {
 
   // ---- Programados del lote (futuro) con eficiencia del modelo ----
   const scheduledMap = ctx.scheduled.get(lot.id) || new Map();
+  // Solo eventos con lámina real: los programas sin mm definido no
+  // aportan agua ni se marcan en el gráfico.
   const scheduledEvents = [...scheduledMap.entries()]
     .map(([date, mm]) => ({ date, mm: round1(mm * efficiency) }))
+    .filter(e => e.mm > 0)
     .sort((a, b) => a.date.localeCompare(b.date));
 
   return {
