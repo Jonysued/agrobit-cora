@@ -130,7 +130,8 @@ export const weatherService = {
     let station = null;
     let current = null;
     if (mode !== 'FORECAST_ONLY') {
-      const stations = await base44.entities.WeatherStation.filter({ farm_id: farm.id });
+      const all = await base44.entities.WeatherStation.list();
+      const stations = all.filter(s => (s.farm_ids || (s.farm_id ? [s.farm_id] : [])).includes(farm.id));
       station = stations.find(s => s.active !== false) || stations[0] || null;
       current = await this.getLatestObservation(farm.id);
     }

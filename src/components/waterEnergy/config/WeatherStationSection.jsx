@@ -21,7 +21,7 @@ const STATUS_BADGES = {
 // Estaciones meteorológicas propias. Las credenciales de API se guardan
 // como secrets del backend — acá solo se registra la configuración no sensible.
 export default function WeatherStationSection({ farms, stations, onChange }) {
-  const farmName = id => (farms || []).find(f => f.id === id)?.name || '—';
+  const linkedFarms = s => s.farm_ids || (s.farm_id ? [s.farm_id] : []);
   const [form, setForm] = useState(() => ({
     farm_id: (farms || [])[0]?.id || '',
     name: '', provider: 'davis', connection_type: 'api',
@@ -37,6 +37,7 @@ export default function WeatherStationSection({ farms, stations, onChange }) {
     const farm = (farms || []).find(f => f.id === form.farm_id);
     await base44.entities.WeatherStation.create({
       farm_id: form.farm_id,
+      farm_ids: [form.farm_id],
       name: form.name,
       provider: form.provider,
       connection_type: form.connection_type,
@@ -65,8 +66,14 @@ export default function WeatherStationSection({ farms, stations, onChange }) {
 
   const remove = async station => { await base44.entities.WeatherStation.delete(station.id); onChange(); };
 
-  // Re-vincular una estación existente a la finca que el usuario elija
-  const relink = async (station, farmId) => { await base44.entities.WeatherStation.update(station.id, { farm_id: farmId }); onChange(); };
+  // Vincular / desvincular la estación a una o más fincas (siempre al menos una)
+  const toggleFarm = async (station, farmId) => {
+    const linked = linkedFarms(station);
+    if (linked.includes(farmId) && linked.length === 1) return;
+    const farm_ids = linked.includes(farmId) ? linked.filter(id => id !== farmId) : [...linked, farmId];
+    await base44.entities.WeatherStation.update(station.id, { farm_ids, farm_id: farm_ids[0] });
+    onChange();
+  };
 
   return (
     <ConfigPanel title="Estaciones meteorológicas" description="Conectá tu estación propia (Davis, WiseConn, Pessl, Campbell, Metos, API genérica o webhook) y elegí a qué finca vincularla. Las credenciales de API se guardan como secrets del backend y nunca se exponen en el frontend.">
@@ -123,11 +130,16 @@ export default function WeatherStationSection({ farms, stations, onChange }) {
                     <b className="text-slate-800">{s.name}</b>
                     <span className="text-slate-400"> · {PROVIDERS.find(p => p[0] === s.provider)?.[1] || s.provider} · {CONNECTION_TYPES.find(c => c[0] === s.connection_type)?.[1]}</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Finca:</span>
-                    <select value={s.farm_id ?? ''} onChange={e => relink(s, e.target.value)} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700">
-                      {(farms || []).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                    </select>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Fincas vinculadas:</span>
+                    {(farms || []).map(f => {
+                      const linked = linkedFarms(s).includes(f.id);
+                      return (
+                        <button key={f.id} type="button" onClick={() => toggleFarm(s, f.id)} className={`rounded-full px-2.5 py-1 text-xs font-bold transition ${linked ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                          {linked ? '✓ ' : '+ '}{f.name}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => test(s)} disabled={t?.loading} className="flex items-center gap-1.5 rounded-lg border border-emerald-700 px-2.5 py-1.5 text-xs font-bold text-emerald-800 transition hover:bg-emerald-50 disabled:opacity-60">

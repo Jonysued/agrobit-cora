@@ -13,7 +13,7 @@ const SOURCES = [
 export default function WeatherSourceSection({ lots, farms, stations, onChange }) {
   const names = [...new Set([...(lots || []).map(l => l.farm).filter(Boolean), ...(farms || []).map(f => f.name)])];
   const [blocked, setBlocked] = useState(null);
-  const activeStations = id => (stations || []).filter(s => s.farm_id === id && s.active !== false);
+  const activeStations = id => (stations || []).filter(s => (s.farm_ids || (s.farm_id ? [s.farm_id] : [])).includes(id) && s.active !== false);
   const save = async (name, value) => {
     const farm = (farms || []).find(f => f.name === name);
     // Estación propia (o híbrido) exige una estación vinculada a esa finca

@@ -5,6 +5,12 @@
     "farm_id": {
       "type": "string"
     },
+    "farm_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "name": {
       "type": "string"
     },
