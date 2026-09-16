@@ -49,6 +49,9 @@
     },
     "pump_id": {
       "type": "string"
+    },
+    "manual_initial_water_mm": {
+      "type": "number"
     }
   },
   "required": [

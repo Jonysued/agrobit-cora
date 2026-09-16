@@ -9,9 +9,14 @@ const fmtTip = t => new Date(t).toLocaleDateString('es-AR', { dateStyle: 'medium
 const dayT = d => new Date(`${d}T12:00:00`).getTime();
 
 export default function MoistureChart({ detail }) {
-  const { state, scenarioWithoutIrrigation, scenarioWithIrrigation, history, recommendation, probeLinked } = detail;
+  const { state, scenarioWithoutIrrigation, scenarioWithIrrigation, history, recommendation, probeLinked, initial_source, profile } = detail;
   const hasRec = recommendation != null;
-  const currentMm = state.current_available_water_mm;
+  // HOY ancla en el estado inicial efectivo: valor manual si está
+  // configurado, o el medido por la sonda — mismo punto de partida
+  // que la proyección.
+  const currentMm = initial_source === 'manual' && profile?.manual_initial_water_mm != null
+    ? profile.manual_initial_water_mm
+    : state.current_available_water_mm;
   const data = [
     ...(history || []).map(h => ({ t: h.t, Histórico: h.mm })),
     { t: Date.now(), Histórico: currentMm, 'Sin riego': currentMm, ...(hasRec ? { 'Riego recomendado': currentMm } : {}) },

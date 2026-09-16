@@ -68,7 +68,11 @@ function buildRow(lot, profile, weatherDays, pumps, tariffs, state) {
   const kc = profile.current_kc;
   const kc_missing = kc == null;
   const days = forecastInputs(weatherDays, kc);
-  const startMm = state.current_available_water_mm;
+  // Estado inicial: valor manual configurado en el lote o agua útil
+  // medida por la sonda — la proyección continúa desde ahí.
+  const manualStart = profile.manual_initial_water_mm != null ? profile.manual_initial_water_mm : null;
+  const startMm = manualStart != null ? manualStart : state.current_available_water_mm;
+  const initial_source = manualStart != null ? 'manual' : 'probe';
   const scenarioWithoutIrrigation = runUsefulWaterScenario(startMm, config, days);
   // Sin Kc configurado o cobertura insuficiente: sin recomendación
   const canRecommend = !kc_missing && state.coverage_status !== 'insufficient';
@@ -80,6 +84,7 @@ function buildRow(lot, profile, weatherDays, pumps, tariffs, state) {
     ...row,
     kc,
     kc_missing,
+    initial_source,
     forecast_confidence: state.coverage_status === 'partial' ? 'partial' : 'complete',
     scenarioWithoutIrrigation,
     scenarioWithIrrigation,

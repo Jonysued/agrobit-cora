@@ -6,6 +6,7 @@ import MetricCard from '@/components/MetricCard';
 import LoadingState from '@/components/LoadingState';
 import MoistureChart from '@/components/waterEnergy/MoistureChart';
 import RecommendationCard from '@/components/waterEnergy/RecommendationCard';
+import InitialStateConfig from '@/components/waterEnergy/InitialStateConfig';
 import { waterForecastService, CONFIG_LABELS } from '@/services/waterEnergy';
 
 const round1 = n => Math.round(n * 10) / 10;
@@ -27,11 +28,13 @@ export default function WaterEnergyLot() {
   const { lotId } = useParams();
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
+    setDetail(null);
     waterForecastService.getLotDetail(lotId)
       .then(d => (d ? setDetail(d) : setError(true)))
       .catch(() => setError(true));
-  }, [lotId]);
+  }, [lotId, reloadKey]);
   if (!detail) return error ? <div className="p-6 text-sm text-slate-500">Lote no encontrado.</div> : <LoadingState />;
   const { lot, profile, state } = detail;
   return (
@@ -51,7 +54,14 @@ export default function WaterEnergyLot() {
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-            <MetricCard label="Agua útil actual" value={`${state.current_available_water_mm} mm`} detail={`${state.available_water_percent}% de la capacidad útil`} tone={state.status === 'RECARGAR' ? 'red' : 'light'} />
+            <MetricCard
+              label={detail.initial_source === 'manual' ? 'Agua útil inicial' : 'Agua útil actual'}
+              value={detail.initial_source === 'manual' ? `${profile.manual_initial_water_mm} mm` : `${state.current_available_water_mm} mm`}
+              detail={detail.initial_source === 'manual' ? `Inicio manual · sonda: ${state.current_available_water_mm} mm` : `${state.available_water_percent}% de la capacidad útil`}
+              tone={detail.initial_source === 'manual'
+                ? (state.recharge_threshold_mm != null && profile.manual_initial_water_mm < state.recharge_threshold_mm ? 'red' : 'light')
+                : (state.status === 'RECARGAR' ? 'red' : 'light')}
+            />
             <MetricCard label="Capacidad útil (TAW)" value={`${state.total_available_water_capacity_mm} mm`} tone="light" />
             <MetricCard label="Umbral de recarga" value={state.recharge_threshold_mm != null ? `${state.recharge_threshold_mm} mm` : '—'} tone="light" />
             <MetricCard label="Objetivo de recarga" value={state.target_water_mm != null ? `${state.target_water_mm} mm` : '—'} tone="light" />
@@ -59,6 +69,7 @@ export default function WaterEnergyLot() {
             <MetricCard label="Lluvia prevista" value={`${round1(detail.scenarioWithoutIrrigation.reduce((s, p) => s + (p.rainfall_mm || 0), 0))} mm`} tone="light" />
             <MetricCard label="Riego recomendado" value={detail.recommendation ? `${detail.recommendation.recommended_irrigation_mm} mm` : detail.kc_missing ? 'Falta Kc' : 'No requerido'} tone={detail.recommendation ? 'amber' : 'light'} />
           </div>
+          <InitialStateConfig detail={detail} onSaved={() => setReloadKey(k => k + 1)} />
           <MoistureChart detail={detail} />
           <RecommendationCard detail={detail} />
           {detail.forecast_confidence === 'partial' && (
