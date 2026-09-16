@@ -7,12 +7,9 @@ import { soilBehaviorService } from '@/services/waterEnergy/soilBehaviorService'
 import { computeProfileConfig, fullProfileDepthCm } from '@/services/waterEnergy/soilWaterService';
 import { base44 } from '@/api/base44Client';
 
-const EMPTY = { lot_id: '', name: '', soil_type: 'Franco', root_zone_depth_cm: 60, field_capacity_vwc: 0.28, wilting_point_vwc: 0.12, target_min_vwc: 0.17, target_max_vwc: 0.24, initial_vwc: 0.21, management_allowed_depletion_percent: '', target_refill_percent: '', current_kc: '', notes: '' };
+const EMPTY = { lot_id: '', name: '', soil_type: 'Franco', root_zone_depth_cm: 60, field_capacity_vwc: 0.28, wilting_point_vwc: 0.12, target_min_vwc: 0.17, target_max_vwc: 0.24, initial_vwc: 0.21, current_kc: '', notes: '' };
 const num = v => (v === '' || v == null ? null : Number(v));
 const toMm = v => (v == null ? '—' : `${Math.round(v * 10) / 10} mm`);
-// Agotamiento permitido en mm = TAW × MAD%
-const madMm = (cfg, madPct) => (cfg?.total_available_water_capacity_mm != null && madPct != null
-  ? cfg.total_available_water_capacity_mm * madPct / 100 : null);
 // Target mín/máx en mm = VWC × profundidad del perfil × 10
 const targetMm = (vwc, depth) => (vwc != null && depth ? vwc * depth * 10 : null);
 
@@ -95,16 +92,18 @@ export default function ProfileSection({ lots, profiles, onChange }) {
     // Los parámetros se ingresan en mm: se convierten a VWC con la
     // profundidad del perfil al guardar
     const mmToVwc = v => (v === '' || v == null || !rootDepth ? null : Number(v) / (rootDepth * 10));
+    // MAD y objetivo de recarga % fueron eliminados: no se guardan
+    const payload = { ...form };
+    delete payload.management_allowed_depletion_percent;
+    delete payload.target_refill_percent;
     const saved = await waterForecastService.saveProfile({
-      ...form,
+      ...payload,
       root_zone_depth_cm: rootDepth,
       field_capacity_vwc: mmToVwc(mmInputs.field_capacity),
       wilting_point_vwc: mmToVwc(mmInputs.wilting_point),
       target_min_vwc: mmToVwc(mmInputs.target_min),
       target_max_vwc: mmToVwc(mmInputs.target_max),
       initial_vwc: mmToVwc(mmInputs.initial),
-      management_allowed_depletion_percent: num(form.management_allowed_depletion_percent),
-      target_refill_percent: num(form.target_refill_percent),
       current_kc: num(form.current_kc),
     });
     const profileId = saved?.id || form.id;
@@ -159,14 +158,6 @@ export default function ProfileSection({ lots, profiles, onChange }) {
             <Field label="Target mín. (mm)"><input required type="number" step="any" min="0" value={mmInputs.target_min ?? ''} onChange={e => setMmInputs(m => ({ ...m, target_min: e.target.value }))} className={inputCls} /></Field>
             <Field label="Target máx. (mm)"><input required type="number" step="any" min="0" value={mmInputs.target_max ?? ''} onChange={e => setMmInputs(m => ({ ...m, target_max: e.target.value }))} className={inputCls} /></Field>
             <Field label="Humedad inicial (mm)"><input type="number" step="any" min="0" value={mmInputs.initial ?? ''} onChange={e => setMmInputs(m => ({ ...m, initial: e.target.value }))} className={inputCls} /></Field>
-            <Field label="Agotamiento permitido (MAD) %">
-              <input type="number" step="any" min="0" max="100" value={form.management_allowed_depletion_percent ?? ''} onChange={e => set('management_allowed_depletion_percent', e.target.value)} className={inputCls} placeholder="40" />
-              <p className="text-[10px] leading-tight text-slate-400">Porcentaje del agua útil que se permite consumir antes de alcanzar el umbral de recarga.</p>
-            </Field>
-            <Field label="Objetivo de recarga %">
-              <input type="number" step="any" min="0" max="100" value={form.target_refill_percent ?? ''} onChange={e => set('target_refill_percent', e.target.value)} className={inputCls} placeholder="90" />
-              <p className="text-[10px] leading-tight text-slate-400">Porcentaje de la capacidad útil al que se quiere recuperar el perfil después de regar.</p>
-            </Field>
             <Field label="Kc del cultivo">
               <input type="number" step="any" min="0" value={form.current_kc ?? ''} onChange={e => set('current_kc', e.target.value)} className={inputCls} placeholder="0.65" />
               <p className="text-[10px] leading-tight text-slate-400">Coeficiente de cultivo usado por el forecast hídrico (ETc = ET0 × Kc). Sin Kc no se genera recomendación de riego.</p>
@@ -188,7 +179,7 @@ export default function ProfileSection({ lots, profiles, onChange }) {
       {profiles.length > 0 && (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[900px] text-sm">
-            <thead><tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Lote</th><th className="pr-3">Suelo</th><th className="pr-3">Prof. (cm)</th><th className="pr-3">CC / PM (mm)</th><th className="pr-3">Target mín / máx (mm)</th><th className="pr-3">MAD (mm)</th><th className="pr-3">Objetivo recarga (mm)</th><th className="pr-3">Capas</th><th /></tr></thead>
+            <thead><tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Lote</th><th className="pr-3">Suelo</th><th className="pr-3">Prof. (cm)</th><th className="pr-3">CC / PM (mm)</th><th className="pr-3">Target mín / máx (mm)</th><th className="pr-3">Capas</th><th /></tr></thead>
             <tbody>
               {profiles.map(p => {
                 const cfg = mmCfg[p.id];
@@ -199,8 +190,6 @@ export default function ProfileSection({ lots, profiles, onChange }) {
                   <td className="pr-3 text-slate-600">{cfg?.profile_depth_cm ?? p.root_zone_depth_cm ?? '—'}</td>
                   <td className="pr-3 text-slate-600">{toMm(cfg?.field_capacity_storage_mm)} / {toMm(cfg?.wilting_storage_mm)}</td>
                   <td className="pr-3 text-slate-600">{toMm(targetMm(p.target_min_vwc, cfg?.profile_depth_cm))} / {toMm(targetMm(p.target_max_vwc, cfg?.profile_depth_cm))}</td>
-                  <td className="pr-3 text-slate-600">{toMm(madMm(cfg, p.management_allowed_depletion_percent))}</td>
-                  <td className="pr-3 text-slate-600">{toMm(cfg?.target_water_mm)}</td>
                   <td className="pr-3 text-slate-600">{layerCounts[p.id] || 0}</td>
                   <td className="whitespace-nowrap text-right">
                     <button onClick={() => openEdit(p)} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 transition hover:border-emerald-600 hover:bg-emerald-50 hover:text-emerald-800"><Pencil size={12} className="inline" /> Editar</button>

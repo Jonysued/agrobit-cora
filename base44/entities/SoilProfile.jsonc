@@ -29,12 +29,6 @@
     "initial_vwc": {
       "type": "number"
     },
-    "management_allowed_depletion_percent": {
-      "type": "number"
-    },
-    "target_refill_percent": {
-      "type": "number"
-    },
     "current_kc": {
       "type": "number"
     },

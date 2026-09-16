@@ -7,9 +7,9 @@ import { runUsefulWaterScenario } from './engine/waterBalanceEngine';
 //
 //  · Detecta el PRIMER día del forecast donde
 //    available_water_mm <= recharge_threshold_mm (umbral de
-//    recarga, derivado del MAD — nunca target_min_vwc).
+//    recarga = Target mín del perfil, en agua útil).
 //  · Lámina recomendada = target_water_mm − available_water_mm
-//    del día del cruce (nunca target_max_vwc, nunca negativa).
+//    del día del cruce (= Target máx del perfil, nunca negativa).
 //  · Re-corre el balance con el riego aplicado ese día para
 //    construir el escenario CON riego.
 // ============================================================

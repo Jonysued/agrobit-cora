@@ -41,8 +41,6 @@ export const CONFIG_LABELS = {
   root_zone_depth: 'profundidad radicular',
   field_capacity: 'capacidad de campo',
   wilting_point: 'punto de marchitez',
-  management_allowed_depletion: 'agotamiento permitido (MAD)',
-  target_refill: 'objetivo de recarga',
 };
 
 const CORE = [
@@ -50,17 +48,11 @@ const CORE = [
   ['field_capacity', 'field_capacity_vwc'],
   ['wilting_point', 'wilting_point_vwc'],
 ];
-const OPTIONAL = [
-  ['management_allowed_depletion', 'management_allowed_depletion_percent'],
-  ['target_refill', 'target_refill_percent'],
-];
-
-// Configuración faltante del perfil (obligatoria + opcional)
+// Configuración faltante del perfil (obligatoria)
 function missingConfiguration(profile) {
   if (!profile) return ['soil_profile'];
   const missing = [];
   for (const [key, field] of CORE) if (profile[field] == null) missing.push(key);
-  for (const [key, field] of OPTIONAL) if (profile[field] == null) missing.push(key);
   return missing;
 }
 
@@ -237,11 +229,14 @@ async function buildState(profile, channels, readings) {
     }
   }
 
-  // Umbral de recarga / objetivo / déficit — sin parámetros, sin invención
-  const mad = profile.management_allowed_depletion_percent;
-  const refill = profile.target_refill_percent;
-  const rechargeMm = mad != null ? round1(tawMm * (1 - mad / 100)) : null;
-  const targetMm = refill != null ? round1(tawMm * refill / 100) : null;
+  // Umbral de recarga / objetivo / déficit: derivados de la ZONA
+  // OBJETIVO (Target mín / máx) del perfil — sin MAD ni % de recarga.
+  const tmin = profile.target_min_vwc;
+  const tmax = profile.target_max_vwc;
+  const rechargeStorageMm = tmin != null ? round1(tmin * fullDepth * 10) : null;
+  const targetStorageMm = tmax != null ? round1(tmax * fullDepth * 10) : null;
+  const rechargeMm = rechargeStorageMm != null ? round1(Math.max(0, rechargeStorageMm - fullWiltingMm)) : null;
+  const targetMm = targetStorageMm != null ? round1(Math.max(0, targetStorageMm - fullWiltingMm)) : null;
   const deficitMm = targetMm != null ? round1(Math.max(0, targetMm - currentAvailableMm)) : null;
 
   // Escala de ALMACENAMIENTO del PERFIL COMPLETO (0–fullDepth): el
@@ -251,8 +246,8 @@ async function buildState(profile, channels, readings) {
   const totalProfileMm = round1(fullWaterMm);
   const wiltingStorage = round1(fullWiltingMm);
   const fcStorage = round1(fullFcMm);
-  const rechargeStorage = mad != null ? round1(wiltingStorage + tawMm * (1 - mad / 100)) : null;
-  const targetStorage = refill != null ? round1(wiltingStorage + tawMm * refill / 100) : null;
+  const rechargeStorage = rechargeStorageMm;
+  const targetStorage = targetStorageMm;
 
   let status = null;
   if (rechargeMm != null) {
@@ -409,10 +404,10 @@ export function computeProfileConfig(profile, layers = [], fullDepthCm) {
     wiltingMm += L.wilting_point_vwc * thicknessMm;
     fcMm += L.field_capacity_vwc * thicknessMm;
   }
-  const mad = profile.management_allowed_depletion_percent;
-  const refill = profile.target_refill_percent;
-  const rechargeMm = mad != null ? round1(tawMm * (1 - mad / 100)) : null;
-  const targetMm = refill != null ? round1(tawMm * refill / 100) : null;
+  const tmin = profile.target_min_vwc;
+  const tmax = profile.target_max_vwc;
+  const rechargeMm = tmin != null ? round1(Math.max(0, tmin * profileDepth * 10 - wiltingMm)) : null;
+  const targetMm = tmax != null ? round1(Math.max(0, tmax * profileDepth * 10 - wiltingMm)) : null;
   return {
     configuration_status: missing_configuration.length ? 'incomplete' : 'complete',
     missing_configuration,
