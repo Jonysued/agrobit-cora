@@ -7,7 +7,8 @@ import { waterForecastService } from '@/services/waterEnergy';
 // Inicialización del estado hídrico del lote. El estado de cada lote
 // es CALCULADO y evoluciona solo con sus propios eventos (riegos
 // ejecutados, lluvia, ETc). Acá se define SOLO el punto de partida:
-// un valor manual (mm de agua útil) o una estimación inicial desde
+// un valor manual (mm de suma de perfil, la misma escala del gráfico)
+// o una estimación inicial desde
 // la sonda de referencia del modelo de suelo. La sonda no vuelve a
 // igualar el estado del lote: solo aprende el comportamiento del
 // suelo (eficiencia de recarga, agotamiento).
@@ -48,18 +49,18 @@ export default function InitialStateConfig({ detail, onSaved }) {
           <div>
             <h3 className="text-sm font-bold text-charcoal">Estado hídrico del lote (inicialización)</h3>
             <p className="text-xs text-slate-500">
-              {state?.current_available_water_mm != null
-                ? `Estado actual: ${state.current_available_water_mm} mm (${SOURCE_LABEL[state.state_source] || 'calculado'}) — el estado evoluciona solo con los eventos del lote.`
+              {state?.total_profile_water_mm != null
+                ? `Suma de perfil actual: ${state.total_profile_water_mm} mm (${SOURCE_LABEL[state.state_source] || 'calculado'}) — el estado evoluciona solo con los eventos del lote.`
                 : 'Sin estado inicial: la curva del lote necesita un punto de partida.'}
             </p>
           </div>
         </div>
         <div className="flex items-end gap-2">
           <div>
-            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Estado inicial (mm)</label>
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Suma de perfil inicial (mm)</label>
             <Input
               type="number" min="0" step="0.1" className="h-9 w-36"
-              value={value} placeholder="mm de agua útil"
+              value={value} placeholder="mm almacenados"
               onChange={e => setValue(e.target.value)}
             />
           </div>
@@ -75,6 +76,11 @@ export default function InitialStateConfig({ detail, onSaved }) {
       </div>
       {error && <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>}
       {!valid && <p className="mt-2 text-xs font-semibold text-red-600">Ingresá un valor válido en mm (mayor o igual a 0).</p>}
+      {state?.field_capacity_storage_mm != null && (
+        <p className="mt-2 text-[11px] text-slate-400">
+          Misma escala del gráfico · rango físico: {state.wilting_storage_mm}–{state.field_capacity_storage_mm} mm (marchitez a capacidad de campo) · valores fuera del rango se ajustan al límite más cercano.
+        </p>
+      )}
     </div>
   );
 }

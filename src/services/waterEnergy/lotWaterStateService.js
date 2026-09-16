@@ -173,6 +173,12 @@ async function computeLot(lot, ctx, withHistory) {
       reason: configComplete ? 'sin_estado_inicial' : 'config_incompleta',
     };
   }
+  // Rango físico del origen: nunca por encima de la capacidad útil
+  // (el excedente drena) ni por debajo del punto de marchitez. Sin
+  // esto, un origen fuera de rango hace que el primer día del
+  // forecast recorte la curva y el gráfico no refleje el valor inicial.
+  if (taw != null && anchor.useful > taw) anchor = { ...anchor, useful: taw };
+  if (anchor.useful < 0) anchor = { ...anchor, useful: 0 };
 
   // ---- Reconstrucción diaria: ancla → hoy ----
   // eventos propios del lote + clima observado + demanda del cultivo,
@@ -236,16 +242,24 @@ export const lotWaterStateService = {
     return new Map(lots.map((l, i) => [l.id, results[i]]));
   },
 
-  // Inicialización manual del estado del lote (mm de agua útil).
-  // Persiste el punto de partida; a partir de ahí el estado evoluciona
-  // solo con los eventos del lote.
-  async initializeManual(lotId, usefulMm) {
+  // Inicialización manual del estado del lote. La entrada está en la
+  // MISMA escala del gráfico "Suma de perfil" (mm de agua almacenada):
+  // la curva arranca exactamente en el valor ingresado. Se acota al
+  // rango físico [punto de marchitez, capacidad de campo] — el
+  // excedente drena y no se almacena. A partir de ahí el estado
+  // evoluciona solo con los eventos del lote.
+  async initializeManual(lotId, profileWaterMm) {
     const profiles = await base44.entities.SoilProfile.filter({ lot_id: lotId });
     const profile = profiles[0];
     if (!profile) throw new Error('El lote no tiene perfil de suelo configurado.');
     const config = await soilWaterService.getProfileConfig(profile);
-    const stored = round1((config?.wilting_storage_mm || 0) + usefulMm);
-    await base44.entities.SoilProfile.update(profile.id, { manual_initial_water_mm: usefulMm });
+    const wilting = config?.wilting_storage_mm || 0;
+    const taw = config?.total_available_water_capacity_mm;
+    let useful = round1(profileWaterMm - wilting);
+    if (taw != null && useful > taw) useful = taw;
+    if (useful < 0) useful = 0;
+    const stored = round1(wilting + useful);
+    await base44.entities.SoilProfile.update(profile.id, { manual_initial_water_mm: useful });
     return base44.entities.LotWaterState.create({
       lot_id: lotId,
       timestamp: new Date().toISOString(),
