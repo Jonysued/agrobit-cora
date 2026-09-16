@@ -71,6 +71,7 @@ export default function WaterEnergySoilPoint() {
               targetStorageMm={data.target_storage_mm}
               fcStorageMm={data.field_capacity_storage_mm}
               nextIrrigation={nextIrrigation}
+              layerBreakdown={data.layer_breakdown}
             />
           )}
           <ProfileChart readings={data.readings} channels={data.channels} events={data.events} />
