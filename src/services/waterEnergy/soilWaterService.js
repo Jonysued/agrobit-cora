@@ -182,10 +182,10 @@ async function buildState(profile, channels, readings) {
   const measuredDepth = segs.length ? segs[segs.length - 1].depth_bottom_cm : 0;
 
   // PERFIL COMPLETO DE LA SONDA: todas las profundidades medidas, sin
-  // recorte a la zona radicular. El indicador "Agua en el perfil"
-  // integra TODO el perfil medido (0 → fondo del sensor más profundo,
-  // ej. 0–120 cm). La agronomía del cultivo (agua útil, umbrales,
-  // estado) sigue calculándose sobre la zona radicular.
+  // recorte a la zona radicular. Tanto el indicador "Agua en el perfil"
+  // como el estado hídrico del cultivo (agua útil, umbrales y estado)
+  // se calculan sobre TODO el perfil medido (0 → fondo del sensor más
+  // profundo, ej. 0–120 cm).
   const allDepths = [...new Set(channels.map(c => c.depth_cm))].sort((a, b) => a - b);
   const fullSegs = sensorSegments(allDepths, Infinity);
   const fullDepth = fullSegs.length ? fullSegs[fullSegs.length - 1].depth_bottom_cm : 0;
@@ -198,15 +198,13 @@ async function buildState(profile, channels, readings) {
     ? [...layers, { depth_top_cm: lastLayer?.depth_bottom_cm ?? 0, depth_bottom_cm: fullDepth, field_capacity_vwc: deepFc, wilting_point_vwc: deepWp }]
     : layers;
 
-  // Desglose auditable (sensor × capa) del PERFIL COMPLETO + sumas de
-  // AGUA ÚTIL de la zona radicular
+  // Desglose auditable (sensor × capa) del PERFIL COMPLETO
   const layer_breakdown = [];
   let currentAvailableMm = 0;
   let tawMm = 0;
   let fullWaterMm = 0;
   let fullWiltingMm = 0;
   let fullFcMm = 0;
-  let fullTawMm = 0;
   for (const seg of fullSegs) {
     const theta = byDepth.get(seg.sensor_depth_cm)?.v;
     if (theta == null) continue; // profundidad sin lectura: no se contabiliza
@@ -214,23 +212,16 @@ async function buildState(profile, channels, readings) {
       const thicknessMm = (part.depth_bottom_cm - part.depth_top_cm) * 10;
       const fc = part.layer.field_capacity_vwc;
       const wp = part.layer.wilting_point_vwc;
-      // PERFIL COMPLETO (0–fullDepth): indicador principal en mm
+      // Agua almacenada del perfil completo (indicador principal, en mm)
       fullWaterMm += theta * thicknessMm;
       fullWiltingMm += wp * thicknessMm;
       fullFcMm += fc * thicknessMm;
-      fullTawMm += (fc - wp) * thicknessMm;
-      // ZONA RADICULAR (agronomía del cultivo): agua útil y capacidad útil
-      const rTop = Math.max(0, part.depth_top_cm);
-      const rBottom = Math.min(rootDepth, part.depth_bottom_cm);
-      let availableMm = 0;
-      let totalMm = 0;
-      if (rBottom > rTop) {
-        const rTh = (rBottom - rTop) * 10;
-        availableMm = Math.max(0, (theta - wp) * rTh);
-        totalMm = (fc - wp) * rTh;
-        currentAvailableMm += availableMm;
-        tawMm += totalMm;
-      }
+      // ESTADO HÍDRICO DEL CULTIVO sobre el perfil completo medido:
+      // agua útil y capacidad útil en la misma escala (0–fullDepth).
+      const availableMm = Math.max(0, (theta - wp) * thicknessMm);
+      const totalMm = (fc - wp) * thicknessMm;
+      currentAvailableMm += availableMm;
+      tawMm += totalMm;
       layer_breakdown.push({
         depth_top_cm: part.depth_top_cm,
         depth_bottom_cm: part.depth_bottom_cm,
@@ -254,15 +245,14 @@ async function buildState(profile, channels, readings) {
   const deficitMm = targetMm != null ? round1(Math.max(0, targetMm - currentAvailableMm)) : null;
 
   // Escala de ALMACENAMIENTO del PERFIL COMPLETO (0–fullDepth): el
-  // indicador "Agua en el perfil" y sus umbrales (recarga, objetivo,
-  // capacidad de campo) en la misma escala de mm almacenados — sin
-  // promedios. El estado RECARGAR/ÓPTIMO/LLENO del cultivo sigue
-  // calculándose con el agua útil de la zona radicular.
+  // indicador "Agua en el perfil", el estado hídrico del cultivo y sus
+  // umbrales (recarga, objetivo, capacidad de campo) en la misma
+  // escala de mm almacenados — sin promedios.
   const totalProfileMm = round1(fullWaterMm);
   const wiltingStorage = round1(fullWiltingMm);
   const fcStorage = round1(fullFcMm);
-  const rechargeStorage = mad != null ? round1(fullWiltingMm + fullTawMm * (1 - mad / 100)) : null;
-  const targetStorage = refill != null ? round1(fullWiltingMm + fullTawMm * refill / 100) : null;
+  const rechargeStorage = mad != null ? round1(wiltingStorage + tawMm * (1 - mad / 100)) : null;
+  const targetStorage = refill != null ? round1(wiltingStorage + tawMm * refill / 100) : null;
 
   let status = null;
   if (rechargeMm != null) {
