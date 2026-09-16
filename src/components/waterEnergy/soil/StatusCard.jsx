@@ -33,9 +33,10 @@ function depthRows(breakdown) {
   return rows.sort((a, b) => a.sensor_depth_cm - b.sensor_depth_cm);
 }
 
-export default function StatusCard({ status, totalProfileMm, depthLabel, deficitMm, rechargeStorageMm, targetStorageMm, fcStorageMm, nextIrrigation, layerBreakdown }) {
+export default function StatusCard({ status, totalProfileMm, depthLabel, deficitMm, rechargeStorageMm, targetStorageMm, fcStorageMm, nextIrrigation, layerBreakdown, belowRootBreakdown }) {
   const scale = fcStorageMm > 0 ? fcStorageMm : null;
   const rows = depthRows(layerBreakdown);
+  const belowRows = belowRootBreakdown || [];
   const pos = scale && totalProfileMm != null ? clamp(Math.round((totalProfileMm / scale) * 100)) : 0;
   const hasZones = scale && rechargeStorageMm != null && targetStorageMm != null;
   const zMin = hasZones ? clamp(Math.round((rechargeStorageMm / scale) * 100)) : null;
@@ -106,6 +107,29 @@ export default function StatusCard({ status, totalProfileMm, depthLabel, deficit
           <p className="mt-2 text-[11px] text-slate-400">
             mm de agua almacenada por segmento ({rows.reduce((s, r) => s + round1(r.water), 0)} mm en total) · barra = llenado relativo a la capacidad de campo del segmento.
           </p>
+          {belowRows.length > 0 && (
+            <div className="mt-3 border-t border-dashed border-slate-200 pt-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bajo la zona radicular · solo monitoreo</p>
+              <div className="mt-2 space-y-2">
+                {belowRows.map(r => {
+                  const pct = r.fc_storage_mm > 0 ? clamp(Math.round((r.profile_water_mm / r.fc_storage_mm) * 100)) : 0;
+                  return (
+                    <div key={r.sensor_depth_cm} className="flex items-center gap-3">
+                      <span className="w-16 shrink-0 text-xs font-bold text-slate-500">{r.sensor_depth_cm} cm</span>
+                      <span className="w-20 shrink-0 text-[11px] text-slate-400">{r.depth_top_cm}–{r.depth_bottom_cm} cm</span>
+                      <div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-slate-400" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="w-28 shrink-0 text-right text-xs font-semibold text-slate-600">
+                        {r.profile_water_mm} de {r.fc_storage_mm ?? '—'} mm
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-[11px] text-slate-400">Profundidades por debajo del perfil del cultivo — no suman al estado hídrico.</p>
+            </div>
+          )}
         </div>
       )}
     </section>

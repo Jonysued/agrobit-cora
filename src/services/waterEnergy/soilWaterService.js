@@ -169,6 +169,7 @@ async function buildState(profile, channels, readings) {
       lastReadingAt: null,
       source: null,
       layer_breakdown: null,
+      below_root_breakdown: null,
       _model: null,
     };
   }
@@ -238,6 +239,30 @@ async function buildState(profile, channels, readings) {
     status = currentAvailableMm < rechargeMm ? 'RECARGAR' : (targetMm != null && currentAvailableMm >= targetMm) ? 'LLENO' : 'ÓPTIMO';
   }
 
+  // MONITOREO BAJO LA ZONA RADICULAR: profundidades de la sonda por
+  // debajo del perfil del cultivo. Se reportan aparte — no suman al
+  // estado hídrico (0–rootDepth) ni a sus umbrales.
+  const below_root_breakdown = [];
+  const allDepths = [...new Set(channels.map(c => c.depth_cm))].sort((a, b) => a - b);
+  for (let i = 0; i < allDepths.length; i++) {
+    const d = allDepths[i];
+    if (d <= rootDepth) continue;
+    const prev = i > 0 ? allDepths[i - 1] : null;
+    const next = i < allDepths.length - 1 ? allDepths[i + 1] : null;
+    const top = Math.max(rootDepth, prev != null ? (prev + d) / 2 : rootDepth);
+    const bottom = next != null ? (d + next) / 2 : d + (d - top);
+    const theta = byDepth.get(d)?.v;
+    if (theta == null || bottom <= top) continue;
+    const thicknessMm = (bottom - top) * 10;
+    below_root_breakdown.push({
+      depth_top_cm: round1(top),
+      depth_bottom_cm: round1(bottom),
+      sensor_depth_cm: d,
+      profile_water_mm: round1(theta * thicknessMm),
+      fc_storage_mm: profile.field_capacity_vwc != null ? round1(profile.field_capacity_vwc * thicknessMm) : null,
+    });
+  }
+
   return {
     configuration_status: missing_configuration.length ? 'incomplete' : 'complete',
     missing_configuration,
@@ -261,6 +286,7 @@ async function buildState(profile, channels, readings) {
     lastReadingAt: lastTs > -Infinity ? new Date(lastTs).toISOString() : null,
     source: lastSource,
     layer_breakdown,
+    below_root_breakdown,
     // Modelo interno (segmentos × capas) — auditoría e historial
     _model: { segs, layers, depths, rootDepth, measuredDepth },
   };
