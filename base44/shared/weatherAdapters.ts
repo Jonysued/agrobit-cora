@@ -8,6 +8,7 @@ import { secrets } from "base44:runtime";
 // Credencial por proveedor — se cargan como secrets de la app.
 const CREDENTIALS = {
   davis: "WEATHER_DAVIS_API_KEY",
+  davis_secret: "WEATHER_DAVIS_API_SECRET",
   wiseconn: "WEATHER_WISECONN_API_KEY",
   pessl: "WEATHER_PESSL_API_KEY",
   campbell: "WEATHER_CAMPBELL_API_KEY",
@@ -32,7 +33,45 @@ function notImplemented(label) {
 }
 
 // ---- Adapters por proveedor (se irán conectando marca por marca) ----
-export const DavisWeatherAdapter = { test: async () => notImplemented("Davis (WeatherLink)") };
+// Davis WeatherLink (Data API v2): prueba de conexión real contra la
+// estación configurada. Requiere los secrets WEATHER_DAVIS_API_KEY y
+// WEATHER_DAVIS_API_SECRET y el ID de estación de WeatherLink en
+// external_station_id (Configuración → Estación meteorológica).
+export const DavisWeatherAdapter = {
+  test: async (station) => {
+    const apiKey = getSecret(CREDENTIALS.davis);
+    const apiSecret = getSecret(CREDENTIALS.davis_secret);
+    if (!apiKey || !apiSecret) {
+      return { ok: false, status: "missing_credentials", message: "Falta configurar WEATHER_DAVIS_API_KEY y WEATHER_DAVIS_API_SECRET en los secrets de la app." };
+    }
+    if (!station.external_station_id) {
+      return { ok: false, status: "misconfigured", message: "Falta el ID de estación de WeatherLink (campo ID / endpoint externo)." };
+    }
+    try {
+      const path = `/v2/stations/${station.external_station_id}`;
+      const timestamp = Math.floor(Date.now() / 1000);
+      // Firma HMAC-SHA256 requerida por WeatherLink v2: api-key \n path \n timestamp
+      const enc = new TextEncoder();
+      const hmacKey = await crypto.subtle.importKey("raw", enc.encode(apiSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+      const sig = await crypto.subtle.sign("HMAC", hmacKey, enc.encode(`${apiKey}\n${path}\n${timestamp}`));
+      const signature = [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, "0")).join("");
+      const res = await fetch(`https://api.weatherlink.com${path}?api-key=${encodeURIComponent(apiKey)}`, {
+        headers: {
+          "X-Api-Key": apiKey,
+          "X-Api-Signature": signature,
+          "X-Api-Timestamp": String(timestamp),
+        },
+      });
+      if (res.ok) return { ok: true, status: "connected", message: "WeatherLink respondió correctamente." };
+      if (res.status === 401 || res.status === 403) {
+        return { ok: false, status: "error", message: "WeatherLink rechazó la credencial — verificá el API key/secret y que la estación pertenezca a la cuenta." };
+      }
+      return { ok: false, status: "error", message: `WeatherLink respondió con código ${res.status}.` };
+    } catch (e) {
+      return { ok: false, status: "error", message: `No se pudo contactar WeatherLink: ${e.message}` };
+    }
+  },
+};
 export const WiseConnWeatherAdapter = { test: async () => notImplemented("WiseConn") };
 export const PesslWeatherAdapter = { test: async () => notImplemented("Pessl") };
 export const CampbellWeatherAdapter = { test: async () => notImplemented("Campbell Scientific") };
