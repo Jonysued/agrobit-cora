@@ -5,6 +5,7 @@ import WeatherPanel from '@/components/waterEnergy/WeatherPanel';
 import LotForecastTable from '@/components/waterEnergy/LotForecastTable';
 import MetricCard from '@/components/MetricCard';
 import LoadingState from '@/components/LoadingState';
+import { Button } from '@/components/ui/button';
 import { waterForecastService } from '@/services/waterEnergy';
 import { weatherService } from '@/services/waterEnergy/weatherService';
 
@@ -17,8 +18,20 @@ export default function WaterEnergy() {
   useEffect(() => {
     weatherService.getFarms().then(fs => { setFarms(fs); if (fs.length) setFarmId(fs[0].id); }).catch(() => setFarms([]));
   }, []);
-  useEffect(() => { waterForecastService.getFarmOverview().then(setData).catch(() => setError(true)); }, []);
-  if (!data) return error ? <div className="p-6 text-sm text-slate-500">No se pudo cargar Water & Energy.</div> : <LoadingState />;
+  const loadOverview = () => {
+    setError(null);
+    waterForecastService.getFarmOverview()
+      .then(setData)
+      .catch(e => { console.error('[WaterEnergy] getFarmOverview:', e); setError(e?.message || 'Error desconocido'); });
+  };
+  useEffect(loadOverview, []);
+  if (!data) return error ? (
+    <div className="mx-auto max-w-md space-y-3 p-8 text-center">
+      <p className="text-sm font-semibold text-slate-600">No se pudo cargar Water &amp; Energy.</p>
+      <p className="break-words rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">{error}</p>
+      <Button onClick={loadOverview}>Reintentar</Button>
+    </div>
+  ) : <LoadingState />;
   const { rows, totals } = data;
   // La finca seleccionada en el selector meteorológico define los
   // lotes de la tabla Y las métricas: TODOS los lotes de esa finca
