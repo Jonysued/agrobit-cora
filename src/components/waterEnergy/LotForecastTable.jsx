@@ -7,6 +7,7 @@ import React from 'react';
 const DOT = { RECARGAR: 'bg-red-500', LLENO: 'bg-emerald-500', 'ÓPTIMO': 'bg-emerald-500' };
 const fmtDate = s => (s ? new Date(`${s}T00:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) : '—');
 const stateText = r => {
+  if (!r.profile) return 'Sin perfil de suelo';
   if (!r.state) return 'Sin sonda';
   if (r.state.missing) return 'Sin lecturas';
   if (r.state.configuration_status === 'incomplete') return 'Config. incompleta';
@@ -17,7 +18,7 @@ export default function LotForecastTable({ rows, onOpen }) {
   if (!rows.length) {
     return (
       <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">
-        No hay lotes con perfil de suelo configurado. Cargalos en Water & Energy → Configuración.
+        No hay lotes cargados para esta finca.
       </section>
     );
   }

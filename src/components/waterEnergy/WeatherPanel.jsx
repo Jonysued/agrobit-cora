@@ -18,12 +18,18 @@ function Metric({ icon: Icon, label, value }) {
 
 // Panel meteorológico del dashboard: dato observado de la estación propia
 // (si la finca la tiene) + pronóstico a 7 días con su fuente.
-export default function WeatherPanel() {
-  const [farms, setFarms] = useState([]);
-  const [farmId, setFarmId] = useState(null);
+export default function WeatherPanel({ farms: farmsProp, farmId: farmIdProp, onFarmChange }) {
+  // Modo controlado: la página pasa la lista y la finca seleccionada
+  // (el selector define qué lotes se ven abajo). Sin props, autónomo.
+  const [ownFarms, setOwnFarms] = useState([]);
+  const [ownFarmId, setOwnFarmId] = useState(null);
+  const farms = farmsProp || ownFarms;
+  const farmId = farmIdProp ?? ownFarmId;
+  const setFarmId = onFarmChange || setOwnFarmId;
   const [combined, setCombined] = useState(undefined);
   useEffect(() => {
-    weatherService.getFarms().then(fs => { setFarms(fs); if (fs.length) setFarmId(fs[0].id); }).catch(() => setFarms([]));
+    if (farmsProp) return;
+    weatherService.getFarms().then(fs => { setOwnFarms(fs); if (fs.length) setOwnFarmId(fs[0].id); }).catch(() => setOwnFarms([]));
   }, []);
   useEffect(() => {
     if (!farmId) return;
