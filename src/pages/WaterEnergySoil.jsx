@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Gauge } from 'lucide-react';
 import ModuleHeader from '@/components/waterEnergy/ModuleHeader';
 import LoadingState from '@/components/LoadingState';
-import { soilWaterService } from '@/services/waterEnergy';
+import { soilWaterService, CONFIG_LABELS } from '@/services/waterEnergy';
 
 // SENSORES — pantalla principal: una sonda por tarjeta,
 // solo información de monitoreo del perfil de suelo.
@@ -20,6 +20,7 @@ const rel = ts => {
   const h = Math.round((Date.now() - new Date(ts).getTime()) / 3600000);
   return h < 1 ? 'hace instantes' : h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`;
 };
+const missingLabels = row => (row.missing_configuration || []).map(k => CONFIG_LABELS[k] || k).join(', ');
 
 export default function WaterEnergySoil() {
   const nav = useNavigate();
@@ -53,15 +54,23 @@ export default function WaterEnergySoil() {
               </div>
               {row.missing ? (
                 <p className="mt-5 text-xs text-slate-400">{row.missing}</p>
+              ) : row.current_available_water_mm == null ? (
+                <div className="mt-5">
+                  <p className="text-sm font-semibold text-amber-700">Configuración incompleta</p>
+                  <p className="mt-1 text-xs text-slate-400">Falta configurar: {missingLabels(row)} — Water & Energy → Configuración.</p>
+                </div>
               ) : (
                 <>
                   <div className="mt-4 flex items-end justify-between">
-                    <span className={`text-3xl font-bold tracking-tight ${STATUS_TEXT[row.status] || ''}`}>{row.pct}%</span>
+                    <span className={`text-3xl font-bold tracking-tight ${STATUS_TEXT[row.status] || 'text-charcoal'}`}>{row.available_water_percent}%</span>
                     <span className="pb-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">agua disponible</span>
                   </div>
                   <div className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-xs text-slate-600">
-                    <p>Estado hídrico: <b>{row.status}</b></p>
+                    <p>Estado hídrico: <b>{row.status || 'Sin configurar'}</b></p>
+                    <p>Agua útil en zona radicular: <b>{row.current_available_water_mm} mm</b></p>
+                    <p>Déficit hasta objetivo: <b>{row.water_deficit_mm != null ? `${row.water_deficit_mm} mm` : 'Sin configurar'}</b></p>
                     <p>Última lectura: <b>{rel(row.lastReadingAt)}</b></p>
+                    {row.missing_configuration?.length > 0 && <p className="text-amber-700">Falta configurar: {missingLabels(row)}</p>}
                   </div>
                 </>
               )}

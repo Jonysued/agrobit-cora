@@ -8,7 +8,7 @@
 // ============================================================
 export { waterForecastService } from './waterForecastService';
 export { sensorService } from './sensorService';
-export { soilWaterService } from './soilWaterService';
+export { soilWaterService, CONFIG_LABELS } from './soilWaterService';
 export { weatherService } from './weatherService';
 export { irrigationRecommendationService } from './irrigationRecommendationService';
 export { energyService } from './energyService';

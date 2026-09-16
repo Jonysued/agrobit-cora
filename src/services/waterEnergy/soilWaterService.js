@@ -1,55 +1,125 @@
 import { base44 } from '@/api/base44Client';
 import { sensorService } from './sensorService';
 import { weatherService } from './weatherService';
-import { mmOfVwc } from './engine/waterBalanceEngine';
 
 // ============================================================
-// soilWaterService — SOLO MONITOREO del agua del perfil de suelo,
-// centrado en SONDA (no en puntos de monitoreo: los puntos se
-// gestionan automáticamente al vincular la sonda a un lote).
-// Convierte lecturas VWC por profundidad en mm de agua de la zona
-// radicular, ponderando el espesor de suelo que representa cada
-// sensor. No genera recomendaciones de riego.
-// La UI consulta resultados: NUNCA calcula.
+// soilWaterService — CÁLCULO DEL ESTADO HÍDRICO ACTUAL del perfil
+// de suelo, centrado en SONDA. SOLO MONITOREO (sin recomendaciones).
+//
+// Motor:
+//  1. Cada sensor representa un segmento del perfil. Los límites
+//     entre sensores consecutivos son los PUNTOS MEDIOS
+//     (d_actual + d_siguiente) / 2 → segmentos continuos, sin
+//     solapamiento, huecos ni doble contabilización. El sensor
+//     más profundo se extiende en forma simétrica: nunca se
+//     extrapola humedad por debajo de la zona medida.
+//  2. root_zone_depth_cm SIEMPRE conserva la profundidad radicular
+//     configurada (no se recorta a la sonda). La cobertura de la
+//     sonda se reporta aparte: measured_profile_depth_cm +
+//     coverage_status (complete / partial / insufficient).
+//  3. Cada segmento se cruza con las SoilLayer del perfil
+//     (división matemática cuando un segmento atraviesa dos
+//     capas). Sin capas configuradas se usan TEMPORALMENTE los
+//     valores generales del perfil (uniform_profile = true).
+//  4. Indicador principal: AGUA ÚTIL (por encima del punto de
+//     marchitez), no el agua total.
+//  5. Sin invención silenciosa: si falta configuración obligatoria
+//     se devuelve configuration_status = "incomplete" +
+//     missing_configuration, sin resultados aparentemente reales.
+//
 // ESTIMACIÓN EXPERIMENTAL — no reemplaza criterio agronómico.
 // ============================================================
 const DAY_MS = 86400000;
 const round1 = n => Math.round(n * 10) / 10;
 
-// Perfil de respaldo si el lote no tiene SoilProfile configurado
-const DEFAULT_PROFILE = {
-  name: 'Perfil estimado',
-  root_zone_depth_cm: 120,
-  field_capacity_vwc: 0.30,
-  wilting_point_vwc: 0.12,
-  target_min_vwc: 0.17,
-  target_max_vwc: 0.25,
+// Etiquetas de la configuración faltante (para la UI)
+export const CONFIG_LABELS = {
+  soil_profile: 'perfil de suelo',
+  root_zone_depth: 'profundidad radicular',
+  field_capacity: 'capacidad de campo',
+  wilting_point: 'punto de marchitez',
+  management_allowed_depletion: 'agotamiento permitido (MAD)',
+  target_refill: 'objetivo de recarga',
 };
 
-// Espesor de suelo (cm) que representa cada sensor dentro de la zona
-// radicular: límites a mitad de camino entre sensores consecutivos.
-function layerSplit(depths, rootDepth) {
-  const inside = depths.filter(d => d <= rootDepth);
-  const layers = inside.map((d, i) => {
-    const top = i === 0 ? 0 : (inside[i - 1] + d) / 2;
-    const next = inside[i + 1] != null ? inside[i + 1] : rootDepth;
-    const bottom = Math.min(rootDepth, next);
-    return Math.max(0, bottom - top);
-  });
-  return { inside, layers };
+const CORE = [
+  ['root_zone_depth', 'root_zone_depth_cm'],
+  ['field_capacity', 'field_capacity_vwc'],
+  ['wilting_point', 'wilting_point_vwc'],
+];
+const OPTIONAL = [
+  ['management_allowed_depletion', 'management_allowed_depletion_percent'],
+  ['target_refill', 'target_refill_percent'],
+];
+
+// Configuración faltante del perfil (obligatoria + opcional)
+function missingConfiguration(profile) {
+  if (!profile) return ['soil_profile'];
+  const missing = [];
+  for (const [key, field] of CORE) if (profile[field] == null) missing.push(key);
+  for (const [key, field] of OPTIONAL) if (profile[field] == null) missing.push(key);
+  return missing;
 }
 
-// Estado hídrico del perfil a partir de las últimas lecturas de la sonda.
-// Orden-agnóstico: conserva el valor más reciente por canal.
-function buildState(rawProfile, channels, readings) {
-  const depths = channels.map(c => c.depth_cm).sort((a, b) => a - b);
-  // Profundidad efectiva: zona radicular del perfil, recortada al alcance de la sonda
-  const rootDepth = Math.min(rawProfile.root_zone_depth_cm || 120, Math.max(...depths));
-  const profile = { ...rawProfile, root_zone_depth_cm: rootDepth };
-  const { inside, layers } = layerSplit(depths, rootDepth);
+// ---- SoilLayers del perfil; sin capas → perfil uniforme temporal ----
+async function getLayersFor(profile) {
+  if (!profile?.id) return { layers: [], uniform_profile: true };
+  const layers = await base44.entities.SoilLayer.filter({ soil_profile_id: profile.id });
+  if (layers.length) {
+    return { layers: layers.sort((a, b) => a.depth_top_cm - b.depth_top_cm), uniform_profile: false };
+  }
+  // Fallback TEMPORAL: valores generales del perfil en toda la zona radicular
+  return {
+    layers: [{
+      depth_top_cm: 0,
+      depth_bottom_cm: profile.root_zone_depth_cm,
+      field_capacity_vwc: profile.field_capacity_vwc,
+      wilting_point_vwc: profile.wilting_point_vwc,
+    }],
+    uniform_profile: true,
+  };
+}
 
-  // Último valor por profundidad (VWC fracción)
-  const latest = new Map();
+// ---- Segmentos representados por cada sensor (puntos medios) ----
+function sensorSegments(depths, rootDepth) {
+  const segs = [];
+  for (let i = 0; i < depths.length; i++) {
+    const top = i === 0 ? 0 : (depths[i - 1] + depths[i]) / 2;
+    const bottom = i < depths.length - 1
+      ? (depths[i] + depths[i + 1]) / 2
+      : depths[i] + (depths[i] - top); // extensión simétrica del sensor más profundo
+    const cTop = Math.max(0, top);
+    const cBottom = Math.min(rootDepth, bottom);
+    if (cBottom - cTop > 0) {
+      segs.push({ sensor_depth_cm: depths[i], depth_top_cm: round1(cTop), depth_bottom_cm: round1(cBottom) });
+    }
+  }
+  return segs;
+}
+
+function coverageStatus(rootDepth, measuredDepth) {
+  if (measuredDepth <= 0) return 'insufficient';
+  const ratio = measuredDepth / rootDepth;
+  if (ratio >= 0.9) return 'complete';
+  if (ratio >= 0.5) return 'partial';
+  return 'insufficient';
+}
+
+// ---- Cruce segmento del sensor × SoilLayer (división matemática) ----
+function splitSegmentWithLayers(seg, layers) {
+  const parts = [];
+  for (const L of layers) {
+    const top = Math.max(seg.depth_top_cm, L.depth_top_cm);
+    const bottom = Math.min(seg.depth_bottom_cm, L.depth_bottom_cm);
+    if (bottom - top <= 0) continue;
+    parts.push({ layer: L, depth_top_cm: round1(top), depth_bottom_cm: round1(bottom) });
+  }
+  return parts;
+}
+
+// ---- Última VWC por profundidad + timestamp/origen más reciente ----
+function latestReadings(channels, readings) {
+  const byDepth = new Map();
   let lastTs = -Infinity;
   let lastSource = 'MANUAL';
   for (const r of readings || []) {
@@ -57,35 +127,111 @@ function buildState(rawProfile, channels, readings) {
     if (!ch) continue;
     const t = new Date(r.timestamp).getTime();
     if (t > lastTs) { lastTs = t; lastSource = r.source || 'MANUAL'; }
-    const cur = latest.get(ch.depth_cm);
-    if (!cur || t > cur.t) latest.set(ch.depth_cm, { t, v: r.value / 100 });
+    const cur = byDepth.get(ch.depth_cm);
+    if (!cur || t > cur.t) byDepth.set(ch.depth_cm, { t, v: r.value / 100 });
+  }
+  return { byDepth, lastTs, lastSource };
+}
+
+// ---- ESTADO HÍDRICO ACTUAL (núcleo del cálculo) ----
+async function buildState(profile, channels, readings) {
+  const missing_configuration = missingConfiguration(profile);
+  const coreOk = !missing_configuration.some(k => k === 'soil_profile' || CORE.some(([key]) => key === k));
+  if (!coreOk) {
+    // Configuración obligatoria faltante: SIN resultados aparentemente reales
+    return {
+      configuration_status: 'incomplete',
+      missing_configuration,
+      uniform_profile: null,
+      root_zone_depth_cm: profile?.root_zone_depth_cm ?? null,
+      measured_profile_depth_cm: null,
+      coverage_status: null,
+      current_available_water_mm: null,
+      total_available_water_capacity_mm: null,
+      available_water_percent: null,
+      recharge_threshold_mm: null,
+      target_water_mm: null,
+      water_deficit_mm: null,
+      status: null,
+      currentVwc: null,
+      lastReadingAt: null,
+      source: null,
+      layer_breakdown: null,
+      _model: null,
+    };
   }
 
-  // Agua almacenada en la zona radicular (mm)
-  let currentMm = 0;
-  inside.forEach((d, i) => { currentMm += (latest.get(d)?.v || 0) * layers[i] * 10; });
-  currentMm = round1(currentMm);
+  // La profundidad radicular SIEMPRE es la configurada — nunca se recorta
+  const rootDepth = profile.root_zone_depth_cm;
+  const { layers, uniform_profile } = await getLayersFor(profile);
+  const depths = [...new Set(channels.map(c => c.depth_cm))].filter(d => d <= rootDepth).sort((a, b) => a - b);
+  const { byDepth, lastTs, lastSource } = latestReadings(channels, readings);
+  const segs = sensorSegments(depths, rootDepth);
+  const measuredDepth = segs.length ? segs[segs.length - 1].depth_bottom_cm : 0;
 
-  const wpMm = round1(mmOfVwc(profile.wilting_point_vwc, rootDepth));
-  const fcMm = round1(mmOfVwc(profile.field_capacity_vwc, rootDepth));
-  const tMinMm = round1(mmOfVwc(profile.target_min_vwc, rootDepth));
-  const tMaxMm = round1(mmOfVwc(profile.target_max_vwc, rootDepth));
-  const pct = fcMm > wpMm ? Math.max(0, Math.min(100, Math.round(((currentMm - wpMm) / (fcMm - wpMm)) * 100))) : null;
-  const deficitMm = round1(Math.max(0, tMaxMm - currentMm));
-  const status = currentMm < tMinMm ? 'RECARGAR' : currentMm >= tMaxMm ? 'LLENO' : 'ÓPTIMO';
+  // Desglose auditable (sensor × capa) y sumas de AGUA ÚTIL
+  const layer_breakdown = [];
+  let currentAvailableMm = 0;
+  let tawMm = 0;
+  let measuredWaterMm = 0;
+  for (const seg of segs) {
+    const theta = byDepth.get(seg.sensor_depth_cm)?.v;
+    if (theta == null) continue; // profundidad sin lectura: no se contabiliza
+    for (const part of splitSegmentWithLayers(seg, layers)) {
+      const thicknessMm = (part.depth_bottom_cm - part.depth_top_cm) * 10;
+      const fc = part.layer.field_capacity_vwc;
+      const wp = part.layer.wilting_point_vwc;
+      const availableMm = Math.max(0, (theta - wp) * thicknessMm);
+      const totalMm = (fc - wp) * thicknessMm;
+      currentAvailableMm += availableMm;
+      tawMm += totalMm;
+      measuredWaterMm += theta * thicknessMm;
+      layer_breakdown.push({
+        depth_top_cm: part.depth_top_cm,
+        depth_bottom_cm: part.depth_bottom_cm,
+        thickness_cm: round1(part.depth_bottom_cm - part.depth_top_cm),
+        sensor_depth_cm: seg.sensor_depth_cm,
+        current_vwc: theta,
+        field_capacity_vwc: fc,
+        wilting_point_vwc: wp,
+        available_water_mm: round1(availableMm),
+        total_available_water_mm: round1(totalMm),
+      });
+    }
+  }
+
+  // Umbral de recarga / objetivo / déficit — sin parámetros, sin invención
+  const mad = profile.management_allowed_depletion_percent;
+  const refill = profile.target_refill_percent;
+  const rechargeMm = mad != null ? round1(tawMm * (1 - mad / 100)) : null;
+  const targetMm = refill != null ? round1(tawMm * refill / 100) : null;
+  const deficitMm = targetMm != null ? round1(Math.max(0, targetMm - currentAvailableMm)) : null;
+
+  let status = null;
+  if (rechargeMm != null) {
+    status = currentAvailableMm < rechargeMm ? 'RECARGAR' : (targetMm != null && currentAvailableMm >= targetMm) ? 'LLENO' : 'ÓPTIMO';
+  }
 
   return {
-    rootDepth,
-    depths: inside,
-    currentMm,
-    currentVwc: currentMm / (rootDepth * 10),
-    pct,
-    deficitMm,
+    configuration_status: missing_configuration.length ? 'incomplete' : 'complete',
+    missing_configuration,
+    uniform_profile,
+    root_zone_depth_cm: rootDepth,
+    measured_profile_depth_cm: measuredDepth,
+    coverage_status: coverageStatus(rootDepth, measuredDepth),
+    current_available_water_mm: round1(currentAvailableMm),
+    total_available_water_capacity_mm: round1(tawMm),
+    available_water_percent: tawMm > 0 ? round1((currentAvailableMm / tawMm) * 100) : null,
+    recharge_threshold_mm: rechargeMm,
+    target_water_mm: targetMm,
+    water_deficit_mm: deficitMm,
     status,
-    thresholds: { wpMm, fcMm, tMinMm, tMaxMm },
+    currentVwc: measuredDepth > 0 ? round1((measuredWaterMm / (measuredDepth * 10)) * 1000) / 1000 : null,
     lastReadingAt: lastTs > -Infinity ? new Date(lastTs).toISOString() : null,
     source: lastSource,
-    experimental: !rawProfile.id,
+    layer_breakdown,
+    // Modelo interno (segmentos × capas) — auditoría e historial
+    _model: { segs, layers, depths, rootDepth, measuredDepth },
   };
 }
 
@@ -99,9 +245,36 @@ async function stateForProbe(probe, lots, profiles) {
   if (!channels.length) return { probe, probeId: probe.id, lot, lotName: lot.name, missing: 'Sonda sin canales/profundidades configurados.' };
   const readings = await base44.entities.SensorReading.filter({ probe_id: probe.id }, '-timestamp', 200);
   if (!readings.length) return { probe, probeId: probe.id, lot, lotName: lot.name, missing: 'Sin lecturas — la sonda todavía no reporta datos.' };
-  const profile = profiles.find(p => p.lot_id === lot.id) || { ...DEFAULT_PROFILE };
-  const state = buildState(profile, channels, readings);
+  const profile = profiles.find(p => p.lot_id === lot.id) || null;
+  const state = await buildState(profile, channels, readings);
   return { probe, probeId: probe.id, lot, lotName: lot.name, probeProvider: probe.provider, connectionStatus: probe.connection_status, ...state };
+}
+
+// Serie temporal de agua ÚTIL (mm) en la zona radicular medida
+function usefulWaterSeries(readings, channels, model) {
+  const { segs, layers, depths } = model;
+  const depthByChannel = new Map(channels.map(c => [c.id, c.depth_cm]));
+  const byTs = new Map();
+  for (const r of readings) {
+    const d = depthByChannel.get(r.probe_channel_id);
+    if (d == null) continue;
+    const t = new Date(r.timestamp).getTime();
+    if (!byTs.has(t)) byTs.set(t, new Map());
+    byTs.get(t).set(d, r.value / 100);
+  }
+  const series = [];
+  byTs.forEach((vals, t) => {
+    if (!depths.every(d => vals.has(d))) return; // timestamp incompleto
+    let useful = 0;
+    for (const seg of segs) {
+      const theta = vals.get(seg.sensor_depth_cm);
+      for (const part of splitSegmentWithLayers(seg, layers)) {
+        useful += Math.max(0, (theta - part.layer.wilting_point_vwc) * (part.depth_bottom_cm - part.depth_top_cm) * 10);
+      }
+    }
+    series.push({ t, mm: round1(useful) });
+  });
+  return series.sort((a, b) => a.t - b.t);
 }
 
 export const soilWaterService = {
@@ -132,28 +305,9 @@ export const soilWaterService = {
       sensorService.getProbeReadings(probe.id, Date.now() - 95 * DAY_MS, Date.now()),
     ]);
     if (!channels.length) return { probe, lot, missing: 'La sonda no tiene canales configurados.' };
-    const profile = profiles.find(p => p.lot_id === lot.id) || { ...DEFAULT_PROFILE };
-    const state = buildState(profile, channels, readings);
-    const { inside, layers } = layerSplit(channels.map(c => c.depth_cm).sort((a, b) => a - b), state.rootDepth);
-
-    // ---- Historial: agua total de la zona radicular por timestamp ----
-    const depthByChannel = new Map(channels.map(c => [c.id, c.depth_cm]));
-    const byTs = new Map();
-    for (const r of readings) {
-      const d = depthByChannel.get(r.probe_channel_id);
-      if (d == null) continue;
-      const t = new Date(r.timestamp).getTime();
-      if (!byTs.has(t)) byTs.set(t, new Map());
-      byTs.get(t).set(d, r.value / 100);
-    }
-    const history = [];
-    byTs.forEach((vals, t) => {
-      if (vals.size < inside.length) return; // timestamp incompleto
-      let mm = 0;
-      inside.forEach((d, i) => { mm += (vals.get(d) || 0) * layers[i] * 10; });
-      history.push({ t, mm: round1(mm) });
-    });
-    history.sort((a, b) => a.t - b.t);
+    const profile = profiles.find(p => p.lot_id === lot.id) || null;
+    const state = await buildState(profile, channels, readings);
+    const history = state._model ? usefulWaterSeries(readings, channels, state._model) : [];
 
     // ---- Eventos de contexto: riegos del lote + lluvia observada ----
     const programs = await base44.entities.IrrigationProgram.list();
@@ -175,7 +329,7 @@ export const soilWaterService = {
       lot,
       channels,
       readings,
-      profile: profile.id ? profile : null,
+      profile,
       ...state,
       history,
       events: { irrigation: irrigationEvents, rain: rainEvents },
@@ -200,40 +354,39 @@ export const soilWaterService = {
     return map;
   },
 
-  // ---- Historial diario de VWC de la zona radicular según la sonda
-  // vinculada al perfil del lote (Vinculación de perfiles).
-  // Devuelve [{date, vwc}] (última lectura de cada día) o null si el
-  // lote no tiene sonda vinculada con lecturas.
+  // ---- Historial diario de VWC de la zona radicular medida según la
+  // sonda vinculada al perfil del lote (Vinculación de perfiles).
+  // Devuelve [{date, vwc}] (última lectura de cada día) o null.
   async getLinkedProbeVwcHistory(lotId) {
     const state = await this._lotState(lotId);
-    if (!state || state.missing || !state.probe) return null;
+    if (!state || state.missing || !state.probe || !state._model) return null;
+    const { segs, depths, measuredDepth } = state._model;
     const [channels, readings] = await Promise.all([
       sensorService.getProbeChannels(state.probe.id),
       sensorService.getProbeReadings(state.probe.id, Date.now() - 95 * DAY_MS, Date.now()),
     ]);
     if (!channels.length || !readings.length) return null;
-    const { inside, layers } = layerSplit(channels.map(c => c.depth_cm).sort((a, b) => a - b), state.rootDepth);
     const depthByChannel = new Map(channels.map(c => [c.id, c.depth_cm]));
     const byTs = new Map();
     for (const r of readings) {
       const d = depthByChannel.get(r.probe_channel_id);
-      if (d == null || !inside.includes(d)) continue;
+      if (d == null) continue;
       const t = new Date(r.timestamp).getTime();
       if (!byTs.has(t)) byTs.set(t, new Map());
       byTs.get(t).set(d, r.value / 100);
     }
-    // Último valor de cada día: VWC promedio de la zona radicular
+    // Último valor de cada día: VWC promedio de la zona radicular medida
     const byDay = new Map();
     [...byTs.entries()].sort((a, b) => a[0] - b[0]).forEach(([t, vals]) => {
-      if (vals.size < inside.length) return;
+      if (!depths.every(d => vals.has(d))) return;
       let mm = 0;
-      inside.forEach((d, i) => { mm += (vals.get(d) || 0) * layers[i] * 10; });
-      byDay.set(new Date(t).toISOString().slice(0, 10), mm / (state.rootDepth * 10));
+      for (const seg of segs) mm += vals.get(seg.sensor_depth_cm) * (seg.depth_bottom_cm - seg.depth_top_cm) * 10;
+      byDay.set(new Date(t).toISOString().slice(0, 10), mm / (measuredDepth * 10));
     });
     return [...byDay.entries()].map(([date, vwc]) => ({ date, vwc }));
   },
 
-  // ---- Getters conceptuales por lote (consultados por la UI, nunca calculados en componentes) ----
+  // ---- Estado por lote (sonda vinculada al perfil o primera del lote) ----
   async _lotState(lotId) {
     const [lots, profiles, probes] = await Promise.all([
       base44.entities.Lot.list(),
@@ -241,27 +394,34 @@ export const soilWaterService = {
       sensorService.getProbes(),
     ]);
     const profile = profiles.find(p => p.lot_id === lotId);
-    // Sonda vinculada al perfil en Configuración → Vinculación; si no, la primera del lote
     const probe = profile?.probe_id
       ? probes.find(p => p.id === profile.probe_id)
       : probes.find(p => p.lot_id === lotId && p.active !== false);
     if (!probe) return null;
     return stateForProbe(probe, lots, profiles);
   },
+
+  // ---- Getters conceptuales (nuevo motor: agua útil) ----
   async getRootZoneWater(lotId) {
     const s = await this._lotState(lotId);
-    return s && !s.missing ? { currentMm: s.currentMm, rootDepthCm: s.rootDepth, ...s.thresholds } : null;
+    if (!s || s.missing || s.current_available_water_mm == null) return null;
+    return {
+      currentAvailableMm: s.current_available_water_mm,
+      tawMm: s.total_available_water_capacity_mm,
+      rootZoneDepthCm: s.root_zone_depth_cm,
+      measuredProfileDepthCm: s.measured_profile_depth_cm,
+    };
   },
   async getAvailableWaterPercent(lotId) {
     const s = await this._lotState(lotId);
-    return s && !s.missing ? s.pct : null;
+    return s && !s.missing ? s.available_water_percent : null;
   },
   async getWaterDeficitMm(lotId) {
     const s = await this._lotState(lotId);
-    return s && !s.missing ? s.deficitMm : null;
+    return s && !s.missing ? s.water_deficit_mm : null;
   },
   async getRechargeThreshold(lotId) {
     const s = await this._lotState(lotId);
-    return s && !s.missing ? s.thresholds.tMinMm : null;
+    return s && !s.missing ? s.recharge_threshold_mm : null;
   },
 };
