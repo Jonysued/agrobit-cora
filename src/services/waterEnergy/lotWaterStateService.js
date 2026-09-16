@@ -91,7 +91,9 @@ async function dailyObservedWeather(farmId) {
     const day = o.timestamp.slice(0, 10);
     const cur = raw.get(day) || { rain: 0, etoSum: 0, etoN: 0 };
     cur.rain += o.rainfall_mm || 0;
-    if (o.eto_mm != null) { cur.etoSum += o.eto_mm; cur.etoN++; etos.push(o.eto_mm); }
+    // ET0 = 0 se trata como "sin dato" (la demanda diaria nunca es
+    // exactamente cero): no contabiliza para el promedio del día.
+    if (o.eto_mm > 0) { cur.etoSum += o.eto_mm; cur.etoN++; etos.push(o.eto_mm); }
     raw.set(day, cur);
   }
   const byDay = new Map();
@@ -146,10 +148,13 @@ async function computeLot(lot, ctx, withHistory) {
     if (profile.manual_initial_water_mm != null) {
       anchor = { date: todayStr(), useful: profile.manual_initial_water_mm, source: 'manual_adjustment' };
       justInitialized = true;
-    } else if (model?.reference_probe_id) {
-      // Estimación inicial ÚNICA desde la sonda de referencia (el estado
-      // luego evoluciona solo: la sonda nunca vuelve a igualarlo).
-      const probeState = await soilWaterService.getProbeWaterState(model.reference_probe_id);
+    } else {
+      // Estimación inicial ÚNICA desde la sonda de referencia del modelo
+      // de suelo — o, si aún no hay modelo creado, desde la sonda
+      // vinculada al perfil. El estado luego evoluciona solo: la sonda
+      // nunca vuelve a igualarlo.
+      const refProbeId = model?.reference_probe_id || profile.probe_id;
+      const probeState = refProbeId ? await soilWaterService.getProbeWaterState(refProbeId) : null;
       if (probeState && !probeState.missing && probeState.current_available_water_mm != null) {
         anchor = { date: todayStr(), useful: probeState.current_available_water_mm, source: 'initialized' };
         justInitialized = true;
@@ -264,8 +269,9 @@ export const lotWaterStateService = {
     if (!profile) throw new Error('El lote no tiene perfil de suelo configurado.');
     const models = await soilBehaviorService.getModels();
     const model = soilBehaviorService.getModelForProfile(profile, models);
-    if (!model?.reference_probe_id) throw new Error('El lote no tiene modelo de suelo con sonda de referencia — vinculá uno en Water & Energy → Configuración.');
-    const probeState = await soilWaterService.getProbeWaterState(model.reference_probe_id);
+    const refProbeId = model?.reference_probe_id || profile.probe_id;
+    if (!refProbeId) throw new Error('El lote no tiene modelo de suelo ni sonda vinculada — vinculá uno en Water & Energy → Configuración.');
+    const probeState = await soilWaterService.getProbeWaterState(refProbeId);
     if (!probeState || probeState.missing || probeState.current_available_water_mm == null) {
       throw new Error('La sonda de referencia no tiene lecturas suficientes para estimar el estado inicial.');
     }

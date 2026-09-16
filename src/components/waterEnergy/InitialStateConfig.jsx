@@ -66,8 +66,8 @@ export default function InitialStateConfig({ detail, onSaved }) {
           <Button size="sm" disabled={saving || !valid || parsed == null} onClick={() => run(() => waterForecastService.initializeManual(profile.lot_id, parsed))}>
             <Save size={14} className="mr-1" />Guardar
           </Button>
-          {model && (
-            <Button size="sm" variant="outline" disabled={saving} title="Estimación inicial única desde la sonda de referencia del modelo de suelo" onClick={() => run(() => waterForecastService.initializeFromReferenceProbe(profile.lot_id))}>
+          {(model || profile?.probe_id) && (
+            <Button size="sm" variant="outline" disabled={saving} title="Estimación inicial única desde la sonda de referencia del modelo de suelo (o la sonda vinculada al perfil)" onClick={() => run(() => waterForecastService.initializeFromReferenceProbe(profile.lot_id))}>
               <RefreshCw size={14} className="mr-1" />Reiniciar desde sonda
             </Button>
           )}
