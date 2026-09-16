@@ -2,24 +2,16 @@ import React from 'react';
 
 const fmtDate = s => new Date(`${s}T00:00:00`).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 
-// Tarjeta de recomendación de riego (agua útil en mm).
-// Sin Kc configurado o con cobertura de sonda insuficiente no se
-// genera recomendación automática — se informa el motivo.
+// Tarjeta de recomendación de riego (agua útil en mm de la curva
+// calculada del lote). Sin Kc configurado no se genera recomendación
+// automática — se informa el motivo.
 export default function RecommendationCard({ detail }) {
-  const { lot, recommendation, energy, kc_missing, state, forecast_confidence } = detail;
+  const { lot, recommendation, energy, kc_missing, forecast_confidence } = detail;
   if (kc_missing) {
     return (
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
         <h3 className="font-bold text-amber-900">Recomendación</h3>
         <p className="mt-1 text-sm text-amber-800">Falta configurar Kc — definí el Kc del cultivo en Water & Energy → Configuración → Perfiles de suelo para generar la recomendación de riego.</p>
-      </section>
-    );
-  }
-  if (state?.coverage_status === 'insufficient') {
-    return (
-      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-        <h3 className="font-bold text-amber-900">Recomendación</h3>
-        <p className="mt-1 text-sm text-amber-800">Cobertura de la sonda insuficiente sobre la zona radicular — no se genera recomendación automática. El forecast se muestra solo como referencia.</p>
       </section>
     );
   }

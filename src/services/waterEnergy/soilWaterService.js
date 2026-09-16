@@ -312,6 +312,72 @@ function usefulWaterSeries(readings, channels, model) {
 }
 
 export const soilWaterService = {
+  // ---- Configuración estática del perfil (SIN sonda) ----
+  // Capacidad útil (TAW), agua almacenada en marchitez / capacidad de
+  // campo y umbrales derivados (recarga, objetivo), calculados SOLO
+  // con el perfil y sus capas. Es la base del modelo de lote: la sonda
+  // de referencia ya no define el estado hídrico del lote.
+  async getProfileConfig(profile) {
+    const missing_configuration = missingConfiguration(profile);
+    const coreOk = !missing_configuration.some(k => k === 'soil_profile' || CORE.some(([key]) => key === k));
+    if (!coreOk || !profile) {
+      return {
+        configuration_status: 'incomplete',
+        missing_configuration: missing_configuration.length ? missing_configuration : ['soil_profile'],
+        root_zone_depth_cm: profile?.root_zone_depth_cm ?? null,
+        total_available_water_capacity_mm: null,
+        wilting_storage_mm: null,
+        field_capacity_storage_mm: null,
+        recharge_threshold_mm: null,
+        target_water_mm: null,
+        recharge_storage_mm: null,
+        target_storage_mm: null,
+      };
+    }
+    const { layers } = await getLayersFor(profile);
+    const rootDepth = profile.root_zone_depth_cm;
+    let tawMm = 0, wiltingMm = 0, fcMm = 0;
+    for (const L of layers) {
+      const top = Math.max(0, L.depth_top_cm);
+      const bottom = Math.min(rootDepth, L.depth_bottom_cm);
+      const thicknessMm = (bottom - top) * 10;
+      if (thicknessMm <= 0) continue;
+      tawMm += (L.field_capacity_vwc - L.wilting_point_vwc) * thicknessMm;
+      wiltingMm += L.wilting_point_vwc * thicknessMm;
+      fcMm += L.field_capacity_vwc * thicknessMm;
+    }
+    const mad = profile.management_allowed_depletion_percent;
+    const refill = profile.target_refill_percent;
+    const rechargeMm = mad != null ? round1(tawMm * (1 - mad / 100)) : null;
+    const targetMm = refill != null ? round1(tawMm * refill / 100) : null;
+    return {
+      configuration_status: missing_configuration.length ? 'incomplete' : 'complete',
+      missing_configuration,
+      root_zone_depth_cm: rootDepth,
+      total_available_water_capacity_mm: round1(tawMm),
+      wilting_storage_mm: round1(wiltingMm),
+      field_capacity_storage_mm: round1(fcMm),
+      recharge_threshold_mm: rechargeMm,
+      target_water_mm: targetMm,
+      recharge_storage_mm: rechargeMm != null ? round1(wiltingMm + rechargeMm) : null,
+      target_storage_mm: targetMm != null ? round1(wiltingMm + targetMm) : null,
+    };
+  },
+
+  // ---- Estado de UNA sonda puntual (referencia de un modelo de
+  //      suelo / pantalla Sensores). NUNCA representa la humedad de
+  //      un lote: es la medición de esa sonda. ----
+  async getProbeWaterState(probeId) {
+    const [probes, lots, profiles] = await Promise.all([
+      base44.entities.SoilProbe.list(),
+      base44.entities.Lot.list(),
+      base44.entities.SoilProfile.list(),
+    ]);
+    const probe = probes.find(p => p.id === probeId);
+    if (!probe) return null;
+    return stateForProbe(probe, lots, profiles);
+  },
+
   // ---- Listado de sondas (pantalla Sensores) ----
   async getProbeSummaries() {
     const [probes, lots, profiles] = await Promise.all([

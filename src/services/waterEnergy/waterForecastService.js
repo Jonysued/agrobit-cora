@@ -2,33 +2,32 @@ import { base44 } from '@/api/base44Client';
 import { weatherService } from './weatherService';
 import { energyService } from './energyService';
 import { irrigationRecommendationService } from './irrigationRecommendationService';
-import { soilWaterService } from './soilWaterService';
+import { lotWaterStateService } from './lotWaterStateService';
 import { runUsefulWaterScenario } from './engine/waterBalanceEngine';
 
 // ============================================================
 // waterForecastService — orquestador del módulo Water & Energy.
-// FORECAST HÍDRICO V1 (AGUA ÚTIL EN MM):
-//  · Estado inicial: AGUA ÚTIL DISPONIBLE (mm) medida por la
-//    sonda, tomada directamente de soilWaterService — nunca VWC
-//    promedio. Junto al estado se propagan TAW, umbral de recarga,
-//    objetivo, cobertura y estado de configuración.
-//  · Balance diario: agua = agua + lluvia efectiva + riego − ETc,
-//    con ETc = ET0 (forecast meteorológico) × Kc (current_kc del
-//    perfil). Limitado por TAW: el exceso es drainage_mm; si cae
-//    bajo 0 se marca below_wilting.
-//  · V1: effective_rainfall_mm = rainfall_mm (sin coeficientes;
-//    se mantienen como variables separadas para evolucionar).
-//  · Recomendación: primer día que cruza recharge_threshold_mm,
-//    recargando hasta target_water_mm. Bloqueada si falta Kc
-//    ("Falta configurar Kc") o si la cobertura es insuficiente.
-//  · configuration_status incomplete → forecast no disponible;
-//    coverage partial → forecast con forecast_confidence "partial".
+//
+// FORECAST HÍDRICO POR LOTE (CURVA CALCULADA):
+//   LotWaterState (estado calculado del lote, lotWaterStateService)
+//   + SoilBehaviorModel (comportamiento del suelo de referencia)
+//   + IrrigationLog (riegos ejecutados → ya aplicados al estado)
+//   + IrrigationProgram (riegos programados → futuro)
+//   + WeatherForecast (ET0 / lluvia pronosticada)
+//   + Kc del cultivo (ETc = ET0 × Kc)
+//   = CURVA HÍDRICA PROPIA DE CADA LOTE
+//
+// La sonda de referencia NO entrega el estado del lote: el estado
+// inicial es el último LotWaterState persistido (o una inicialización
+// manual / estimación única desde la sonda). Dos lotes con el mismo
+// modelo de suelo tienen curvas completamente distintas.
+//
 // MODELO EXPERIMENTAL — no es una predicción agronómica validada.
 // ============================================================
 
 const round1 = n => Math.round(n * 10) / 10;
 
-// Insumos diarios del balance. V1: lluvia efectiva = lluvia
+// Insumos diarios del balance futuro. V1: lluvia efectiva = lluvia
 // pronosticada tal cual (variables separadas para el futuro).
 function forecastInputs(weatherDays, kc) {
   return (weatherDays || []).map(w => ({
@@ -41,56 +40,91 @@ function forecastInputs(weatherDays, kc) {
   }));
 }
 
+// Estado sintético para la UI (escala de agua útil + almacenamiento)
+function buildState(curve) {
+  const { config, currentUsefulMm } = curve;
+  const taw = config.total_available_water_capacity_mm;
+  const recharge = config.recharge_threshold_mm;
+  const target = config.target_water_mm;
+  let status = null;
+  if (recharge != null) {
+    status = currentUsefulMm < recharge ? 'RECARGAR'
+      : (target != null && currentUsefulMm >= target) ? 'LLENO' : 'ÓPTIMO';
+  }
+  return {
+    configuration_status: config.configuration_status,
+    missing_configuration: config.missing_configuration,
+    current_available_water_mm: currentUsefulMm,
+    available_water_percent: taw > 0 ? round1((currentUsefulMm / taw) * 100) : null,
+    status,
+    total_available_water_capacity_mm: taw,
+    recharge_threshold_mm: recharge,
+    target_water_mm: target,
+    wilting_storage_mm: config.wilting_storage_mm,
+    field_capacity_storage_mm: config.field_capacity_storage_mm,
+    recharge_storage_mm: config.recharge_storage_mm,
+    target_storage_mm: config.target_storage_mm,
+    total_profile_water_mm: curve.currentStoredMm,
+    state_source: curve.state_source,
+    origin: curve.origin,
+    last_state_at: curve.anchored_at,
+  };
+}
+
 // Fila de análisis de un lote (compartida por dashboard y detalle)
-function buildRow(lot, profile, weatherDays, pumps, tariffs, state) {
+function buildRow(lot, curve, weatherDays, pumps, tariffs) {
+  const { profile, model, efficiency } = curve;
   const pump = energyService.getPumpForLot(pumps, lot, profile);
   const tariff = energyService.getActiveTariff(tariffs);
-  // El estado inicial SIEMPRE es el agua útil medida (soilWaterService)
-  const usable = state && !state.missing
-    && state.configuration_status === 'complete'
-    && state.current_available_water_mm != null;
+  const usable = curve.forecast_status === 'ok'
+    && curve.config?.configuration_status === 'complete'
+    && curve.currentUsefulMm != null;
   const row = {
     lot,
     profile,
+    model,
     pump,
     tariff,
-    state: state || null,
+    state: usable ? buildState(curve) : (curve.config
+      ? { configuration_status: curve.config.configuration_status, missing_configuration: curve.config.missing_configuration }
+      : null),
     weather: weatherDays,
     forecast_status: usable ? 'ok' : 'no_disponible',
   };
   if (!usable) return row;
 
-  const config = {
-    total_available_water_capacity_mm: state.total_available_water_capacity_mm,
-    recharge_threshold_mm: state.recharge_threshold_mm,
-    target_water_mm: state.target_water_mm,
-  };
+  // Balance futuro: clima + riegos PROGRAMADOS del lote (con la
+  // eficiencia de recarga del modelo de suelo de referencia)
   const kc = profile.current_kc;
   const kc_missing = kc == null;
-  const days = forecastInputs(weatherDays, kc);
-  // Estado inicial: valor manual configurado en el lote o agua útil
-  // medida por la sonda — la proyección continúa desde ahí.
-  const manualStart = profile.manual_initial_water_mm != null ? profile.manual_initial_water_mm : null;
-  const startMm = manualStart != null ? manualStart : state.current_available_water_mm;
-  const initial_source = manualStart != null ? 'manual' : 'probe';
-  const scenarioWithoutIrrigation = runUsefulWaterScenario(startMm, config, days);
-  // Sin Kc configurado o cobertura insuficiente: sin recomendación
-  const canRecommend = !kc_missing && state.coverage_status !== 'insufficient';
+  const scheduledByDate = new Map((curve.events?.scheduled || []).map(e => [e.date, e.mm]));
+  const days = forecastInputs(weatherDays, kc).map(d => ({
+    ...d,
+    irrigation_mm: scheduledByDate.get(d.date) ?? 0,
+  }));
+  const config = {
+    total_available_water_capacity_mm: curve.config.total_available_water_capacity_mm,
+    recharge_threshold_mm: curve.config.recharge_threshold_mm,
+    target_water_mm: curve.config.target_water_mm,
+  };
+  const scenarioScheduled = runUsefulWaterScenario(curve.currentUsefulMm, config, days);
+  const canRecommend = !kc_missing;
   const { recommendation, scenarioWithIrrigation } = canRecommend
-    ? irrigationRecommendationService.withRecommendation(config, lot, startMm, days, scenarioWithoutIrrigation)
-    : { recommendation: null, scenarioWithIrrigation: scenarioWithoutIrrigation };
+    ? irrigationRecommendationService.withRecommendation(config, lot, curve.currentUsefulMm, days, scenarioScheduled)
+    : { recommendation: null, scenarioWithIrrigation: scenarioScheduled };
   const energy = recommendation ? energyService.compute(recommendation.recommended_irrigation_m3, pump, tariff) : null;
   return {
     ...row,
     kc,
     kc_missing,
-    initial_source,
-    forecast_confidence: state.coverage_status === 'partial' ? 'partial' : 'complete',
-    scenarioWithoutIrrigation,
+    efficiency,
+    scheduled_irrigation: curve.events?.scheduled || [],
+    forecast_confidence: model?.calibration_status === 'calibrated' ? 'complete' : 'partial',
+    scenarioWithoutIrrigation: scenarioScheduled,
     scenarioWithIrrigation,
     recommendation,
     energy,
-    below_wilting: scenarioWithoutIrrigation.some(p => p.below_wilting),
+    below_wilting: scenarioScheduled.some(p => p.below_wilting),
   };
 }
 
@@ -103,21 +137,23 @@ export const waterForecastService = {
   },
   async deleteProfile(id) { return base44.entities.SoilProfile.delete(id); },
 
+  // ---- Inicialización del estado de un lote (manual / sonda de ref.) ----
+  initializeManual(lotId, mm) { return lotWaterStateService.initializeManual(lotId, mm); },
+  initializeFromReferenceProbe(lotId) { return lotWaterStateService.initializeFromReferenceProbe(lotId); },
+
   // ---- Dashboard: filas por lote + totales de 7 días ----
   async getFarmOverview() {
-    const [lots, profiles, pumps, tariffs] = await Promise.all([
+    const [lots, pumps, tariffs] = await Promise.all([
       this.getLots(),
-      this.getProfiles(),
       energyService.getPumps(),
       energyService.getTariffs(),
     ]);
-    const tariff = energyService.getActiveTariff(tariffs);
+    const curves = await lotWaterStateService.getLotStates(lots, { withHistory: false });
     const weather = await weatherService.getFarmForecast(lots);
-    const states = await soilWaterService.getStateForLots(lots.map(l => l.id));
     const rows = lots.map(lot => {
-      const profile = profiles.find(p => p.lot_id === lot.id);
-      if (!profile) return { lot, profile: null, forecast_status: 'no_disponible' };
-      return buildRow(lot, profile, weather.get(lot.id) || [], pumps, tariffs, states.get(lot.id));
+      const curve = curves.get(lot.id);
+      if (!curve?.profile) return { lot, profile: null, state: null, forecast_status: 'no_disponible' };
+      return buildRow(lot, curve, weather.get(lot.id) || [], pumps, tariffs);
     });
     const withState = rows.filter(r => r.forecast_status === 'ok');
     const withRecommendation = withState.filter(r => r.recommendation);
@@ -125,34 +161,35 @@ export const waterForecastService = {
     const totals = {
       lots: lots.length,
       monitored: withState.length,
-      unprofiled: rows.length - rows.filter(r => r.profile).length,
+      unprofiled: rows.filter(r => !r.profile).length,
       avgPct: pcts.length ? Math.round(pcts.reduce((s, v) => s + v, 0) / pcts.length) : null,
       volumeM3: Math.round(withRecommendation.reduce((s, r) => s + (r.recommendation?.recommended_irrigation_m3 || 0), 0)),
       kwh: Math.round(withRecommendation.reduce((s, r) => s + (r.energy?.kwh || 0), 0)),
       cost: Math.round(withRecommendation.reduce((s, r) => s + (r.energy?.cost || 0), 0)),
     };
-    return { rows, totals, tariff };
+    return { rows, totals, tariff: energyService.getActiveTariff(tariffs) };
   },
 
-  // ---- Detalle de un lote: histórico + HOY + forecast a 7 días ----
+  // ---- Detalle de un lote: histórico calculado + HOY + forecast a 7 días ----
   async getLotDetail(lotId) {
     const lots = await this.getLots();
     const lot = lots.find(l => l.id === lotId);
     if (!lot) return null;
-    const [profiles, pumps, tariffs] = await Promise.all([
-      this.getProfiles(),
+    const [pumps, tariffs, curves] = await Promise.all([
       energyService.getPumps(),
       energyService.getTariffs(),
+      lotWaterStateService.getLotStates([lot], { withHistory: true }),
     ]);
-    const profile = profiles.find(p => p.lot_id === lotId);
-    if (!profile) return { lot, profile: null, forecast_status: 'no_disponible' };
-    const [weather, state, history] = await Promise.all([
-      weatherService.getFarmForecast([lot]),
-      soilWaterService.getStateForLots([lotId]).then(m => m.get(lotId)),
-      soilWaterService.getUsefulWaterHistory(lotId),
-    ]);
-    const row = buildRow(lot, profile, weather.get(lot.id) || [], pumps, tariffs, state);
-    // Histórico del agua útil (mm) medido por la sonda del lote
-    return { ...row, history: history || [], probeLinked: !!history };
+    const curve = curves.get(lotId);
+    if (!curve?.profile) return { lot, profile: null, forecast_status: 'no_disponible' };
+    const weather = await weatherService.getFarmForecast([lot]);
+    const row = buildRow(lot, curve, weather.get(lot.id) || [], pumps, tariffs);
+    // Serie calculada del lote (agua útil mm por día) + eventos propios
+    return {
+      ...row,
+      history: curve.history || [],
+      events: curve.events,
+      efficiency: curve.efficiency,
+    };
   },
 };

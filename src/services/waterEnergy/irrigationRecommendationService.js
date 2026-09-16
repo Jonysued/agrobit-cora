@@ -35,7 +35,7 @@ export const irrigationRecommendationService = {
       recommended_irrigation_m3: volumeM3,
       recommended_start_date: hit.date,
       days_to_threshold: hit.day,
-      reason: `Sin riego, el agua útil del perfil alcanza el umbral de recarga (${threshold} mm) dentro de ${hit.day} día${hit.day > 1 ? 's' : ''}. Se recomienda regar para recuperar hasta el objetivo de recarga (${target} mm).`,
+      reason: `Sin riego adicional al ya programado, el agua útil del perfil alcanza el umbral de recarga (${threshold} mm) dentro de ${hit.day} día${hit.day > 1 ? 's' : ''}. Se recomienda regar para recuperar hasta el objetivo de recarga (${target} mm).`,
       status: 'activa',
     };
     const scenarioWithIrrigation = runUsefulWaterScenario(startMm, config, days.map(d => (

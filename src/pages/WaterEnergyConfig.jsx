@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ModuleHeader from '@/components/waterEnergy/ModuleHeader';
 import LoadingState from '@/components/LoadingState';
-import { waterForecastService, sensorService, energyService, weatherService } from '@/services/waterEnergy';
+import { waterForecastService, sensorService, energyService, weatherService, soilBehaviorService } from '@/services/waterEnergy';
 import ProfileSection from '@/components/waterEnergy/config/ProfileSection';
 import SensorSection from '@/components/waterEnergy/config/SensorSection';
 import PumpSection from '@/components/waterEnergy/config/PumpSection';
@@ -23,7 +23,11 @@ export default function WaterEnergyConfig() {
       energyService.getTariffs(),
       weatherService.getConfig(lots.map(l => l.farm)),
     ]);
-    setData({ lots, profiles, probes, pumps, tariffs, farms: weather.farms, stations: weather.stations });
+    // Un modelo de suelo por sonda (la sonda es la referencia del
+    // modelo) — se crean si no existen y se recalibran si venció su
+    // calibración (> 7 días).
+    const models = await soilBehaviorService.ensureModelsForProbes(probes);
+    setData({ lots, profiles, probes, models, pumps, tariffs, farms: weather.farms, stations: weather.stations });
   };
   useEffect(() => { refresh().catch(() => setError(true)); }, []);
   if (!data) return error ? <div className="p-6 text-sm text-slate-500">No se pudo cargar la configuración.</div> : <LoadingState />;
@@ -35,7 +39,7 @@ export default function WaterEnergyConfig() {
         <SensorSection lots={data.lots} probes={data.probes} onChange={refresh} />
         <PumpSection lots={data.lots} pumps={data.pumps} onChange={refresh} />
         <TariffSection tariffs={data.tariffs} onChange={refresh} />
-        <LinkSection lots={data.lots} profiles={data.profiles} probes={data.probes} pumps={data.pumps} onChange={refresh} />
+        <LinkSection lots={data.lots} profiles={data.profiles} probes={data.probes} models={data.models} pumps={data.pumps} onChange={refresh} />
         <FarmLocationSection lots={data.lots} farms={data.farms} onChange={refresh} />
         <WeatherSourceSection lots={data.lots} farms={data.farms} stations={data.stations} onChange={refresh} />
         <WeatherStationSection farms={data.farms} stations={data.stations} onChange={refresh} />

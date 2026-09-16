@@ -1,15 +1,13 @@
 import React from 'react';
 
-// Tabla de forecast por lote — agua útil en mm (V1).
-// Estado actual medido por la sonda, proyección a +3/+7 días sin
-// riego, próximo riego (cruce del umbral de recarga) y lámina
-// recomendada.
+// Tabla de forecast por lote — agua útil CALCULADA de cada lote
+// (curva propia: riegos ejecutados/programados, clima y cultivo),
+// proyección a +3/+7 días, próximo riego y lámina recomendada.
 const DOT = { RECARGAR: 'bg-red-500', LLENO: 'bg-emerald-500', 'ÓPTIMO': 'bg-emerald-500' };
 const fmtDate = s => (s ? new Date(`${s}T00:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) : '—');
 const stateText = r => {
   if (!r.profile) return 'Sin perfil de suelo';
-  if (!r.state) return 'Sin sonda';
-  if (r.state.missing) return 'Sin lecturas';
+  if (!r.state) return 'Sin estado inicial';
   if (r.state.configuration_status === 'incomplete') return 'Config. incompleta';
   return `${r.state.current_available_water_mm} mm · ${r.state.available_water_percent}% útil`;
 };
@@ -31,7 +29,7 @@ export default function LotForecastTable({ rows, onOpen }) {
       <table className="w-full min-w-[860px] text-sm">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
-            {['Lote', 'Agua útil actual', '+3 días', '+7 días', 'Próximo riego', 'MM recomendados', 'Energía estimada'].map(h => <th key={h} className="px-4 py-3">{h}</th>)}
+            {['Lote', 'Agua útil (calculada)', '+3 días', '+7 días', 'Próximo riego', 'MM recomendados', 'Energía estimada'].map(h => <th key={h} className="px-4 py-3">{h}</th>)}
           </tr>
         </thead>
         <tbody>
