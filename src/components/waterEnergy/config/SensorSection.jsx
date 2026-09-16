@@ -7,8 +7,10 @@ import { sensorService } from '@/services/waterEnergy';
 // FINCA → LOTE → PUNTO DE MONITOREO → SONDA → CANALES/PROFUNDIDADES.
 // Los puntos son ubicaciones físicas; las sondas definen sus propias
 // profundidades (canales). Las lecturas se cargan por CSV/API/demo.
+const PROVIDERS = [['wiseconn', 'WiseConn'], ['irrimax', 'IrriMAX'], ['cropx', 'CropX'], ['demo', 'Demo / Manual']];
 const EMPTY_POINT = { lot_id: '', name: '', active: true };
-const EMPTY_PROBE = { monitoring_point_id: '', name: '', provider: '', active: true };
+const EMPTY_PROBE = { monitoring_point_id: '', name: '', provider: '', external_device_id: '', active: true };
+const rel = ts => { if (!ts) return '—'; const h = Math.round((Date.now() - new Date(ts).getTime()) / 3600000); return h < 1 ? 'hace instantes' : h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`; };
 const lotName = (lots, id) => lots.find(l => l.id === id)?.name || '—';
 
 export default function SensorSection({ lots, points, probes, onChange }) {
@@ -64,7 +66,7 @@ export default function SensorSection({ lots, points, probes, onChange }) {
             <b className="text-sm text-charcoal">{probeForm.id ? 'Editar sonda' : 'Nueva sonda'}</b>
             <button type="button" onClick={() => setProbeForm(null)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Punto de monitoreo">
               <select required value={probeForm.monitoring_point_id} onChange={e => setS('monitoring_point_id', e.target.value)} className={inputCls}>
                 <option value="">Seleccionar…</option>
@@ -72,8 +74,15 @@ export default function SensorSection({ lots, points, probes, onChange }) {
               </select>
             </Field>
             <Field label="Nombre"><input required value={probeForm.name} onChange={e => setS('name', e.target.value)} className={inputCls} placeholder="Sonda A" /></Field>
-            <Field label="Proveedor"><input value={probeForm.provider ?? ''} onChange={e => setS('provider', e.target.value)} className={inputCls} placeholder="WiseConn / IrriMAX / CropX…" /></Field>
+            <Field label="Proveedor · API">
+              <select value={probeForm.provider || ''} onChange={e => setS('provider', e.target.value)} className={inputCls}>
+                <option value="">Seleccionar…</option>
+                {PROVIDERS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </Field>
+            <Field label="ID del dispositivo (API)"><input value={probeForm.external_device_id ?? ''} onChange={e => setS('external_device_id', e.target.value)} className={inputCls} placeholder="ID en la API del proveedor" /></Field>
           </div>
+          <p className="mt-2 text-[11px] text-slate-400">Las credenciales de la API del proveedor se configuran de forma segura en el backend (Secrets). Aquí registrás la sonda, su proveedor y su ID de dispositivo — cuando la API empieza a reportar lecturas, la sonda aparece automáticamente en el módulo Sensores.</p>
           <label className="mt-3 flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={probeForm.active !== false} onChange={e => setS('active', e.target.checked)} className="h-4 w-4 accent-emerald-700" />Activa</label>
           <button disabled={busy} className="mt-4 w-full rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy ? 'Guardando…' : 'Guardar sonda'}</button>
         </form>
@@ -105,13 +114,15 @@ export default function SensorSection({ lots, points, probes, onChange }) {
         <div className="mt-4 overflow-x-auto">
           <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">Sondas</p>
           <table className="w-full min-w-[620px] text-sm">
-            <thead><tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Sonda</th><th className="pr-3">Punto · Lote</th><th className="pr-3">Proveedor</th><th className="pr-3">Estado</th><th /></tr></thead>
+            <thead><tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Sonda</th><th className="pr-3">Punto · Lote</th><th className="pr-3">Proveedor</th><th className="pr-3">ID externo</th><th className="pr-3">Última lectura</th><th className="pr-3">Estado</th><th /></tr></thead>
             <tbody>
               {probes.map(s => (
                 <tr key={s.id} className="border-b border-slate-100">
                   <td className="py-2 pr-3"><b className="text-slate-700">{s.name}</b></td>
                   <td className="pr-3 text-slate-600">{points.find(p => p.id === s.monitoring_point_id)?.name || '—'} · {lotName(lots, s.lot_id)}</td>
                   <td className="pr-3 text-slate-600">{s.provider || '—'}</td>
+                  <td className="pr-3 text-slate-600">{s.external_device_id || '—'}</td>
+                  <td className="pr-3 text-slate-600">{rel(s.last_reading_at)}</td>
                   <td className="pr-3"><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${s.active !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>{s.active !== false ? 'Activa' : 'Inactiva'}</span></td>
                   <td className="whitespace-nowrap text-right">
                     <button onClick={() => setProbeForm({ ...s })} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 transition hover:border-emerald-600 hover:bg-emerald-50 hover:text-emerald-800"><Pencil size={12} className="inline" /> Editar</button>

@@ -77,6 +77,7 @@ function buildState(lot, rawProfile, channels, readings) {
     rootDepth,
     depths: inside,
     currentMm,
+    currentVwc: currentMm / (rootDepth * 10),
     pct,
     deficitMm,
     status,
@@ -99,7 +100,7 @@ async function stateForPoint(point, lots, profiles, preferredProbe) {
   if (!readings.length) return { point, lot, lotName: lot.name, missing: 'Sin lecturas cargadas.' };
   const profile = profiles.find(p => p.lot_id === lot.id) || { ...DEFAULT_PROFILE };
   const state = buildState(lot, profile, channels, readings);
-  return { point, lot, lotName: lot.name, probeName: probe.name, ...state };
+  return { point, lot, lotName: lot.name, probeName: probe.name, probeProvider: probe.provider, connectionStatus: probe.connection_status, ...state };
 }
 
 export const soilWaterService = {
@@ -180,6 +181,28 @@ export const soilWaterService = {
       history,
       events: { irrigation: irrigationEvents, rain: rainEvents },
     };
+  },
+
+  // ---- Estados de las sondas vinculadas a perfiles por lote ----
+  // Map<lot_id, estado> — lo consulta el forecast para usar la humedad
+  // real de la sonda vinculada al perfil (Configuración → Vinculación).
+  async getLinkedProbeStates(lotIds) {
+    const [lots, profiles, probes, points] = await Promise.all([
+      base44.entities.Lot.list(),
+      base44.entities.SoilProfile.list(),
+      sensorService.getProbes(),
+      sensorService.getMonitoringPoints(),
+    ]);
+    const map = new Map();
+    for (const profile of profiles) {
+      if (!profile.probe_id || !lotIds.includes(profile.lot_id)) continue;
+      const probe = probes.find(p => p.id === profile.probe_id);
+      if (!probe) continue;
+      const point = points.find(pt => pt.id === probe.monitoring_point_id);
+      if (!point) continue;
+      map.set(profile.lot_id, await stateForPoint(point, lots, profiles, probe));
+    }
+    return map;
   },
 
   // ---- Getters conceptuales por lote (consultados por la UI, nunca calculados en componentes) ----

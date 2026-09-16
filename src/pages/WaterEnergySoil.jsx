@@ -60,6 +60,7 @@ export default function WaterEnergySoil() {
                     <span className="pb-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">agua disponible</span>
                   </div>
                   <div className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                    <p>Sonda: <b>{row.probeName}{row.probeProvider ? ` · ${row.probeProvider}` : ''}</b></p>
                     <p>Estado hídrico: <b>{row.status}</b></p>
                     <p>Última lectura: <b>{rel(row.lastReadingAt)}</b></p>
                   </div>
