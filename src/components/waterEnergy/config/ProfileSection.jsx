@@ -3,28 +3,55 @@ import { Pencil, Trash2, Plus, X } from 'lucide-react';
 import ConfigPanel, { Field, inputCls } from './ConfigPanel';
 import ProfileLayersEditor, { validateLayers } from './ProfileLayersEditor';
 import { waterForecastService } from '@/services/waterEnergy';
+import { soilBehaviorService } from '@/services/waterEnergy/soilBehaviorService';
+import { computeProfileConfig, fullProfileDepthCm } from '@/services/waterEnergy/soilWaterService';
 import { base44 } from '@/api/base44Client';
 
 const EMPTY = { lot_id: '', name: '', soil_type: 'Franco', root_zone_depth_cm: 60, field_capacity_vwc: 0.28, wilting_point_vwc: 0.12, target_min_vwc: 0.17, target_max_vwc: 0.24, initial_vwc: 0.21, management_allowed_depletion_percent: '', target_refill_percent: '', current_kc: '', notes: '' };
 const num = v => (v === '' || v == null ? null : Number(v));
-const pct = v => (v == null ? '—' : `${Math.round(v * 100)}%`);
-const pct100 = v => (v == null || v === '' ? '—' : `${v}%`);
+const toMm = v => (v == null ? '—' : `${Math.round(v * 10) / 10} mm`);
+// Agotamiento permitido en mm = TAW × MAD%
+const madMm = (cfg, madPct) => (cfg?.total_available_water_capacity_mm != null && madPct != null
+  ? cfg.total_available_water_capacity_mm * madPct / 100 : null);
+// Target mín/máx en mm = VWC × profundidad del perfil × 10
+const targetMm = (vwc, depth) => (vwc != null && depth ? vwc * depth * 10 : null);
 
 export default function ProfileSection({ lots, profiles, onChange }) {
   const [form, setForm] = useState(null);
   const [layers, setLayers] = useState([]);
   const [deletedLayerIds, setDeletedLayerIds] = useState([]);
   const [layerCounts, setLayerCounts] = useState({});
+  const [mmCfg, setMmCfg] = useState({});
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  // Cantidad de capas por perfil (resumen del listado)
+  // Capas por perfil (resumen) + valores en mm de agua almacenada,
+  // integrados sobre el perfil completo definido por la sonda de
+  // referencia (misma escala que el dashboard)
   useEffect(() => {
-    base44.entities.SoilLayer.list().then(all => {
+    Promise.all([
+      base44.entities.SoilLayer.list(),
+      base44.entities.SoilProbeChannel.list(),
+      soilBehaviorService.getModels(),
+    ]).then(([allLayers, channels, models]) => {
       const counts = {};
-      all.forEach(l => { if (l.soil_profile_id) counts[l.soil_profile_id] = (counts[l.soil_profile_id] || 0) + 1; });
+      const layersByProfile = {};
+      allLayers.forEach(l => {
+        if (!l.soil_profile_id) return;
+        counts[l.soil_profile_id] = (counts[l.soil_profile_id] || 0) + 1;
+        (layersByProfile[l.soil_profile_id] ||= []).push(l);
+      });
       setLayerCounts(counts);
+      const cfgs = {};
+      profiles.forEach(p => {
+        const model = soilBehaviorService.getModelForProfile(p, models);
+        const refProbeId = model?.reference_probe_id || p.probe_id;
+        const depths = refProbeId ? channels.filter(c => c.probe_id === refProbeId).map(c => c.depth_cm) : [];
+        const layers = (layersByProfile[p.id] || []).sort((a, b) => a.depth_top_cm - b.depth_top_cm);
+        cfgs[p.id] = computeProfileConfig(p, layers, fullProfileDepthCm(depths));
+      });
+      setMmCfg(cfgs);
     }).catch(() => {});
   }, [profiles]);
 
@@ -92,7 +119,7 @@ export default function ProfileSection({ lots, profiles, onChange }) {
   const layerChecks = form ? validateLayers(layers, num(form.root_zone_depth_cm)) : { errors: [], warnings: [] };
 
   return (
-    <ConfigPanel title="Perfiles de suelo" description={`Zona objetivo (target_min / target_max) por lote, en humedad volumétrica · ${profiles.length} configurado(s)`}>
+    <ConfigPanel title="Perfiles de suelo" description={`Valores en mm de agua almacenada sobre el perfil completo · ${profiles.length} configurado(s)`}>
       {!form && <button onClick={openNew} className="flex items-center gap-1.5 rounded-lg bg-emerald-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-800"><Plus size={14} />Nuevo perfil</button>}
       {form && (
         <form onSubmit={save} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -144,24 +171,26 @@ export default function ProfileSection({ lots, profiles, onChange }) {
       {profiles.length > 0 && (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[900px] text-sm">
-            <thead><tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Lote</th><th className="pr-3">Suelo</th><th className="pr-3">Prof. (cm)</th><th className="pr-3">CC / PM</th><th className="pr-3">Target mín / máx</th><th className="pr-3">MAD</th><th className="pr-3">Objetivo recarga</th><th className="pr-3">Capas</th><th /></tr></thead>
+            <thead><tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Lote</th><th className="pr-3">Suelo</th><th className="pr-3">Prof. (cm)</th><th className="pr-3">CC / PM (mm)</th><th className="pr-3">Target mín / máx (mm)</th><th className="pr-3">MAD (mm)</th><th className="pr-3">Objetivo recarga (mm)</th><th className="pr-3">Capas</th><th /></tr></thead>
             <tbody>
-              {profiles.map(p => (
+              {profiles.map(p => {
+                const cfg = mmCfg[p.id];
+                return (
                 <tr key={p.id} className="border-b border-slate-100">
                   <td className="py-2 pr-3"><b className="text-slate-700">{lots.find(l => l.id === p.lot_id)?.name || '—'}</b></td>
                   <td className="pr-3 text-slate-600">{p.soil_type || '—'}</td>
-                  <td className="pr-3 text-slate-600">{p.root_zone_depth_cm ?? '—'}</td>
-                  <td className="pr-3 text-slate-600">{pct(p.field_capacity_vwc)} / {pct(p.wilting_point_vwc)}</td>
-                  <td className="pr-3 text-slate-600">{pct(p.target_min_vwc)} / {pct(p.target_max_vwc)}</td>
-                  <td className="pr-3 text-slate-600">{pct100(p.management_allowed_depletion_percent)}</td>
-                  <td className="pr-3 text-slate-600">{pct100(p.target_refill_percent)}</td>
+                  <td className="pr-3 text-slate-600">{cfg?.profile_depth_cm ?? p.root_zone_depth_cm ?? '—'}</td>
+                  <td className="pr-3 text-slate-600">{toMm(cfg?.field_capacity_storage_mm)} / {toMm(cfg?.wilting_storage_mm)}</td>
+                  <td className="pr-3 text-slate-600">{toMm(targetMm(p.target_min_vwc, cfg?.profile_depth_cm))} / {toMm(targetMm(p.target_max_vwc, cfg?.profile_depth_cm))}</td>
+                  <td className="pr-3 text-slate-600">{toMm(madMm(cfg, p.management_allowed_depletion_percent))}</td>
+                  <td className="pr-3 text-slate-600">{toMm(cfg?.target_water_mm)}</td>
                   <td className="pr-3 text-slate-600">{layerCounts[p.id] || 0}</td>
                   <td className="whitespace-nowrap text-right">
                     <button onClick={() => openEdit(p)} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 transition hover:border-emerald-600 hover:bg-emerald-50 hover:text-emerald-800"><Pencil size={12} className="inline" /> Editar</button>
                     <button onClick={() => del(p)} className="ml-1.5 rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"><Trash2 size={14} /></button>
                   </td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         </div>
