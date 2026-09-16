@@ -27,6 +27,11 @@ import { soilBehaviorService } from './soilBehaviorService';
 // estado persistido para trazabilidad).
 // ============================================================
 const MODEL_VERSION = 'v1';
+// Fondo del perfil de cálculo (cm): el estado hídrico CALCULADO de un
+// lote se integra SIEMPRE sobre el perfil completo 0–120 cm. La sonda
+// de referencia define el fondo con sus profundidades (10–115 → 120);
+// sin sonda de referencia se usa el estándar 0–120 cm.
+const DEFAULT_FULL_PROFILE_DEPTH_CM = 120;
 const round1 = n => Math.round(n * 10) / 10;
 const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -109,9 +114,9 @@ async function dailyObservedWeather(farmId) {
 async function referenceFullDepthCm(profile, models) {
   const model = soilBehaviorService.getModelForProfile(profile, models);
   const refProbeId = model?.reference_probe_id || profile.probe_id;
-  if (!refProbeId) return null;
+  if (!refProbeId) return DEFAULT_FULL_PROFILE_DEPTH_CM;
   const channels = await base44.entities.SoilProbeChannel.filter({ probe_id: refProbeId });
-  return fullProfileDepthCm(channels.map(c => c.depth_cm));
+  return fullProfileDepthCm(channels.map(c => c.depth_cm)) ?? DEFAULT_FULL_PROFILE_DEPTH_CM;
 }
 
 // ---- Contexto compartido (una sola pasada para todos los lotes) ----
@@ -140,7 +145,7 @@ async function loadContext(lots) {
     const model = soilBehaviorService.getModelForProfile(p, models);
     const refProbeId = model?.reference_probe_id || p.probe_id;
     const depths = refProbeId ? allChannels.filter(c => c.probe_id === refProbeId).map(c => c.depth_cm) : [];
-    configs.set(p.id, computeProfileConfig(p, layersByProfile.get(p.id) || [], fullProfileDepthCm(depths)));
+    configs.set(p.id, computeProfileConfig(p, layersByProfile.get(p.id) || [], fullProfileDepthCm(depths) ?? DEFAULT_FULL_PROFILE_DEPTH_CM));
   }
   // Clima observado por finca (id)
   const farmByLot = new Map(lots.map(l => [l.id, farms.find(f => f.name === l.farm) || null]));
