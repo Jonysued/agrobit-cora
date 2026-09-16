@@ -18,6 +18,7 @@ const targetMm = (vwc, depth) => (vwc != null && depth ? vwc * depth * 10 : null
 
 export default function ProfileSection({ lots, profiles, onChange }) {
   const [form, setForm] = useState(null);
+  const [mmInputs, setMmInputs] = useState({});
   const [layers, setLayers] = useState([]);
   const [deletedLayerIds, setDeletedLayerIds] = useState([]);
   const [layerCounts, setLayerCounts] = useState({});
@@ -55,9 +56,19 @@ export default function ProfileSection({ lots, profiles, onChange }) {
     }).catch(() => {});
   }, [profiles]);
 
-  const openNew = () => { setForm({ ...EMPTY }); setLayers([]); setDeletedLayerIds([]); setSaveError(null); };
+  // VWC ↔ mm de agua almacenada sobre la profundidad del perfil
+  const vwcToMmStr = (vwc, depth) => (vwc == null || !depth ? '' : String(Math.round(vwc * depth * 100) / 10));
+  const initMmInputs = (p, depth) => setMmInputs({
+    field_capacity: vwcToMmStr(p.field_capacity_vwc, depth),
+    wilting_point: vwcToMmStr(p.wilting_point_vwc, depth),
+    target_min: vwcToMmStr(p.target_min_vwc, depth),
+    target_max: vwcToMmStr(p.target_max_vwc, depth),
+    initial: vwcToMmStr(p.initial_vwc, depth),
+  });
+
+  const openNew = () => { setForm({ ...EMPTY }); initMmInputs(EMPTY, EMPTY.root_zone_depth_cm); setLayers([]); setDeletedLayerIds([]); setSaveError(null); };
   const openEdit = p => {
-    setForm({ ...p }); setDeletedLayerIds([]); setSaveError(null);
+    setForm({ ...p }); initMmInputs(p, p.root_zone_depth_cm); setDeletedLayerIds([]); setSaveError(null);
     base44.entities.SoilLayer.filter({ soil_profile_id: p.id })
       .then(ls => setLayers(ls.sort((a, b) => a.depth_top_cm - b.depth_top_cm)))
       .catch(() => setLayers([]));
@@ -81,14 +92,17 @@ export default function ProfileSection({ lots, profiles, onChange }) {
     const { errors } = validateLayers(layers, rootDepth);
     if (errors.length) { setSaveError('Corregí los errores de las capas antes de guardar.'); return; }
     setBusy(true);
+    // Los parámetros se ingresan en mm: se convierten a VWC con la
+    // profundidad del perfil al guardar
+    const mmToVwc = v => (v === '' || v == null || !rootDepth ? null : Number(v) / (rootDepth * 10));
     const saved = await waterForecastService.saveProfile({
       ...form,
       root_zone_depth_cm: rootDepth,
-      field_capacity_vwc: num(form.field_capacity_vwc),
-      wilting_point_vwc: num(form.wilting_point_vwc),
-      target_min_vwc: num(form.target_min_vwc),
-      target_max_vwc: num(form.target_max_vwc),
-      initial_vwc: num(form.initial_vwc),
+      field_capacity_vwc: mmToVwc(mmInputs.field_capacity),
+      wilting_point_vwc: mmToVwc(mmInputs.wilting_point),
+      target_min_vwc: mmToVwc(mmInputs.target_min),
+      target_max_vwc: mmToVwc(mmInputs.target_max),
+      initial_vwc: mmToVwc(mmInputs.initial),
       management_allowed_depletion_percent: num(form.management_allowed_depletion_percent),
       target_refill_percent: num(form.target_refill_percent),
       current_kc: num(form.current_kc),
@@ -137,11 +151,14 @@ export default function ProfileSection({ lots, profiles, onChange }) {
             <Field label="Nombre"><input required value={form.name} onChange={e => set('name', e.target.value)} className={inputCls} placeholder="Perfil C1" /></Field>
             <Field label="Tipo de suelo"><input value={form.soil_type} onChange={e => set('soil_type', e.target.value)} className={inputCls} placeholder="Franco" /></Field>
             <Field label="Profundidad radicular (cm)"><input required type="number" step="any" min="0" value={form.root_zone_depth_cm ?? ''} onChange={e => set('root_zone_depth_cm', e.target.value)} className={inputCls} /></Field>
-            <Field label="Capacidad de campo (VWC)"><input required type="number" step="any" min="0" max="1" value={form.field_capacity_vwc ?? ''} onChange={e => set('field_capacity_vwc', e.target.value)} className={inputCls} /></Field>
-            <Field label="Punto de marchitez (VWC)"><input required type="number" step="any" min="0" max="1" value={form.wilting_point_vwc ?? ''} onChange={e => set('wilting_point_vwc', e.target.value)} className={inputCls} /></Field>
-            <Field label="Target mín. (VWC)"><input required type="number" step="any" min="0" max="1" value={form.target_min_vwc ?? ''} onChange={e => set('target_min_vwc', e.target.value)} className={inputCls} /></Field>
-            <Field label="Target máx. (VWC)"><input required type="number" step="any" min="0" max="1" value={form.target_max_vwc ?? ''} onChange={e => set('target_max_vwc', e.target.value)} className={inputCls} /></Field>
-            <Field label="Humedad inicial (VWC)"><input type="number" step="any" min="0" max="1" value={form.initial_vwc ?? ''} onChange={e => set('initial_vwc', e.target.value)} className={inputCls} /></Field>
+            <Field label="Capacidad de campo (mm)">
+              <input required type="number" step="any" min="0" value={mmInputs.field_capacity ?? ''} onChange={e => setMmInputs(m => ({ ...m, field_capacity: e.target.value }))} className={inputCls} />
+              <p className="text-[10px] leading-tight text-slate-400">mm de agua almacenada sobre la profundidad del perfil.</p>
+            </Field>
+            <Field label="Punto de marchitez (mm)"><input required type="number" step="any" min="0" value={mmInputs.wilting_point ?? ''} onChange={e => setMmInputs(m => ({ ...m, wilting_point: e.target.value }))} className={inputCls} /></Field>
+            <Field label="Target mín. (mm)"><input required type="number" step="any" min="0" value={mmInputs.target_min ?? ''} onChange={e => setMmInputs(m => ({ ...m, target_min: e.target.value }))} className={inputCls} /></Field>
+            <Field label="Target máx. (mm)"><input required type="number" step="any" min="0" value={mmInputs.target_max ?? ''} onChange={e => setMmInputs(m => ({ ...m, target_max: e.target.value }))} className={inputCls} /></Field>
+            <Field label="Humedad inicial (mm)"><input type="number" step="any" min="0" value={mmInputs.initial ?? ''} onChange={e => setMmInputs(m => ({ ...m, initial: e.target.value }))} className={inputCls} /></Field>
             <Field label="Agotamiento permitido (MAD) %">
               <input type="number" step="any" min="0" max="100" value={form.management_allowed_depletion_percent ?? ''} onChange={e => set('management_allowed_depletion_percent', e.target.value)} className={inputCls} placeholder="40" />
               <p className="text-[10px] leading-tight text-slate-400">Porcentaje del agua útil que se permite consumir antes de alcanzar el umbral de recarga.</p>
