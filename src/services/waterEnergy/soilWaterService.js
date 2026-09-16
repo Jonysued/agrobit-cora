@@ -336,6 +336,10 @@ function usefulWaterSeries(readings, channels, model) {
   return series.sort((a, b) => a.t - b.t);
 }
 
+// Fondo del perfil de cálculo cuando NO hay sonda de referencia:
+// estándar 0–120 cm (independiente de la profundidad radicular).
+export const DEFAULT_FULL_PROFILE_DEPTH_CM = 120;
+
 // ---- Fondo del PERFIL COMPLETO medido por una sonda ----
 // El sensor más profundo se extiende en forma simétrica (misma
 // lógica que sensorSegments para el perfil completo de la sonda):
@@ -353,7 +357,9 @@ export function fullProfileDepthCm(depths) {
 // campo y umbrales derivados (recarga, objetivo). Integra sobre el
 // PERFIL COMPLETO (0–fullDepthCm, ej. 0–120 cm definido por la sonda
 // de referencia) cuando fullDepthCm está disponible; sin sonda de
-// referencia, sobre la zona radicular configurada. Por debajo de la
+// referencia, sobre el perfil estándar 0–120 cm — JAMÁS sobre la zona
+// radicular: la profundidad de la sonda y la radicular son variables
+// independientes. Por debajo de la
 // última capa configurada se usan los valores generales del perfil.
 // Se usa con las capas PRECARGADAS para evitar una consulta a
 // SoilLayer por cada perfil.
@@ -376,7 +382,7 @@ export function computeProfileConfig(profile, layers = [], fullDepthCm) {
     };
   }
   const rootDepth = profile.root_zone_depth_cm;
-  const profileDepth = fullDepthCm ?? rootDepth;
+  const profileDepth = fullDepthCm ?? DEFAULT_FULL_PROFILE_DEPTH_CM;
   let effLayers = layers.length
     ? layers.slice().sort((a, b) => a.depth_top_cm - b.depth_top_cm)
     : [{

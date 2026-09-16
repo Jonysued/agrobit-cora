@@ -1,5 +1,5 @@
 import { base44 } from '@/api/base44Client';
-import { soilWaterService, computeProfileConfig, fullProfileDepthCm } from './soilWaterService';
+import { soilWaterService, computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from './soilWaterService';
 import { soilBehaviorService } from './soilBehaviorService';
 
 // ============================================================
@@ -30,8 +30,8 @@ const MODEL_VERSION = 'v1';
 // Fondo del perfil de cálculo (cm): el estado hídrico CALCULADO de un
 // lote se integra SIEMPRE sobre el perfil completo 0–120 cm. La sonda
 // de referencia define el fondo con sus profundidades (10–115 → 120);
-// sin sonda de referencia se usa el estándar 0–120 cm.
-const DEFAULT_FULL_PROFILE_DEPTH_CM = 120;
+// sin sonda de referencia se usa el estándar DEFAULT_FULL_PROFILE_DEPTH_CM
+// (importado de soilWaterService).
 const round1 = n => Math.round(n * 10) / 10;
 const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;

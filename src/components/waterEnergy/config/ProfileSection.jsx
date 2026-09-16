@@ -4,7 +4,7 @@ import ConfigPanel, { Field, inputCls } from './ConfigPanel';
 import ProfileLayersEditor, { validateLayers } from './ProfileLayersEditor';
 import { waterForecastService } from '@/services/waterEnergy';
 import { soilBehaviorService } from '@/services/waterEnergy/soilBehaviorService';
-import { computeProfileConfig, fullProfileDepthCm } from '@/services/waterEnergy/soilWaterService';
+import { computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from '@/services/waterEnergy/soilWaterService';
 import { base44 } from '@/api/base44Client';
 
 const EMPTY = { lot_id: '', name: '', soil_type: 'Franco', root_zone_depth_cm: 60, field_capacity_vwc: 0.28, wilting_point_vwc: 0.12, target_min_vwc: 0.17, target_max_vwc: 0.24, initial_vwc: 0.21, current_kc: '', notes: '' };
@@ -20,6 +20,7 @@ export default function ProfileSection({ lots, profiles, onChange }) {
   const [deletedLayerIds, setDeletedLayerIds] = useState([]);
   const [layerCounts, setLayerCounts] = useState({});
   const [mmCfg, setMmCfg] = useState({});
+  const [depthCfg, setDepthCfg] = useState({});
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -42,14 +43,21 @@ export default function ProfileSection({ lots, profiles, onChange }) {
       });
       setLayerCounts(counts);
       const cfgs = {};
+      const depthsByProfile = {};
       profiles.forEach(p => {
         const model = soilBehaviorService.getModelForProfile(p, models);
         const refProbeId = model?.reference_probe_id || p.probe_id;
         const depths = refProbeId ? channels.filter(c => c.probe_id === refProbeId).map(c => c.depth_cm) : [];
         const layers = (layersByProfile[p.id] || []).sort((a, b) => a.depth_top_cm - b.depth_top_cm);
-        cfgs[p.id] = computeProfileConfig(p, layers, fullProfileDepthCm(depths));
+        // PROFUNDIDAD DEL PERFIL: la define la sonda real vinculada;
+        // sin sonda, el estándar 0–120 cm. INDEPENDIENTE de la
+        // profundidad radicular (configuración agronómica del lote).
+        const depth = fullProfileDepthCm(depths) ?? DEFAULT_FULL_PROFILE_DEPTH_CM;
+        depthsByProfile[p.id] = { depth, probe: depths.length > 0 };
+        cfgs[p.id] = computeProfileConfig(p, layers, depth);
       });
       setMmCfg(cfgs);
+      setDepthCfg(depthsByProfile);
     }).catch(() => {});
   }, [profiles]);
 
@@ -63,9 +71,9 @@ export default function ProfileSection({ lots, profiles, onChange }) {
     initial: vwcToMmStr(p.initial_vwc, depth),
   });
 
-  const openNew = () => { setForm({ ...EMPTY }); initMmInputs(EMPTY, EMPTY.root_zone_depth_cm); setLayers([]); setDeletedLayerIds([]); setSaveError(null); };
+  const openNew = () => { setForm({ ...EMPTY }); initMmInputs(EMPTY, DEFAULT_FULL_PROFILE_DEPTH_CM); setLayers([]); setDeletedLayerIds([]); setSaveError(null); };
   const openEdit = p => {
-    setForm({ ...p }); initMmInputs(p, p.root_zone_depth_cm); setDeletedLayerIds([]); setSaveError(null);
+    setForm({ ...p }); initMmInputs(p, depthCfg[p.id]?.depth ?? DEFAULT_FULL_PROFILE_DEPTH_CM); setDeletedLayerIds([]); setSaveError(null);
     base44.entities.SoilLayer.filter({ soil_profile_id: p.id })
       .then(ls => setLayers(ls.sort((a, b) => a.depth_top_cm - b.depth_top_cm)))
       .catch(() => setLayers([]));
@@ -90,8 +98,9 @@ export default function ProfileSection({ lots, profiles, onChange }) {
     if (errors.length) { setSaveError('Corregí los errores de las capas antes de guardar.'); return; }
     setBusy(true);
     // Los parámetros se ingresan en mm: se convierten a VWC con la
-    // profundidad del perfil al guardar
-    const mmToVwc = v => (v === '' || v == null || !rootDepth ? null : Number(v) / (rootDepth * 10));
+    // profundidad del PERFIL (sonda vinculada o estándar 120 cm),
+    // nunca con la profundidad radicular — variables independientes
+    const mmToVwc = v => (v === '' || v == null ? null : Number(v) / (convDepth * 10));
     // MAD y objetivo de recarga % fueron eliminados: no se guardan
     const payload = { ...form };
     delete payload.management_allowed_depletion_percent;
@@ -129,6 +138,9 @@ export default function ProfileSection({ lots, profiles, onChange }) {
     onChange();
   };
 
+  // Profundidad del PERFIL usada para mm ↔ VWC: sonda vinculada o
+  // estándar 0–120 cm — independiente de la profundidad radicular.
+  const convDepth = form?.id ? (depthCfg[form.id]?.depth ?? DEFAULT_FULL_PROFILE_DEPTH_CM) : DEFAULT_FULL_PROFILE_DEPTH_CM;
   const layerChecks = form ? validateLayers(layers, num(form.root_zone_depth_cm)) : { errors: [], warnings: [] };
 
   return (
@@ -150,9 +162,13 @@ export default function ProfileSection({ lots, profiles, onChange }) {
             <Field label="Nombre"><input required value={form.name} onChange={e => set('name', e.target.value)} className={inputCls} placeholder="Perfil C1" /></Field>
             <Field label="Tipo de suelo"><input value={form.soil_type} onChange={e => set('soil_type', e.target.value)} className={inputCls} placeholder="Franco" /></Field>
             <Field label="Profundidad radicular (cm)"><input required type="number" step="any" min="0" value={form.root_zone_depth_cm ?? ''} onChange={e => set('root_zone_depth_cm', e.target.value)} className={inputCls} /></Field>
+            <Field label="Profundidad del perfil (cm)">
+              <p className="py-1.5 text-sm font-semibold text-slate-600">{convDepth}</p>
+              <p className="text-[10px] leading-tight text-slate-400">{depthCfg[form.id]?.probe ? 'La define la sonda vinculada — solo lectura.' : `Estándar ${DEFAULT_FULL_PROFILE_DEPTH_CM} cm — sin sonda de referencia vinculada.`}</p>
+            </Field>
             <Field label="Capacidad de campo (mm)">
               <input required type="number" step="any" min="0" value={mmInputs.field_capacity ?? ''} onChange={e => setMmInputs(m => ({ ...m, field_capacity: e.target.value }))} className={inputCls} />
-              <p className="text-[10px] leading-tight text-slate-400">mm de agua almacenada sobre la profundidad del perfil.</p>
+              <p className="text-[10px] leading-tight text-slate-400">mm de agua almacenada sobre el perfil de cálculo ({convDepth} cm) — independiente de la profundidad radicular.</p>
             </Field>
             <Field label="Punto de marchitez (mm)"><input required type="number" step="any" min="0" value={mmInputs.wilting_point ?? ''} onChange={e => setMmInputs(m => ({ ...m, wilting_point: e.target.value }))} className={inputCls} /></Field>
             <Field label="Target mín. (mm)"><input required type="number" step="any" min="0" value={mmInputs.target_min ?? ''} onChange={e => setMmInputs(m => ({ ...m, target_min: e.target.value }))} className={inputCls} /></Field>
@@ -179,7 +195,7 @@ export default function ProfileSection({ lots, profiles, onChange }) {
       {profiles.length > 0 && (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[900px] text-sm">
-            <thead><tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Lote</th><th className="pr-3">Suelo</th><th className="pr-3">Prof. (cm)</th><th className="pr-3">CC / PM (mm)</th><th className="pr-3">Target mín / máx (mm)</th><th className="pr-3">Capas</th><th /></tr></thead>
+            <thead><tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Lote</th><th className="pr-3">Suelo</th><th className="pr-3">Perfil / Rad. (cm)</th><th className="pr-3">CC / PM (mm)</th><th className="pr-3">Target mín / máx (mm)</th><th className="pr-3">Capas</th><th /></tr></thead>
             <tbody>
               {profiles.map(p => {
                 const cfg = mmCfg[p.id];
@@ -187,7 +203,7 @@ export default function ProfileSection({ lots, profiles, onChange }) {
                 <tr key={p.id} className="border-b border-slate-100">
                   <td className="py-2 pr-3"><b className="text-slate-700">{lots.find(l => l.id === p.lot_id)?.name || '—'}</b></td>
                   <td className="pr-3 text-slate-600">{p.soil_type || '—'}</td>
-                  <td className="pr-3 text-slate-600">{cfg?.profile_depth_cm ?? p.root_zone_depth_cm ?? '—'}</td>
+                  <td className="pr-3 text-slate-600">{cfg?.profile_depth_cm ?? DEFAULT_FULL_PROFILE_DEPTH_CM} / {p.root_zone_depth_cm ?? '—'}</td>
                   <td className="pr-3 text-slate-600">{toMm(cfg?.field_capacity_storage_mm)} / {toMm(cfg?.wilting_storage_mm)}</td>
                   <td className="pr-3 text-slate-600">{toMm(targetMm(p.target_min_vwc, cfg?.profile_depth_cm))} / {toMm(targetMm(p.target_max_vwc, cfg?.profile_depth_cm))}</td>
                   <td className="pr-3 text-slate-600">{layerCounts[p.id] || 0}</td>
