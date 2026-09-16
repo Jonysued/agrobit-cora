@@ -319,11 +319,9 @@ export const soilWaterService = {
       base44.entities.Lot.list(),
       base44.entities.SoilProfile.list(),
     ]);
-    const rows = [];
-    for (const probe of probes.filter(p => p.active !== false)) {
-      rows.push(await stateForProbe(probe, lots, profiles));
-    }
-    return rows;
+    // En paralelo: cada sonda pide canales + lecturas — sin esperas
+    // secuenciales que multiplican la latencia de la pantalla.
+    return Promise.all(probes.filter(p => p.active !== false).map(p => stateForProbe(p, lots, profiles)));
   },
 
   // ---- Detalle completo de una sonda (solo monitoreo) ----
@@ -379,13 +377,13 @@ export const soilWaterService = {
       base44.entities.SoilProfile.list(),
       sensorService.getProbes(),
     ]);
-    const map = new Map();
+    const pairs = [];
     for (const profile of profiles) {
       if (!profile.probe_id || !lotIds.includes(profile.lot_id)) continue;
       const probe = probes.find(p => p.id === profile.probe_id);
-      if (probe) map.set(profile.lot_id, await stateForProbe(probe, lots, profiles));
+      if (probe) pairs.push([profile.lot_id, stateForProbe(probe, lots, profiles)]);
     }
-    return map;
+    return new Map(await Promise.all(pairs.map(async ([k, v]) => [k, await v])));
   },
 
   // ---- Historial diario de VWC de la zona radicular medida según la
@@ -431,15 +429,15 @@ export const soilWaterService = {
       base44.entities.SoilProfile.list(),
       sensorService.getProbes(),
     ]);
-    const map = new Map();
+    const pairs = [];
     for (const profile of profiles) {
       if (!lotIds.includes(profile.lot_id)) continue;
       const probe = profile.probe_id
         ? probes.find(p => p.id === profile.probe_id)
         : probes.find(p => p.lot_id === profile.lot_id && p.active !== false);
-      if (probe) map.set(profile.lot_id, await stateForProbe(probe, lots, profiles));
+      if (probe) pairs.push([profile.lot_id, stateForProbe(probe, lots, profiles)]);
     }
-    return map;
+    return new Map(await Promise.all(pairs.map(async ([k, v]) => [k, await v])));
   },
 
   // ---- Historial de AGUA ÚTIL (mm) del lote según su sonda ----

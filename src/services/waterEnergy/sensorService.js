@@ -44,14 +44,17 @@ export const sensorService = {
   },
 
   // ---- Lecturas de una sonda dentro de un rango (ascendentes) ----
+  // El rango de fechas se filtra en el SERVIDOR ($gte/$lte) para no
+  // traer todo el histórico cuando crece (sondas con miles de filas).
   async getProbeReadings(probeId, from, to) {
-    const rows = await base44.entities.SensorReading.filter({ probe_id: probeId }, '-timestamp', 5000);
-    return rows
-      .filter(r => {
-        const t = new Date(r.timestamp).getTime();
-        return (!from || t >= from) && (!to || t <= to);
-      })
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const query = { probe_id: probeId };
+    if (from || to) {
+      query.timestamp = {};
+      if (from) query.timestamp.$gte = new Date(from).toISOString();
+      if (to) query.timestamp.$lte = new Date(to).toISOString();
+    }
+    const rows = await base44.entities.SensorReading.filter(query, '-timestamp', 5000);
+    return rows.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   },
 
   // ---- Última lectura de cada canal de la sonda ----
