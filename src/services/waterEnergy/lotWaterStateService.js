@@ -1,5 +1,5 @@
 import { base44 } from '@/api/base44Client';
-import { soilWaterService, computeProfileConfig } from './soilWaterService';
+import { soilWaterService, computeProfileConfig, fullProfileDepthCm } from './soilWaterService';
 import { soilBehaviorService } from './soilBehaviorService';
 
 // ============================================================
@@ -102,9 +102,21 @@ async function dailyObservedWeather(farmId) {
   return { byDay, meanEto };
 }
 
+// ---- Fondo del perfil completo (0–N cm) de un lote ----
+// Definido por la sonda de referencia de su modelo de suelo (ej.
+// sonda 10–115 cm → 0–120 cm). Sin sonda de referencia → null: la
+// integración se hace sobre la zona radicular configurada.
+async function referenceFullDepthCm(profile, models) {
+  const model = soilBehaviorService.getModelForProfile(profile, models);
+  const refProbeId = model?.reference_probe_id || profile.probe_id;
+  if (!refProbeId) return null;
+  const channels = await base44.entities.SoilProbeChannel.filter({ probe_id: refProbeId });
+  return fullProfileDepthCm(channels.map(c => c.depth_cm));
+}
+
 // ---- Contexto compartido (una sola pasada para todos los lotes) ----
 async function loadContext(lots) {
-  const [profiles, models, states, logs, programs, farms, allLayers] = await Promise.all([
+  const [profiles, models, states, logs, programs, farms, allLayers, allChannels] = await Promise.all([
     base44.entities.SoilProfile.list(),
     soilBehaviorService.getModels(),
     base44.entities.LotWaterState.list('-timestamp', 2000),
@@ -112,6 +124,7 @@ async function loadContext(lots) {
     base44.entities.IrrigationProgram.list(),
     base44.entities.Farm.list(),
     base44.entities.SoilLayer.list(),
+    base44.entities.SoilProbeChannel.list(),
   ]);
   // Configuración estática de cada perfil (SIN sonda) — capas cargadas
   // UNA sola vez para todos los perfiles: sin consultas por perfil.
@@ -120,7 +133,15 @@ async function loadContext(lots) {
     if (!layersByProfile.has(layer.soil_profile_id)) layersByProfile.set(layer.soil_profile_id, []);
     layersByProfile.get(layer.soil_profile_id).push(layer);
   }
-  const configs = new Map(profiles.map(p => [p.id, computeProfileConfig(p, layersByProfile.get(p.id) || [])]));
+  // Configuración de cada perfil integrada sobre el PERFIL COMPLETO
+  // definido por su sonda de referencia (ej. 0–120 cm)
+  const configs = new Map();
+  for (const p of profiles) {
+    const model = soilBehaviorService.getModelForProfile(p, models);
+    const refProbeId = model?.reference_probe_id || p.probe_id;
+    const depths = refProbeId ? allChannels.filter(c => c.probe_id === refProbeId).map(c => c.depth_cm) : [];
+    configs.set(p.id, computeProfileConfig(p, layersByProfile.get(p.id) || [], fullProfileDepthCm(depths)));
+  }
   // Clima observado por finca (id)
   const farmByLot = new Map(lots.map(l => [l.id, farms.find(f => f.name === l.farm) || null]));
   const farmIds = [...new Set([...farmByLot.values()].map(f => f?.id).filter(Boolean))];
@@ -252,7 +273,8 @@ export const lotWaterStateService = {
     const profiles = await base44.entities.SoilProfile.filter({ lot_id: lotId });
     const profile = profiles[0];
     if (!profile) throw new Error('El lote no tiene perfil de suelo configurado.');
-    const config = await soilWaterService.getProfileConfig(profile);
+    const models = await soilBehaviorService.getModels();
+    const config = await soilWaterService.getProfileConfig(profile, await referenceFullDepthCm(profile, models));
     const wilting = config?.wilting_storage_mm || 0;
     const taw = config?.total_available_water_capacity_mm;
     let useful = round1(profileWaterMm - wilting);
@@ -283,7 +305,7 @@ export const lotWaterStateService = {
     if (!probeState || probeState.missing || probeState.current_available_water_mm == null) {
       throw new Error('La sonda de referencia no tiene lecturas suficientes para estimar el estado inicial.');
     }
-    const config = await soilWaterService.getProfileConfig(profile);
+    const config = await soilWaterService.getProfileConfig(profile, await referenceFullDepthCm(profile, models));
     const stored = round1((config?.wilting_storage_mm || 0) + probeState.current_available_water_mm);
     await base44.entities.SoilProfile.update(profile.id, { manual_initial_water_mm: null });
     return base44.entities.LotWaterState.create({

@@ -341,14 +341,28 @@ function usefulWaterSeries(readings, channels, model) {
   return series.sort((a, b) => a.t - b.t);
 }
 
-// ---- Configuración estática del perfil (SIN sonda) — función PURA ----
+// ---- Fondo del PERFIL COMPLETO medido por una sonda ----
+// El sensor más profundo se extiende en forma simétrica (misma
+// lógica que sensorSegments para el perfil completo de la sonda):
+// sonda Sentek 10–115 cm → fondo 120 cm.
+export function fullProfileDepthCm(depths) {
+  const ds = [...new Set(depths)].filter(d => d != null).sort((a, b) => a - b);
+  if (!ds.length) return null;
+  const d = ds[ds.length - 1];
+  const top = ds.length > 1 ? (ds[ds.length - 2] + d) / 2 : 0;
+  return round1(d + (d - top));
+}
+
+// ---- Configuración estática del perfil — función PURA ----
 // Capacidad útil (TAW), agua almacenada en marchitez / capacidad de
-// campo y umbrales derivados (recarga, objetivo), calculados SOLO con
-// el perfil y sus capas (sin capas → perfil uniforme temporal). Es la
-// base del modelo de lote: la sonda de referencia no define el estado
-// hídrico del lote. Se usa con las capas PRECARGADAS para evitar una
-// consulta a SoilLayer por cada perfil.
-export function computeProfileConfig(profile, layers = []) {
+// campo y umbrales derivados (recarga, objetivo). Integra sobre el
+// PERFIL COMPLETO (0–fullDepthCm, ej. 0–120 cm definido por la sonda
+// de referencia) cuando fullDepthCm está disponible; sin sonda de
+// referencia, sobre la zona radicular configurada. Por debajo de la
+// última capa configurada se usan los valores generales del perfil.
+// Se usa con las capas PRECARGADAS para evitar una consulta a
+// SoilLayer por cada perfil.
+export function computeProfileConfig(profile, layers = [], fullDepthCm) {
   const missing_configuration = missingConfiguration(profile);
   const coreOk = !missing_configuration.some(k => k === 'soil_profile' || CORE.some(([key]) => key === k));
   if (!coreOk || !profile) {
@@ -356,6 +370,7 @@ export function computeProfileConfig(profile, layers = []) {
       configuration_status: 'incomplete',
       missing_configuration: missing_configuration.length ? missing_configuration : ['soil_profile'],
       root_zone_depth_cm: profile?.root_zone_depth_cm ?? null,
+      profile_depth_cm: null,
       total_available_water_capacity_mm: null,
       wilting_storage_mm: null,
       field_capacity_storage_mm: null,
@@ -366,18 +381,28 @@ export function computeProfileConfig(profile, layers = []) {
     };
   }
   const rootDepth = profile.root_zone_depth_cm;
-  const effLayers = layers.length
+  const profileDepth = fullDepthCm ?? rootDepth;
+  let effLayers = layers.length
     ? layers.slice().sort((a, b) => a.depth_top_cm - b.depth_top_cm)
     : [{
         depth_top_cm: 0,
-        depth_bottom_cm: rootDepth,
+        depth_bottom_cm: profileDepth,
         field_capacity_vwc: profile.field_capacity_vwc,
         wilting_point_vwc: profile.wilting_point_vwc,
       }];
+  const lastBottom = effLayers[effLayers.length - 1].depth_bottom_cm;
+  if (profileDepth > lastBottom && profile.field_capacity_vwc != null && profile.wilting_point_vwc != null) {
+    effLayers = [...effLayers, {
+      depth_top_cm: lastBottom,
+      depth_bottom_cm: profileDepth,
+      field_capacity_vwc: profile.field_capacity_vwc,
+      wilting_point_vwc: profile.wilting_point_vwc,
+    }];
+  }
   let tawMm = 0, wiltingMm = 0, fcMm = 0;
   for (const L of effLayers) {
     const top = Math.max(0, L.depth_top_cm);
-    const bottom = Math.min(rootDepth, L.depth_bottom_cm);
+    const bottom = Math.min(profileDepth, L.depth_bottom_cm);
     const thicknessMm = (bottom - top) * 10;
     if (thicknessMm <= 0) continue;
     tawMm += (L.field_capacity_vwc - L.wilting_point_vwc) * thicknessMm;
@@ -392,6 +417,7 @@ export function computeProfileConfig(profile, layers = []) {
     configuration_status: missing_configuration.length ? 'incomplete' : 'complete',
     missing_configuration,
     root_zone_depth_cm: rootDepth,
+    profile_depth_cm: profileDepth,
     total_available_water_capacity_mm: round1(tawMm),
     wilting_storage_mm: round1(wiltingMm),
     field_capacity_storage_mm: round1(fcMm),
@@ -404,9 +430,9 @@ export function computeProfileConfig(profile, layers = []) {
 
 export const soilWaterService = {
   // ---- Configuración estática del perfil (SIN sonda) ----
-  async getProfileConfig(profile) {
+  async getProfileConfig(profile, fullDepthCm) {
     const { layers } = await getLayersFor(profile);
-    return computeProfileConfig(profile, layers);
+    return computeProfileConfig(profile, layers, fullDepthCm);
   },
 
   // ---- Estado de UNA sonda puntual (referencia de un modelo de
