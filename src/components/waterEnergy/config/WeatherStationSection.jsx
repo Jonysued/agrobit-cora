@@ -65,8 +65,11 @@ export default function WeatherStationSection({ farms, stations, onChange }) {
 
   const remove = async station => { await base44.entities.WeatherStation.delete(station.id); onChange(); };
 
+  // Re-vincular una estación existente a la finca que el usuario elija
+  const relink = async (station, farmId) => { await base44.entities.WeatherStation.update(station.id, { farm_id: farmId }); onChange(); };
+
   return (
-    <ConfigPanel title="Estaciones meteorológicas" description="Conectá tu estación propia (Davis, WiseConn, Pessl, Campbell, Metos, API genérica o webhook). Las credenciales de API se guardan como secrets del backend y nunca se exponen en el frontend.">
+    <ConfigPanel title="Estaciones meteorológicas" description="Conectá tu estación propia (Davis, WiseConn, Pessl, Campbell, Metos, API genérica o webhook) y elegí a qué finca vincularla. Las credenciales de API se guardan como secrets del backend y nunca se exponen en el frontend.">
       <form onSubmit={save} className="grid gap-3 md:grid-cols-3">
         <Field label="Finca">
           <select value={form.farm_id} onChange={e => set('farm_id', e.target.value)} required className={inputCls}>
@@ -118,7 +121,13 @@ export default function WeatherStationSection({ farms, stations, onChange }) {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm">
                     <b className="text-slate-800">{s.name}</b>
-                    <span className="text-slate-400"> · {farmName(s.farm_id)} · {PROVIDERS.find(p => p[0] === s.provider)?.[1] || s.provider} · {CONNECTION_TYPES.find(c => c[0] === s.connection_type)?.[1]}</span>
+                    <span className="text-slate-400"> · {PROVIDERS.find(p => p[0] === s.provider)?.[1] || s.provider} · {CONNECTION_TYPES.find(c => c[0] === s.connection_type)?.[1]}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Finca:</span>
+                    <select value={s.farm_id ?? ''} onChange={e => relink(s, e.target.value)} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700">
+                      {(farms || []).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    </select>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => test(s)} disabled={t?.loading} className="flex items-center gap-1.5 rounded-lg border border-emerald-700 px-2.5 py-1.5 text-xs font-bold text-emerald-800 transition hover:bg-emerald-50 disabled:opacity-60">
