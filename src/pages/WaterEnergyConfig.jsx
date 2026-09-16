@@ -31,7 +31,7 @@ export default function WaterEnergyConfig() {
         <SensorSection lots={data.lots} sensors={data.sensors} onChange={refresh} />
         <PumpSection lots={data.lots} pumps={data.pumps} onChange={refresh} />
         <TariffSection tariffs={data.tariffs} onChange={refresh} />
-        <LinkSection lots={data.lots} profiles={data.profiles} sensors={data.sensors} onChange={refresh} />
+        <LinkSection lots={data.lots} profiles={data.profiles} sensors={data.sensors} pumps={data.pumps} onChange={refresh} />
       </div>
     </div>
   );

@@ -17,10 +17,10 @@ import { runScenario, waterAvailablePercent, statusForVwc } from './engine/water
 
 // Fila de análisis de un lote (compartida por dashboard y detalle)
 function buildRow(lot, profile, allHist, weatherDays, pumps, tariffs) {
-  // Vinculación del perfil: sensor de humedad definido en configuración.
-  // Bomba y tarifa son globales: la misma tarifa energética aplica a todos los lotes.
+  // Vinculación del perfil: sensor de humedad y bomba definidos en configuración.
+  // La tarifa energética es global: la misma aplica a todos los lotes.
   const hist = profile.sensor_id ? allHist.filter(r => r.sensor_id === profile.sensor_id) : allHist;
-  const pump = energyService.getPumpForLot(pumps, lot);
+  const pump = energyService.getPumpForLot(pumps, lot, profile);
   const tariff = energyService.getActiveTariff(tariffs);
   const currentVwc = hist.length ? hist[hist.length - 1].value : profile.initial_vwc;
   const inputs = weatherDays.map(w => ({ date: w.date, etcMm: w.etc_mm, rainMm: w.effective_rainfall_mm }));
