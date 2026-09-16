@@ -48,21 +48,15 @@ export const DavisWeatherAdapter = {
       return { ok: false, status: "misconfigured", message: "Falta el ID de estación de WeatherLink (campo ID / endpoint externo)." };
     }
     try {
-      const path = `/v2/stations/${station.external_station_id}`;
-      const timestamp = Math.floor(Date.now() / 1000);
-      // Firma HMAC-SHA256 requerida por WeatherLink v2: api-key \n path \n timestamp
-      const enc = new TextEncoder();
-      const hmacKey = await crypto.subtle.importKey("raw", enc.encode(apiSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-      const sig = await crypto.subtle.sign("HMAC", hmacKey, enc.encode(`${apiKey}\n${path}\n${timestamp}`));
-      const signature = [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, "0")).join("");
-      const res = await fetch(`https://api.weatherlink.com${path}?api-key=${encodeURIComponent(apiKey)}`, {
-        headers: {
-          "X-Api-Key": apiKey,
-          "X-Api-Signature": signature,
-          "X-Api-Timestamp": String(timestamp),
-        },
+      // Autenticación oficial WeatherLink v2: api-key como query param y
+      // el API Secret como header X-Api-Secret (nunca viaja en la URL).
+      const res = await fetch(`https://api.weatherlink.com/v2/current/${station.external_station_id}?api-key=${encodeURIComponent(apiKey)}`, {
+        headers: { "X-Api-Secret": apiSecret },
       });
       if (res.ok) return { ok: true, status: "connected", message: "WeatherLink respondió correctamente." };
+      if (res.status === 404) {
+        return { ok: false, status: "error", message: "La estación no existe o la API key no tiene acceso — verificá el ID de estación de WeatherLink." };
+      }
       if (res.status === 401 || res.status === 403) {
         return { ok: false, status: "error", message: "WeatherLink rechazó la credencial — verificá el API key/secret y que la estación pertenezca a la cuenta." };
       }
