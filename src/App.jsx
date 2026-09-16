@@ -23,6 +23,9 @@ import Irrigation from '@/pages/Irrigation';
 import Documents from '@/pages/Documents';
 import Settings from '@/pages/Settings';
 import WaterEnergy from '@/pages/WaterEnergy';
+import WaterEnergyLot from '@/pages/WaterEnergyLot';
+import WaterEnergyEnergy from '@/pages/WaterEnergyEnergy';
+import WaterEnergyConfig from '@/pages/WaterEnergyConfig';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -64,6 +67,9 @@ const AuthenticatedApp = () => {
           <Route path="/sanidad" element={<Health />} />
           <Route path="/riego" element={<Irrigation />} />
           <Route path="/water-energy" element={<WaterEnergy />} />
+          <Route path="/water-energy/energia" element={<WaterEnergyEnergy />} />
+          <Route path="/water-energy/configuracion" element={<WaterEnergyConfig />} />
+          <Route path="/water-energy/lote/:lotId" element={<WaterEnergyLot />} />
           <Route path="/documentos" element={<Documents />} />
           <Route path="/configuracion" element={<Settings />} />
         </Route>
