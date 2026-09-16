@@ -311,57 +311,72 @@ function usefulWaterSeries(readings, channels, model) {
   return series.sort((a, b) => a.t - b.t);
 }
 
+// ---- Configuración estática del perfil (SIN sonda) — función PURA ----
+// Capacidad útil (TAW), agua almacenada en marchitez / capacidad de
+// campo y umbrales derivados (recarga, objetivo), calculados SOLO con
+// el perfil y sus capas (sin capas → perfil uniforme temporal). Es la
+// base del modelo de lote: la sonda de referencia no define el estado
+// hídrico del lote. Se usa con las capas PRECARGADAS para evitar una
+// consulta a SoilLayer por cada perfil.
+export function computeProfileConfig(profile, layers = []) {
+  const missing_configuration = missingConfiguration(profile);
+  const coreOk = !missing_configuration.some(k => k === 'soil_profile' || CORE.some(([key]) => key === k));
+  if (!coreOk || !profile) {
+    return {
+      configuration_status: 'incomplete',
+      missing_configuration: missing_configuration.length ? missing_configuration : ['soil_profile'],
+      root_zone_depth_cm: profile?.root_zone_depth_cm ?? null,
+      total_available_water_capacity_mm: null,
+      wilting_storage_mm: null,
+      field_capacity_storage_mm: null,
+      recharge_threshold_mm: null,
+      target_water_mm: null,
+      recharge_storage_mm: null,
+      target_storage_mm: null,
+    };
+  }
+  const rootDepth = profile.root_zone_depth_cm;
+  const effLayers = layers.length
+    ? layers.slice().sort((a, b) => a.depth_top_cm - b.depth_top_cm)
+    : [{
+        depth_top_cm: 0,
+        depth_bottom_cm: rootDepth,
+        field_capacity_vwc: profile.field_capacity_vwc,
+        wilting_point_vwc: profile.wilting_point_vwc,
+      }];
+  let tawMm = 0, wiltingMm = 0, fcMm = 0;
+  for (const L of effLayers) {
+    const top = Math.max(0, L.depth_top_cm);
+    const bottom = Math.min(rootDepth, L.depth_bottom_cm);
+    const thicknessMm = (bottom - top) * 10;
+    if (thicknessMm <= 0) continue;
+    tawMm += (L.field_capacity_vwc - L.wilting_point_vwc) * thicknessMm;
+    wiltingMm += L.wilting_point_vwc * thicknessMm;
+    fcMm += L.field_capacity_vwc * thicknessMm;
+  }
+  const mad = profile.management_allowed_depletion_percent;
+  const refill = profile.target_refill_percent;
+  const rechargeMm = mad != null ? round1(tawMm * (1 - mad / 100)) : null;
+  const targetMm = refill != null ? round1(tawMm * refill / 100) : null;
+  return {
+    configuration_status: missing_configuration.length ? 'incomplete' : 'complete',
+    missing_configuration,
+    root_zone_depth_cm: rootDepth,
+    total_available_water_capacity_mm: round1(tawMm),
+    wilting_storage_mm: round1(wiltingMm),
+    field_capacity_storage_mm: round1(fcMm),
+    recharge_threshold_mm: rechargeMm,
+    target_water_mm: targetMm,
+    recharge_storage_mm: rechargeMm != null ? round1(wiltingMm + rechargeMm) : null,
+    target_storage_mm: targetMm != null ? round1(wiltingMm + targetMm) : null,
+  };
+}
+
 export const soilWaterService = {
   // ---- Configuración estática del perfil (SIN sonda) ----
-  // Capacidad útil (TAW), agua almacenada en marchitez / capacidad de
-  // campo y umbrales derivados (recarga, objetivo), calculados SOLO
-  // con el perfil y sus capas. Es la base del modelo de lote: la sonda
-  // de referencia ya no define el estado hídrico del lote.
   async getProfileConfig(profile) {
-    const missing_configuration = missingConfiguration(profile);
-    const coreOk = !missing_configuration.some(k => k === 'soil_profile' || CORE.some(([key]) => key === k));
-    if (!coreOk || !profile) {
-      return {
-        configuration_status: 'incomplete',
-        missing_configuration: missing_configuration.length ? missing_configuration : ['soil_profile'],
-        root_zone_depth_cm: profile?.root_zone_depth_cm ?? null,
-        total_available_water_capacity_mm: null,
-        wilting_storage_mm: null,
-        field_capacity_storage_mm: null,
-        recharge_threshold_mm: null,
-        target_water_mm: null,
-        recharge_storage_mm: null,
-        target_storage_mm: null,
-      };
-    }
     const { layers } = await getLayersFor(profile);
-    const rootDepth = profile.root_zone_depth_cm;
-    let tawMm = 0, wiltingMm = 0, fcMm = 0;
-    for (const L of layers) {
-      const top = Math.max(0, L.depth_top_cm);
-      const bottom = Math.min(rootDepth, L.depth_bottom_cm);
-      const thicknessMm = (bottom - top) * 10;
-      if (thicknessMm <= 0) continue;
-      tawMm += (L.field_capacity_vwc - L.wilting_point_vwc) * thicknessMm;
-      wiltingMm += L.wilting_point_vwc * thicknessMm;
-      fcMm += L.field_capacity_vwc * thicknessMm;
-    }
-    const mad = profile.management_allowed_depletion_percent;
-    const refill = profile.target_refill_percent;
-    const rechargeMm = mad != null ? round1(tawMm * (1 - mad / 100)) : null;
-    const targetMm = refill != null ? round1(tawMm * refill / 100) : null;
-    return {
-      configuration_status: missing_configuration.length ? 'incomplete' : 'complete',
-      missing_configuration,
-      root_zone_depth_cm: rootDepth,
-      total_available_water_capacity_mm: round1(tawMm),
-      wilting_storage_mm: round1(wiltingMm),
-      field_capacity_storage_mm: round1(fcMm),
-      recharge_threshold_mm: rechargeMm,
-      target_water_mm: targetMm,
-      recharge_storage_mm: rechargeMm != null ? round1(wiltingMm + rechargeMm) : null,
-      target_storage_mm: targetMm != null ? round1(wiltingMm + targetMm) : null,
-    };
+    return computeProfileConfig(profile, layers);
   },
 
   // ---- Estado de UNA sonda puntual (referencia de un modelo de
@@ -407,9 +422,17 @@ export const soilWaterService = {
     const state = await buildState(profile, channels, readings);
     const history = state._model ? usefulWaterSeries(readings, channels, state._model) : [];
 
-    // ---- Eventos de contexto: riegos del lote + lluvia observada ----
-    const programs = await base44.entities.IrrigationProgram.list();
-    const irrigationEvents = [...new Set(programs.filter(p => (p.lot_ids || []).includes(lot.id) && p.date).map(p => p.date))].sort();
+    // ---- Eventos de contexto: riegos EJECUTADOS (IrrigationLog) + lluvia ----
+    // Solo riegos con log: un programa sin log no prueba que el riego
+    // ocurrió (para aprender el suelo se usan riegos reales).
+    const [logs, programs] = await Promise.all([
+      base44.entities.IrrigationLog.list(),
+      base44.entities.IrrigationProgram.list(),
+    ]);
+    const programById = new Map(programs.map(p => [p.id, p]));
+    const irrigationEvents = [...new Set(logs
+      .filter(l => l.date && (programById.get(l.program_id)?.lot_ids || []).includes(lot.id))
+      .map(l => l.date))].sort();
     const farms = await base44.entities.Farm.list();
     const farm = farms.find(f => f.name === lot.farm);
     const obs = farm ? await weatherService.getObservedWeather(farm.id, 500) : [];
@@ -434,128 +457,13 @@ export const soilWaterService = {
     };
   },
 
-  // ---- Estados de las sondas vinculadas a perfiles por lote ----
-  // Map<lot_id, estado> — lo consulta el forecast para usar la humedad
-  // real de la sonda vinculada al perfil (Configuración → Vinculación).
-  async getLinkedProbeStates(lotIds) {
-    const [lots, profiles, probes] = await Promise.all([
-      base44.entities.Lot.list(),
-      base44.entities.SoilProfile.list(),
-      sensorService.getProbes(),
-    ]);
-    const pairs = [];
-    for (const profile of profiles) {
-      if (!profile.probe_id || !lotIds.includes(profile.lot_id)) continue;
-      const probe = probes.find(p => p.id === profile.probe_id);
-      if (probe) pairs.push([profile.lot_id, stateForProbe(probe, lots, profiles)]);
-    }
-    return new Map(await Promise.all(pairs.map(async ([k, v]) => [k, await v])));
-  },
-
-  // ---- Historial diario de VWC de la zona radicular medida según la
-  // sonda vinculada al perfil del lote (Vinculación de perfiles).
-  // Devuelve [{date, vwc}] (última lectura de cada día) o null.
-  async getLinkedProbeVwcHistory(lotId) {
-    const state = await this._lotState(lotId);
-    if (!state || state.missing || !state.probe || !state._model) return null;
-    const { segs, depths, measuredDepth } = state._model;
-    const [channels, readings] = await Promise.all([
-      sensorService.getProbeChannels(state.probe.id),
-      sensorService.getProbeReadings(state.probe.id, Date.now() - 95 * DAY_MS, Date.now()),
-    ]);
-    if (!channels.length || !readings.length) return null;
-    const depthByChannel = new Map(channels.map(c => [c.id, c.depth_cm]));
-    const byTs = new Map();
-    for (const r of readings) {
-      const d = depthByChannel.get(r.probe_channel_id);
-      if (d == null) continue;
-      const t = new Date(r.timestamp).getTime();
-      if (!byTs.has(t)) byTs.set(t, new Map());
-      byTs.get(t).set(d, r.value / 100);
-    }
-    // Último valor de cada día: VWC promedio de la zona radicular medida
-    const byDay = new Map();
-    [...byTs.entries()].sort((a, b) => a[0] - b[0]).forEach(([t, vals]) => {
-      if (!depths.every(d => vals.has(d))) return;
-      let mm = 0;
-      for (const seg of segs) mm += vals.get(seg.sensor_depth_cm) * (seg.depth_bottom_cm - seg.depth_top_cm) * 10;
-      byDay.set(new Date(t).toISOString().slice(0, 10), mm / (measuredDepth * 10));
-    });
-    return [...byDay.entries()].map(([date, vwc]) => ({ date, vwc }));
-  },
-
-  // ---- Estados hídricos (agua útil) de los lotes indicados ----
-  // Map<lot_id, estado>: sonda vinculada al perfil del lote
-  // (Vinculación de perfiles) o, en su defecto, la primera sonda
-  // activa del lote. Es el insumo del forecast hídrico
-  // (waterForecastService): estado inicial en mm de agua útil.
-  async getStateForLots(lotIds) {
-    const [lots, profiles, probes] = await Promise.all([
-      base44.entities.Lot.list(),
-      base44.entities.SoilProfile.list(),
-      sensorService.getProbes(),
-    ]);
-    const pairs = [];
-    for (const profile of profiles) {
-      if (!lotIds.includes(profile.lot_id)) continue;
-      const probe = profile.probe_id
-        ? probes.find(p => p.id === profile.probe_id)
-        : probes.find(p => p.lot_id === profile.lot_id && p.active !== false);
-      if (probe) pairs.push([profile.lot_id, stateForProbe(probe, lots, profiles)]);
-    }
-    return new Map(await Promise.all(pairs.map(async ([k, v]) => [k, await v])));
-  },
-
-  // ---- Historial de AGUA ÚTIL (mm) del lote según su sonda ----
-  // Serie [{t, mm}] (últimos ~95 días) para el gráfico de agua en
-  // la zona radicular. Devuelve null si no hay sonda o lecturas.
-  async getUsefulWaterHistory(lotId) {
-    const state = await this._lotState(lotId);
-    if (!state || state.missing || !state._model) return null;
-    const [channels, readings] = await Promise.all([
-      sensorService.getProbeChannels(state.probe.id),
-      sensorService.getProbeReadings(state.probe.id, Date.now() - 95 * DAY_MS, Date.now()),
-    ]);
-    if (!channels.length || !readings.length) return null;
-    return usefulWaterSeries(readings, channels, state._model);
-  },
-
-  // ---- Estado por lote (sonda vinculada al perfil o primera del lote) ----
-  async _lotState(lotId) {
-    const [lots, profiles, probes] = await Promise.all([
-      base44.entities.Lot.list(),
-      base44.entities.SoilProfile.list(),
-      sensorService.getProbes(),
-    ]);
-    const profile = profiles.find(p => p.lot_id === lotId);
-    const probe = profile?.probe_id
-      ? probes.find(p => p.id === profile.probe_id)
-      : probes.find(p => p.lot_id === lotId && p.active !== false);
-    if (!probe) return null;
-    return stateForProbe(probe, lots, profiles);
-  },
-
-  // ---- Getters conceptuales (nuevo motor: agua útil) ----
-  async getRootZoneWater(lotId) {
-    const s = await this._lotState(lotId);
-    if (!s || s.missing || s.current_available_water_mm == null) return null;
-    return {
-      currentAvailableMm: s.current_available_water_mm,
-      tawMm: s.total_available_water_capacity_mm,
-      rootZoneDepthCm: s.root_zone_depth_cm,
-      measuredProfileDepthCm: s.measured_profile_depth_cm,
-    };
-  },
-  async getAvailableWaterPercent(lotId) {
-    const s = await this._lotState(lotId);
-    return s && !s.missing ? s.available_water_percent : null;
-  },
-  async getWaterDeficitMm(lotId) {
-    const s = await this._lotState(lotId);
-    return s && !s.missing ? s.water_deficit_mm : null;
-  },
-  async getRechargeThreshold(lotId) {
-    const s = await this._lotState(lotId);
-    return s && !s.missing ? s.recharge_threshold_mm : null;
-  },
+  // El ESTADO HÍDRICO DE UN LOTE vive EXCLUSIVAMENTE en
+  // lotWaterStateService (curva calculada con los eventos propios del
+  // lote: origen explícito + riegos ejecutados + lluvia − ETc). Este
+  // servicio queda reducido a: analizar una sonda, calcular el agua
+  // del perfil de ESA sonda (monitoreo) y aportar la configuración
+  // estática (umbrales) para la curva del lote y el modelo de
+  // comportamiento del suelo. Las funciones que interpretaban la
+  // sonda vinculada como estado hídrico del lote fueron eliminadas:
+  // una sola arquitectura conceptual.
 };

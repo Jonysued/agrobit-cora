@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { FlaskConical } from 'lucide-react';
 import ConfigPanel, { inputCls } from './ConfigPanel';
-import { waterForecastService } from '@/services/waterEnergy';
+import { Button } from '@/components/ui/button';
+import { soilBehaviorService, waterForecastService } from '@/services/waterEnergy';
 
 // Vinculación de cada lote (vía su perfil de suelo) a su MODELO DE
 // SUELO y a su bomba. El modelo de suelo representa el comportamiento
@@ -9,9 +11,31 @@ import { waterForecastService } from '@/services/waterEnergy';
 // propios riegos, lluvia y demanda del cultivo. La tarifa energética
 // es global (igual para todos los lotes).
 export default function LinkSection({ lots, profiles, probes, models, pumps, onChange }) {
+  const [calibratingId, setCalibratingId] = useState(null);
+  const [calibMessage, setCalibMessage] = useState(null);
   const save = async (profile, field, value) => {
     await waterForecastService.saveProfile({ ...profile, [field]: value || null });
     onChange();
+  };
+  // Calibración EXPLÍCITA del modelo de suelo: aprende el comportamiento
+  // de la sonda de referencia. Nunca se ejecuta automáticamente.
+  const calibrate = async (modelId) => {
+    if (!modelId) return;
+    setCalibratingId(modelId);
+    setCalibMessage(null);
+    try {
+      const m = await soilBehaviorService.calibrate(modelId);
+      setCalibMessage(
+        m?.calibration_status === 'sin_sonda' ? 'El modelo no tiene sonda de referencia vinculada.'
+        : m?.calibration_status === 'sin_datos' ? 'La sonda de referencia no tiene suficientes lecturas para calibrar.'
+        : 'Modelo de suelo calibrado.'
+      );
+      onChange();
+    } catch (e) {
+      setCalibMessage(e?.message || 'No se pudo calibrar el modelo.');
+    } finally {
+      setCalibratingId(null);
+    }
   };
   const probeById = new Map((probes || []).map(p => [p.id, p]));
   // Selección actual: modelo explícito, o el derivado del vínculo
@@ -38,14 +62,20 @@ export default function LinkSection({ lots, profiles, probes, models, pumps, onC
                 <tr key={p.id} className="border-b border-slate-100">
                   <td className="py-2 pr-3"><b className="text-slate-700">{lots.find(l => l.id === p.lot_id)?.name || '—'}</b></td>
                   <td className="py-2 pr-3">
-                    <select value={valueFor(p)} onChange={e => save(p, 'soil_behavior_model_id', e.target.value)} className={inputCls}>
-                      <option value="">Sin modelo de suelo</option>
-                      {(models || []).map(m => {
-                        const probe = probeById.get(m.reference_probe_id);
-                        const eff = m.recharge_efficiency != null ? ` · recarga ${Math.round(m.recharge_efficiency * 100)}%` : '';
-                        return <option key={m.id} value={m.id}>{m.name}{probe ? ` · Ref: ${probe.name}` : ''}{eff}</option>;
-                      })}
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <select value={valueFor(p)} onChange={e => save(p, 'soil_behavior_model_id', e.target.value)} className={inputCls}>
+                        <option value="">Sin modelo de suelo</option>
+                        {(models || []).map(m => {
+                          const probe = probeById.get(m.reference_probe_id);
+                          const eff = m.recharge_efficiency != null ? ` · recarga ${Math.round(m.recharge_efficiency * 100)}%` : '';
+                          return <option key={m.id} value={m.id}>{m.name}{probe ? ` · Ref: ${probe.name}` : ''}{eff}</option>;
+                        })}
+                      </select>
+                      <Button size="sm" variant="outline" className="h-8 shrink-0 whitespace-nowrap" disabled={!valueFor(p) || calibratingId != null} onClick={() => calibrate(valueFor(p))}>
+                        <FlaskConical size={13} className="mr-1" />
+                        {calibratingId === valueFor(p) ? 'Calibrando…' : 'Calibrar modelo'}
+                      </Button>
+                    </div>
                   </td>
                   <td className="py-2 pr-3">
                     <select value={p.pump_id || ''} onChange={e => save(p, 'pump_id', e.target.value)} className={inputCls}>
@@ -59,6 +89,7 @@ export default function LinkSection({ lots, profiles, probes, models, pumps, onC
           </table>
         </div>
       )}
+      {calibMessage && <p className="mt-3 text-xs font-semibold text-slate-600">{calibMessage}</p>}
     </ConfigPanel>
   );
 }

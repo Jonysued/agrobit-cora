@@ -1,5 +1,5 @@
 import { base44 } from '@/api/base44Client';
-import { soilWaterService } from './soilWaterService';
+import { soilWaterService, computeProfileConfig } from './soilWaterService';
 import { soilBehaviorService } from './soilBehaviorService';
 
 // ============================================================
@@ -16,9 +16,12 @@ import { soilBehaviorService } from './soilBehaviorService';
 //   × comportamiento del suelo de referencia (SoilBehaviorModel:
 //     eficiencia de recarga, agotamiento)
 //
-// El estado persiste en LotWaterState (un registro por día) y es el
-// punto de partida del día siguiente: la sonda de referencia NUNCA
-// vuelve a igualar el estado del lote — solo alimenta el modelo.
+// SOLO LECTURA: una consulta de UI nunca escribe LotWaterState. El
+// ORIGEN de la curva es una inicialización EXPLÍCITA del usuario
+// (valor manual o estado inicial guardado); desde ese origen la curva
+// se RECONSTRUYE completa en cada consulta. La sonda de referencia
+// NUNCA inicializa ni iguala el estado del lote — solo alimenta el
+// modelo de comportamiento del suelo.
 //
 // MODEL_VERSION: versión del modelo de balance (se registra en cada
 // estado persistido para trazabilidad).
@@ -41,11 +44,10 @@ function lotIrrigationMm(program, lotId) {
   return (program.mm || 0) * (item?.factor ?? 1);
 }
 
-// ---- Riegos ejecutados (IrrigationLog) y programados por lote ----
-// Ejecutados: cada IrrigationLog confirma el riego de su programa en
-// esa fecha (fuente principal). Fallback: programas pasados
-// Finalizados si el lote no tiene ningún log cargado.
-// Programados: programas futuros Programado/Activo.
+// ---- Riegos ejecutados (PASADO) y programados (FUTURO) por lote ----
+// PASADO = IrrigationLog: un riego cuenta como ejecutado SOLO si
+// tiene su log (un programa histórico sin log no prueba que ocurrió).
+// FUTURO = IrrigationProgram Programado/Activo con fecha futura.
 function irrigationEventsFrom(logs, programs, lots) {
   const lotIds = new Set(lots.map(l => l.id));
   const programById = new Map(programs.map(p => [p.id, p]));
@@ -56,14 +58,12 @@ function irrigationEventsFrom(logs, programs, lots) {
   };
   const executed = new Map();
   const scheduled = new Map();
-  const loggedLots = new Set();
   for (const log of logs) {
     const p = programById.get(log.program_id);
     if (!p || !log.date) continue;
     for (const lotId of p.lot_ids || []) {
       if (!lotIds.has(lotId)) continue;
       add(executed, lotId, log.date, lotIrrigationMm(p, lotId));
-      loggedLots.add(lotId);
     }
   }
   const t = todayStr();
@@ -71,9 +71,6 @@ function irrigationEventsFrom(logs, programs, lots) {
     if (!p.date) continue;
     for (const lotId of p.lot_ids || []) {
       if (!lotIds.has(lotId)) continue;
-      if (!loggedLots.has(lotId) && p.date <= t && ['Finalizado', 'Activo'].includes(p.status)) {
-        add(executed, lotId, p.date, lotIrrigationMm(p, lotId));
-      }
       if (p.date > t && ['Programado', 'Activo'].includes(p.status)) {
         add(scheduled, lotId, p.date, lotIrrigationMm(p, lotId));
       }
@@ -107,16 +104,23 @@ async function dailyObservedWeather(farmId) {
 
 // ---- Contexto compartido (una sola pasada para todos los lotes) ----
 async function loadContext(lots) {
-  const [profiles, models, states, logs, programs, farms] = await Promise.all([
+  const [profiles, models, states, logs, programs, farms, allLayers] = await Promise.all([
     base44.entities.SoilProfile.list(),
     soilBehaviorService.getModels(),
     base44.entities.LotWaterState.list('-timestamp', 2000),
     base44.entities.IrrigationLog.list(),
     base44.entities.IrrigationProgram.list(),
     base44.entities.Farm.list(),
+    base44.entities.SoilLayer.list(),
   ]);
-  // Configuración estática de cada perfil (SIN sonda)
-  const configs = new Map(await Promise.all(profiles.map(async p => [p.id, await soilWaterService.getProfileConfig(p)])));
+  // Configuración estática de cada perfil (SIN sonda) — capas cargadas
+  // UNA sola vez para todos los perfiles: sin consultas por perfil.
+  const layersByProfile = new Map();
+  for (const layer of allLayers) {
+    if (!layersByProfile.has(layer.soil_profile_id)) layersByProfile.set(layer.soil_profile_id, []);
+    layersByProfile.get(layer.soil_profile_id).push(layer);
+  }
+  const configs = new Map(profiles.map(p => [p.id, computeProfileConfig(p, layersByProfile.get(p.id) || [])]));
   // Clima observado por finca (id)
   const farmByLot = new Map(lots.map(l => [l.id, farms.find(f => f.name === l.farm) || null]));
   const farmIds = [...new Set([...farmByLot.values()].map(f => f?.id).filter(Boolean))];
@@ -136,30 +140,31 @@ async function computeLot(lot, ctx, withHistory) {
   const wilting = config?.wilting_storage_mm ?? 0;
   const configComplete = config?.configuration_status === 'complete';
 
-  // ---- Ancla del estado: último estado persistido, o inicialización ----
+  // ---- Origen del estado: inicialización EXPLÍCITA del usuario ----
+  // Se aceptan únicamente un LotWaterState creado explícitamente
+  // (manual o estimación guardada por el usuario) o el valor manual
+  // del perfil. La sonda JAMÁS inicializa el estado del lote: es solo
+  // referencia para aprender el comportamiento del suelo.
   const stateRecs = ctx.states.filter(s => s.lot_id === lot.id);
   let anchor = null;
-  let justInitialized = false;
-  if (stateRecs.length) {
-    const rec = stateRecs[0];
-    anchor = { date: isoDay(new Date(rec.timestamp)), useful: round1((rec.profile_water_mm ?? 0) - wilting), source: rec.source || 'calculated' };
-    if (anchor.useful < 0) anchor.useful = 0;
-  } else if (configComplete) {
-    if (profile.manual_initial_water_mm != null) {
-      anchor = { date: todayStr(), useful: profile.manual_initial_water_mm, source: 'manual_adjustment' };
-      justInitialized = true;
-    } else {
-      // Estimación inicial ÚNICA desde la sonda de referencia del modelo
-      // de suelo — o, si aún no hay modelo creado, desde la sonda
-      // vinculada al perfil. El estado luego evoluciona solo: la sonda
-      // nunca vuelve a igualarlo.
-      const refProbeId = model?.reference_probe_id || profile.probe_id;
-      const probeState = refProbeId ? await soilWaterService.getProbeWaterState(refProbeId) : null;
-      if (probeState && !probeState.missing && probeState.current_available_water_mm != null) {
-        anchor = { date: todayStr(), useful: probeState.current_available_water_mm, source: 'initialized' };
-        justInitialized = true;
-      }
-    }
+  const explicit = stateRecs.find(s => s.source === 'manual_adjustment' || s.source === 'initialized');
+  if (explicit) {
+    // La inicialización más reciente: una nueva inicialización reinicia la curva
+    anchor = {
+      date: isoDay(new Date(explicit.timestamp)),
+      useful: Math.max(0, round1((explicit.profile_water_mm ?? 0) - wilting)),
+      source: explicit.source,
+    };
+  } else if (stateRecs.length) {
+    // Registros legados diarios: el más antiguo es el punto de partida
+    const first = stateRecs[stateRecs.length - 1];
+    anchor = {
+      date: isoDay(new Date(first.timestamp)),
+      useful: Math.max(0, round1((first.profile_water_mm ?? 0) - wilting)),
+      source: 'calculated',
+    };
+  } else if (configComplete && profile.manual_initial_water_mm != null) {
+    anchor = { date: todayStr(), useful: profile.manual_initial_water_mm, source: 'manual_adjustment' };
   }
   if (!anchor) {
     return {
@@ -197,19 +202,6 @@ async function computeLot(lot, ctx, withHistory) {
     d = dayAfter(d, 1);
   }
 
-  // ---- Persistencia: un estado calculado por día ----
-  let persist = null;
-  const lastPersistedDay = stateRecs.length ? isoDay(new Date(stateRecs[0].timestamp)) : null;
-  if (justInitialized || lastPersistedDay !== end) {
-    persist = {
-      lot_id: lot.id,
-      timestamp: new Date().toISOString(),
-      profile_water_mm: round1(wilting + water),
-      source: justInitialized ? anchor.source : 'calculated',
-      model_version: MODEL_VERSION,
-    };
-  }
-
   // ---- Programados del lote (futuro) con eficiencia del modelo ----
   const scheduledMap = ctx.scheduled.get(lot.id) || new Map();
   // Solo eventos con lámina real: los programas sin mm definido no
@@ -224,24 +216,23 @@ async function computeLot(lot, ctx, withHistory) {
     efficiency,
     currentUsefulMm: water,
     currentStoredMm: round1(wilting + water),
-    state_source: justInitialized ? anchor.source : 'calculated',
+    state_source: anchor.source,
     origin: anchor.source,
     anchored_at: end,
     history: withHistory ? history : null,
     events: { irrigation: irrigationEvents, scheduled: scheduledEvents },
     forecast_status: 'ok',
-    persist,
   };
 }
 
 export const lotWaterStateService = {
-  // Map<lot_id, estado calculado> — reconstrucción y persistencia.
-  // withHistory incluye la serie diaria pasada (para el gráfico).
+  // Map<lot_id, estado calculado> — SOLO LECTURA/CÁLCULO: una consulta
+  // de UI nunca escribe LotWaterState (los registros se crean únicamente
+  // con las inicializaciones explícitas de más abajo). withHistory
+  // incluye la serie diaria pasada (para el gráfico).
   async getLotStates(lots, { withHistory = false } = {}) {
     const ctx = await loadContext(lots);
     const results = await Promise.all(lots.map(l => computeLot(l, ctx, withHistory)));
-    const toCreate = results.map(r => r.persist).filter(Boolean);
-    if (toCreate.length) await base44.entities.LotWaterState.bulkCreate(toCreate).catch(() => {});
     return new Map(lots.map((l, i) => [l.id, results[i]]));
   },
 

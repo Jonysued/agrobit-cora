@@ -23,10 +23,10 @@ export default function WaterEnergyConfig() {
       energyService.getTariffs(),
       weatherService.getConfig(lots.map(l => l.farm)),
     ]);
-    // Un modelo de suelo por sonda (la sonda es la referencia del
-    // modelo) — se crean si no existen y se recalibran si venció su
-    // calibración (> 7 días).
-    const models = await soilBehaviorService.ensureModelsForProbes(probes);
+    // SOLO LECTURA: abrir Configuración no crea ni recalibra modelos
+    // de suelo (la calibración es una acción explícita en
+    // Vinculación de perfiles).
+    const models = await soilBehaviorService.getModels();
     setData({ lots, profiles, probes, models, pumps, tariffs, farms: weather.farms, stations: weather.stations });
   };
   useEffect(() => { refresh().catch(() => setError(true)); }, []);

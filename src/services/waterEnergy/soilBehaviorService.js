@@ -17,13 +17,13 @@ import { soilWaterService } from './soilWaterService';
 //     realmente almacenada en el perfil (ej. 0.80 = 80%).
 //   · depletion_rate_mm_day: agotamiento diario observado en
 //     días sin eventos.
-// V1 experimental: la calibración se dispara desde la página de
-// configuración; el forecast usa los valores aprendidos (si el
-// modelo no está calibrado, eficiencia de recarga por defecto 1).
+// V1 experimental: la calibración es una acción EXPLÍCITA del usuario
+// (botón "Calibrar modelo" en Configuración → Vinculación de perfiles);
+// el forecast usa los valores aprendidos (si el modelo no está
+// calibrado, eficiencia de recarga por defecto 1).
 // ============================================================
 const round1 = n => Math.round(n * 10) / 10;
 const round2 = n => Math.round(n * 100) / 100;
-const CALIBRATION_MAX_AGE_MS = 7 * 86400000;
 const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const dayAfter = (iso, n) => { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + n); return isoDay(d); };
@@ -34,14 +34,21 @@ function lotIrrigationMm(program, lotId) {
   return (program.mm || 0) * (item?.factor ?? 1);
 }
 
-// Riego aplicado en el sitio de referencia (lote de la sonda), por fecha
-async function referenceIrrigationByDate(lotId) {
+// Riego EJECUTADO en el sitio de referencia (lote de la sonda), por
+// fecha. Solo IrrigationLog: un programa sin log no prueba que el
+// riego realmente ocurrió.
+async function referenceExecutedIrrigationByDate(lotId) {
   if (!lotId) return new Map();
-  const programs = await base44.entities.IrrigationProgram.list();
+  const [logs, programs] = await Promise.all([
+    base44.entities.IrrigationLog.list(),
+    base44.entities.IrrigationProgram.list(),
+  ]);
+  const programById = new Map(programs.map(p => [p.id, p]));
   const byDate = new Map();
-  for (const p of programs) {
-    if (!p.date || !(p.lot_ids || []).includes(lotId)) continue;
-    byDate.set(p.date, round1((byDate.get(p.date) || 0) + lotIrrigationMm(p, lotId)));
+  for (const log of logs) {
+    const p = programById.get(log.program_id);
+    if (!p || !log.date || !(p.lot_ids || []).includes(lotId)) continue;
+    byDate.set(log.date, round1((byDate.get(log.date) || 0) + lotIrrigationMm(p, lotId)));
   }
   return byDate;
 }
@@ -54,7 +61,10 @@ async function referenceIrrigationByDate(lotId) {
 async function calibrateModel(model, probes) {
   const probe = probes.find(p => p.id === model.reference_probe_id);
   if (!probe) return { calibration_status: 'sin_sonda' };
-  const analysis = await soilWaterService.getProbeAnalysis(probe.id).catch(() => null);
+  const analysis = await soilWaterService.getProbeAnalysis(probe.id).catch(e => {
+    console.error('[soilBehaviorService] No se pudo analizar la sonda de referencia:', e);
+    return null;
+  });
   const history = analysis?.history || [];
   if (history.length < 3) return { calibration_status: 'sin_datos', sample_count: 0 };
 
@@ -64,7 +74,7 @@ async function calibrateModel(model, probes) {
   const days = [...byDay.keys()].sort();
 
   // Eventos de entrada de agua con lámina conocida
-  const irrByDate = await referenceIrrigationByDate(probe.lot_id);
+  const irrByDate = await referenceExecutedIrrigationByDate(probe.lot_id);
   const events = [
     ...(analysis.events?.irrigation || []).map(d => ({ date: d, mm: irrByDate.get(d) || 0 })),
     ...(analysis.events?.rain || []),
@@ -101,35 +111,21 @@ async function calibrateModel(model, probes) {
 export const soilBehaviorService = {
   async getModels() { return base44.entities.SoilBehaviorModel.list(); },
 
-  // Asegura que exista un modelo de suelo por cada sonda (la sonda es
-  // la referencia del modelo) y recalibra los modelos con calibración
-  // vencida (> 7 días). Devuelve la lista completa de modelos.
-  async ensureModelsForProbes(probes, { recalibrate = true } = {}) {
+  // Calibración EXPLÍCITA de un modelo de suelo (acción del usuario,
+  // nunca automática al abrir una pantalla). Aprende el comportamiento
+  // de la sonda de referencia (eficiencia de recarga, agotamiento) y
+  // actualiza el modelo. Sin sonda o sin lecturas devuelve el estado
+  // de calibración correspondiente para que la UI lo informe.
+  async calibrate(modelId) {
     const models = await this.getModels();
-    const out = [...models];
-    for (const probe of (probes || [])) {
-      let m = out.find(x => x.reference_probe_id === probe.id);
-      if (!m) {
-        m = await base44.entities.SoilBehaviorModel.create({
-          name: `Modelo de suelo · ${probe.name}`,
-          reference_probe_id: probe.id,
-          calibration_status: 'uncalibrated',
-          sample_count: 0,
-        });
-        out.push(m);
-      }
-      const stale = !m.last_calibration_at
-        || (Date.now() - new Date(m.last_calibration_at).getTime()) > CALIBRATION_MAX_AGE_MS;
-      if (recalibrate && stale) {
-        const learned = await calibrateModel(m, probes || []);
-        const updated = await base44.entities.SoilBehaviorModel.update(m.id, {
-          ...learned,
-          last_calibration_at: new Date().toISOString(),
-        });
-        out[out.indexOf(m)] = updated;
-      }
-    }
-    return out;
+    const model = models.find(m => m.id === modelId);
+    if (!model) throw new Error('Modelo de suelo no encontrado.');
+    const probes = await base44.entities.SoilProbe.list();
+    const learned = await calibrateModel(model, probes);
+    return base44.entities.SoilBehaviorModel.update(modelId, {
+      ...learned,
+      last_calibration_at: new Date().toISOString(),
+    });
   },
 
   // Modelo de suelo vinculado a un perfil: explícito
