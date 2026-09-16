@@ -16,14 +16,15 @@ export default function WaterEnergyConfig() {
   const [error, setError] = useState(null);
   const refresh = async () => {
     const lots = await waterForecastService.getLots();
-    const [profiles, sensors, pumps, tariffs, weather] = await Promise.all([
+    const [profiles, points, probes, pumps, tariffs, weather] = await Promise.all([
       waterForecastService.getProfiles(),
-      sensorService.getSensors(),
+      sensorService.getMonitoringPoints(),
+      sensorService.getProbes(),
       energyService.getPumps(),
       energyService.getTariffs(),
       weatherService.getConfig(lots.map(l => l.farm)),
     ]);
-    setData({ lots, profiles, sensors, pumps, tariffs, farms: weather.farms, stations: weather.stations });
+    setData({ lots, profiles, points, probes, pumps, tariffs, farms: weather.farms, stations: weather.stations });
   };
   useEffect(() => { refresh().catch(() => setError(true)); }, []);
   if (!data) return error ? <div className="p-6 text-sm text-slate-500">No se pudo cargar la configuración.</div> : <LoadingState />;
@@ -32,10 +33,10 @@ export default function WaterEnergyConfig() {
       <ModuleHeader />
       <div className="space-y-5">
         <ProfileSection lots={data.lots} profiles={data.profiles} onChange={refresh} />
-        <SensorSection lots={data.lots} sensors={data.sensors} onChange={refresh} />
+        <SensorSection lots={data.lots} points={data.points} probes={data.probes} onChange={refresh} />
         <PumpSection lots={data.lots} pumps={data.pumps} onChange={refresh} />
         <TariffSection tariffs={data.tariffs} onChange={refresh} />
-        <LinkSection lots={data.lots} profiles={data.profiles} sensors={data.sensors} pumps={data.pumps} onChange={refresh} />
+        <LinkSection lots={data.lots} profiles={data.profiles} probes={data.probes} pumps={data.pumps} onChange={refresh} />
         <FarmLocationSection lots={data.lots} farms={data.farms} onChange={refresh} />
         <WeatherSourceSection lots={data.lots} farms={data.farms} onChange={refresh} />
         <WeatherStationSection farms={data.farms} stations={data.stations} onChange={refresh} />

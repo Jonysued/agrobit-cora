@@ -1,14 +1,14 @@
 import React from 'react';
 
-// BLOQUE 1 — ESTADO HÍDRICO: barra RECARGAR → ÓPTIMO → LLENO
-// con el marcador de estado actual + 4 métricas de decisión.
+// BLOQUE 1 — ESTADO HÍDRICO: barra RECARGAR → ÓPTIMO → LLENO con el
+// marcador de estado actual. Solo monitoreo, sin recomendaciones.
 const STATUS_BADGE = {
   RECARGAR: 'bg-red-100 text-red-700',
   ÓPTIMO: 'bg-emerald-100 text-emerald-800',
   LLENO: 'bg-cyan-100 text-cyan-800',
 };
 
-export default function StatusCard({ status, pct, thresholds, currentMm, deficitMm, nextIrrigation }) {
+export default function StatusCard({ status, pct, thresholds, currentMm, deficitMm }) {
   const { wpMm, fcMm, tMinMm, tMaxMm } = thresholds;
   const span = fcMm - wpMm || 1;
   const zMin = Math.max(0, Math.min(100, Math.round(((tMinMm - wpMm) / span) * 100)));
@@ -18,7 +18,6 @@ export default function StatusCard({ status, pct, thresholds, currentMm, deficit
     ['Agua disponible', pct == null ? '—' : `${pct}%`],
     ['Agua en zona radicular', `${Math.round(currentMm)} mm`],
     ['Déficit hasta objetivo', `${deficitMm} mm`],
-    ['Próximo riego estimado', nextIrrigation ? `En ${nextIrrigation.days} día${nextIrrigation.days > 1 ? 's' : ''}` : 'Sin riesgo a 7 días'],
   ];
   return (
     <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
@@ -41,7 +40,7 @@ export default function StatusCard({ status, pct, thresholds, currentMm, deficit
           <span style={{ width: `${100 - zMax}%` }} className="text-right">Lleno</span>
         </div>
       </div>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
         {metrics.map(([k, v]) => (
           <div key={k} className="rounded-xl bg-slate-50 p-3">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{k}</p>

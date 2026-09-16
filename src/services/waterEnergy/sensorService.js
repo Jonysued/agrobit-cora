@@ -84,6 +84,23 @@ export const sensorService = {
     };
   },
 
+  // ---- Puntos de monitoreo y sondas: CRUD (Configuración → Sensores) ----
+  async getProbes() { return base44.entities.SoilProbe.list(); },
+  async createMonitoringPoint(data) { return base44.entities.SoilMonitoringPoint.create(data); },
+  async updateMonitoringPoint(id, data) { return base44.entities.SoilMonitoringPoint.update(id, data); },
+  async deleteMonitoringPoint(id) {
+    const probes = await base44.entities.SoilProbe.filter({ monitoring_point_id: id });
+    for (const probe of probes) await this.deleteProbe(probe.id);
+    return base44.entities.SoilMonitoringPoint.delete(id);
+  },
+  async createProbe(data) { return base44.entities.SoilProbe.create(data); },
+  async updateProbe(id, data) { return base44.entities.SoilProbe.update(id, data); },
+  async deleteProbe(id) {
+    await base44.entities.SoilProbeChannel.deleteMany({ probe_id: id });
+    await base44.entities.SensorReading.deleteMany({ probe_id: id });
+    return base44.entities.SoilProbe.delete(id);
+  },
+
   // ---- Lecturas del esquema anterior (sensores simples por lote) ----
   // Map<lot_id, [{id, timestamp, value, depth_cm}]>
   async getRecentSoilReadings(days = 8) {

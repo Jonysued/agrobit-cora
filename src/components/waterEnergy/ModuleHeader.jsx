@@ -5,7 +5,7 @@ import { Droplets } from 'lucide-react';
 const TABS = [
   ['/water-energy', 'Dashboard'],
   ['/water-energy/energia', 'Energía'],
-  ['/water-energy/suelo', 'Monitoreo de Suelo'],
+  ['/water-energy/sensores', 'Sensores'],
   ['/water-energy/configuracion', 'Configuración'],
 ];
 

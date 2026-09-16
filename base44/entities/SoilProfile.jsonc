@@ -35,6 +35,9 @@
     "sensor_id": {
       "type": "string"
     },
+    "probe_id": {
+      "type": "string"
+    },
     "pump_id": {
       "type": "string"
     }

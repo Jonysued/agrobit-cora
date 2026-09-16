@@ -6,12 +6,11 @@ import LoadingState from '@/components/LoadingState';
 import StatusCard from '@/components/waterEnergy/soil/StatusCard';
 import ProfileChart from '@/components/waterEnergy/soil/ProfileChart';
 import RootZoneChart from '@/components/waterEnergy/soil/RootZoneChart';
-import DecisionCard from '@/components/waterEnergy/soil/DecisionCard';
 import { soilWaterService } from '@/services/waterEnergy';
 
-// MONITOREO DE SUELO — detalle del punto: SOLO 4 bloques
-// (Estado hídrico · Humedad por profundidad · Agua en zona radicular ·
-//  Recomendación). Sin variables técnicas del sensor.
+// SENSORES — detalle del punto: SOLO MONITOREO en 3 bloques
+// (Estado hídrico · Humedad por profundidad · Agua en zona radicular).
+// Sin variables técnicas del sensor ni recomendaciones de riego.
 const SOURCE_LABEL = { LIVE: 'En vivo', CSV: 'Importado CSV', MANUAL: 'Manual', DEMO: 'Demo' };
 
 export default function WaterEnergySoilPoint() {
@@ -24,7 +23,7 @@ export default function WaterEnergySoilPoint() {
     <div className="mx-auto max-w-[1200px] space-y-5 p-4 md:p-6">
       <ModuleHeader />
       <div>
-        <Link to="/water-energy/suelo" className="inline-flex items-center gap-1 text-xs font-bold text-emerald-900 hover:underline"><ArrowLeft size={13} /> Monitoreo de Suelo</Link>
+        <Link to="/water-energy/sensores" className="inline-flex items-center gap-1 text-xs font-bold text-emerald-900 hover:underline"><ArrowLeft size={13} /> Sensores</Link>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h1 className="text-xl font-bold text-charcoal">{data.point?.name}</h1>
@@ -42,11 +41,10 @@ export default function WaterEnergySoilPoint() {
         </div>
       ) : (
         <>
-          <StatusCard status={data.status} pct={data.pct} thresholds={data.thresholds} currentMm={data.currentMm} deficitMm={data.deficitMm} nextIrrigation={data.nextIrrigation} />
+          <StatusCard status={data.status} pct={data.pct} thresholds={data.thresholds} currentMm={data.currentMm} deficitMm={data.deficitMm} />
           <ProfileChart readings={data.readings} channels={data.channels} events={data.events} />
-          <RootZoneChart history={data.history} forecastA={data.forecastA} forecastB={data.forecastB} thresholds={data.thresholds} />
-          <DecisionCard lot={data.lot} recommendation={data.recommendation} energy={data.energy} nextIrrigation={data.nextIrrigation} />
-          <p className="text-center text-xs text-slate-400">Estimación experimental del agua del perfil a partir de las sondas — no constituye una predicción agronómica validada.</p>
+          <RootZoneChart history={data.history} thresholds={data.thresholds} />
+          <p className="text-center text-xs text-slate-400">Estimación experimental del agua del perfil a partir de las sondas — módulo de monitoreo, sin recomendación de riego.</p>
         </>
       )}
     </div>

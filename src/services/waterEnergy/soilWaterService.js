@@ -1,21 +1,19 @@
 import { base44 } from '@/api/base44Client';
 import { sensorService } from './sensorService';
 import { weatherService } from './weatherService';
-import { energyService } from './energyService';
-import { irrigationRecommendationService } from './irrigationRecommendationService';
-import { mmOfVwc, runScenario } from './engine/waterBalanceEngine';
+import { mmOfVwc } from './engine/waterBalanceEngine';
 
 // ============================================================
-// soilWaterService — agua del perfil de suelo a partir de sondas.
-// Convierte lecturas VWC por profundidad en mm de agua de la zona
-// radicular, ponderando el espesor de suelo que representa cada
-// sensor (límites a mitad de camino entre profundidades).
+// soilWaterService — SOLO MONITOREO del agua del perfil de suelo
+// a partir de sondas. Convierte lecturas VWC por profundidad en
+// mm de agua de la zona radicular, ponderando el espesor de suelo
+// que representa cada sensor (límites a mitad de camino entre
+// profundidades). No genera recomendaciones de riego.
 // La UI consulta resultados: NUNCA calcula.
-// ESTIMACIÓN EXPERIMENTAL — no reemplaja criterio agronómico.
+// ESTIMACIÓN EXPERIMENTAL — no reemplaza criterio agronómico.
 // ============================================================
 const DAY_MS = 86400000;
 const round1 = n => Math.round(n * 10) / 10;
-const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 // Perfil de respaldo si el lote no tiene SoilProfile configurado
 const DEFAULT_PROFILE = {
@@ -42,7 +40,7 @@ function layerSplit(depths, rootDepth) {
 
 // Estado hídrico del perfil a partir de las últimas lecturas de la sonda.
 // Orden-agnóstico: conserva el valor más reciente por canal.
-function buildState(lot, rawProfile, channels, readings, weatherDays, pumps, tariffs) {
+function buildState(lot, rawProfile, channels, readings) {
   const depths = channels.map(c => c.depth_cm).sort((a, b) => a - b);
   // Profundidad efectiva: zona radicular del perfil, recortada al alcance de la sonda
   const rootDepth = Math.min(rawProfile.root_zone_depth_cm || 120, Math.max(...depths));
@@ -74,16 +72,6 @@ function buildState(lot, rawProfile, channels, readings, weatherDays, pumps, tar
   const pct = fcMm > wpMm ? Math.max(0, Math.min(100, Math.round(((currentMm - wpMm) / (fcMm - wpMm)) * 100))) : null;
   const deficitMm = round1(Math.max(0, tMaxMm - currentMm));
   const status = currentMm < tMinMm ? 'RECARGAR' : currentMm >= tMaxMm ? 'LLENO' : 'ÓPTIMO';
-  const currentVwc = currentMm / (rootDepth * 10);
-
-  // Escenarios a 7 días con el pronóstico meteorológico de la finca
-  const inputs = (weatherDays || []).map(w => ({ date: w.date, etcMm: w.etc_mm, rainMm: w.effective_rainfall_mm }));
-  const scenarioA = inputs.length ? runScenario(profile, currentVwc, inputs) : [];
-  const { recommendation, scenarioB } = irrigationRecommendationService.withRecommendation(profile, lot, currentVwc, inputs, scenarioA);
-  const pump = energyService.getPumpForLot(pumps, lot, profile);
-  const tariff = energyService.getActiveTariff(tariffs);
-  const energy = recommendation ? energyService.compute(recommendation.recommended_irrigation_m3, pump, tariff) : null;
-  const hit = scenarioA.find(p => p.vwc < profile.target_min_vwc);
 
   return {
     rootDepth,
@@ -93,13 +81,6 @@ function buildState(lot, rawProfile, channels, readings, weatherDays, pumps, tar
     deficitMm,
     status,
     thresholds: { wpMm, fcMm, tMinMm, tMaxMm },
-    nextIrrigation: hit ? { days: hit.day, date: hit.date } : null,
-    scenarioA,
-    scenarioB,
-    recommendation,
-    energy,
-    pump,
-    tariff,
     lastReadingAt: lastTs > -Infinity ? new Date(lastTs).toISOString() : null,
     source: lastSource,
     experimental: !rawProfile.id,
@@ -107,60 +88,51 @@ function buildState(lot, rawProfile, channels, readings, weatherDays, pumps, tar
 }
 
 // Estado de un punto (compartido por listado, detalle y getters)
-async function stateForPoint(point, lots, profiles, pumps, tariffs, weatherMap) {
+async function stateForPoint(point, lots, profiles, preferredProbe) {
   const lot = lots.find(l => l.id === point.lot_id);
   if (!lot) return { point, missing: 'El lote del punto ya no existe.' };
-  const probe = (await sensorService.getProbesForMonitoringPoint(point.id))[0];
+  const probe = preferredProbe || (await sensorService.getProbesForMonitoringPoint(point.id))[0];
   if (!probe) return { point, lot, lotName: lot.name, missing: 'Sin sonda asociada.' };
   const channels = await sensorService.getProbeChannels(probe.id);
   if (!channels.length) return { point, lot, lotName: lot.name, missing: 'Sonda sin canales configurados.' };
   const readings = await base44.entities.SensorReading.filter({ probe_id: probe.id }, '-timestamp', 200);
   if (!readings.length) return { point, lot, lotName: lot.name, missing: 'Sin lecturas cargadas.' };
   const profile = profiles.find(p => p.lot_id === lot.id) || { ...DEFAULT_PROFILE };
-  const state = buildState(lot, profile, channels, readings, weatherMap.get(lot.id) || [], pumps, tariffs);
+  const state = buildState(lot, profile, channels, readings);
   return { point, lot, lotName: lot.name, probeName: probe.name, ...state };
 }
 
 export const soilWaterService = {
-  // ---- Listado de puntos de monitoreo (pantalla principal) ----
+  // ---- Listado de puntos de monitoreo (pantalla Sensores) ----
   async getPointSummaries() {
-    const [points, lots, profiles, pumps, tariffs] = await Promise.all([
+    const [points, lots, profiles] = await Promise.all([
       sensorService.getMonitoringPoints(),
       base44.entities.Lot.list(),
       base44.entities.SoilProfile.list(),
-      energyService.getPumps(),
-      energyService.getTariffs(),
     ]);
-    const weatherMap = await weatherService.getFarmForecast(lots);
     const summaries = [];
     for (const point of points) {
-      summaries.push(await stateForPoint(point, lots, profiles, pumps, tariffs, weatherMap));
+      summaries.push(await stateForPoint(point, lots, profiles));
     }
     return summaries;
   },
 
-  // ---- Detalle completo de un punto (pantalla de decisión de riego) ----
+  // ---- Detalle completo de un punto (solo monitoreo) ----
   async getPointAnalysis(pointId) {
     const points = await sensorService.getMonitoringPoints();
     const point = points.find(p => p.id === pointId);
     if (!point) return null;
-    const [lots, profiles, pumps, tariffs] = await Promise.all([
-      base44.entities.Lot.list(),
-      base44.entities.SoilProfile.list(),
-      energyService.getPumps(),
-      energyService.getTariffs(),
-    ]);
+    const [lots, profiles] = await Promise.all([base44.entities.Lot.list(), base44.entities.SoilProfile.list()]);
     const lot = lots.find(l => l.id === point.lot_id);
     const probe = lot ? (await sensorService.getProbesForMonitoringPoint(pointId))[0] : null;
     if (!lot || !probe) return { point, lot: lot || null, missing: 'El punto de monitoreo no tiene sonda asociada.' };
-    const [channels, readings, weatherMap] = await Promise.all([
+    const [channels, readings] = await Promise.all([
       sensorService.getProbeChannels(probe.id),
       sensorService.getProbeReadings(probe.id, Date.now() - 95 * DAY_MS, Date.now()),
-      weatherService.getFarmForecast([lot]),
     ]);
     if (!channels.length) return { point, lot, missing: 'La sonda no tiene canales configurados.' };
     const profile = profiles.find(p => p.lot_id === lot.id) || { ...DEFAULT_PROFILE };
-    const state = buildState(lot, profile, channels, readings, weatherMap.get(lot.id) || [], pumps, tariffs);
+    const state = buildState(lot, profile, channels, readings);
     const { inside, layers } = layerSplit(channels.map(c => c.depth_cm).sort((a, b) => a - b), state.rootDepth);
 
     // ---- Historial: agua total de la zona radicular por timestamp ----
@@ -182,12 +154,7 @@ export const soilWaterService = {
     });
     history.sort((a, b) => a.t - b.t);
 
-    // ---- Forecast 7 días: agua TOTAL de la zona radicular (no por profundidad) ----
-    const todayIso = isoDay(new Date());
-    const forecastA = [{ date: todayIso, mm: state.currentMm }, ...state.scenarioA.map(p => ({ date: p.date, mm: round1(mmOfVwc(p.vwc, state.rootDepth)) }))];
-    const forecastB = [{ date: todayIso, mm: state.currentMm }, ...state.scenarioB.map(p => ({ date: p.date, mm: round1(mmOfVwc(p.vwc, state.rootDepth)) }))];
-
-    // ---- Eventos: riegos del lote + lluvia observada de la finca ----
+    // ---- Eventos de contexto: riegos del lote + lluvia observada ----
     const programs = await base44.entities.IrrigationProgram.list();
     const irrigationEvents = [...new Set(programs.filter(p => (p.lot_ids || []).includes(lot.id) && p.date).map(p => p.date))].sort();
     const farms = await base44.entities.Farm.list();
@@ -211,25 +178,26 @@ export const soilWaterService = {
       profile: profile.id ? profile : null,
       ...state,
       history,
-      forecastA,
-      forecastB,
       events: { irrigation: irrigationEvents, rain: rainEvents },
     };
   },
 
-  // ---- Getores conceptuales por lote (consultados por la UI, nunca calculados en componentes) ----
+  // ---- Getters conceptuales por lote (consultados por la UI, nunca calculados en componentes) ----
   async _lotState(lotId) {
-    const [points, lots, profiles, pumps, tariffs] = await Promise.all([
-      sensorService.getMonitoringPoints(lotId),
+    const [lots, profiles, probes, points] = await Promise.all([
       base44.entities.Lot.list(),
       base44.entities.SoilProfile.list(),
-      energyService.getPumps(),
-      energyService.getTariffs(),
+      sensorService.getProbes(),
+      sensorService.getMonitoringPoints(lotId),
     ]);
-    const point = points[0];
+    const profile = profiles.find(p => p.lot_id === lotId);
+    // Sonda vinculada al perfil en Configuración → Vinculación; si no, primer punto del lote
+    const linkedProbe = profile?.probe_id ? probes.find(p => p.id === profile.probe_id) : null;
+    const point = linkedProbe
+      ? points.find(pt => pt.id === linkedProbe.monitoring_point_id)
+      : points[0];
     if (!point) return null;
-    const weatherMap = await weatherService.getFarmForecast(lots);
-    return stateForPoint(point, lots, profiles, pumps, tariffs, weatherMap);
+    return stateForPoint(point, lots, profiles, linkedProbe);
   },
   async getRootZoneWater(lotId) {
     const s = await this._lotState(lotId);
