@@ -35,16 +35,24 @@ export default function FarmLocationSection({ lots, farms, onChange }) {
   const [lat, setLat] = useState(null);
   const [lon, setLon] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
   const farm = (farms || []).find(f => f.name === name);
   useEffect(() => { setLat(farm?.latitude ?? null); setLon(farm?.longitude ?? null); }, [farm?.id]);
   const pick = ll => { setLat(Number(ll.lat.toFixed(5))); setLon(Number(ll.lng.toFixed(5))); };
   const useGps = () => navigator.geolocation?.getCurrentPosition(pos => pick({ lat: pos.coords.latitude, lng: pos.coords.longitude }));
   const save = async () => {
     setSaving(true);
-    if (farm) await weatherService.saveFarmLocation(farm.id, lat, lon);
-    else await weatherService.createFarmLocation(name, lat, lon);
-    setSaving(false);
-    onChange();
+    setMsg(null);
+    try {
+      if (farm) await weatherService.saveFarmLocation(farm.id, lat, lon);
+      else await weatherService.createFarmLocation(name, lat, lon);
+      setMsg({ type: 'ok', text: `Ubicación de "${name}" guardada (${lat.toFixed(5)}, ${lon.toFixed(5)}). El pronóstico de esta finca ya usa datos reales de Open-Meteo.` });
+      onChange();
+    } catch {
+      setMsg({ type: 'error', text: 'No se pudo guardar. Si el problema persiste, verificá que tu usuario tenga rol de administrador.' });
+    } finally {
+      setSaving(false);
+    }
   };
   const center = lat != null && lon != null ? [lat, lon] : DEFAULT_CENTER;
   return (
@@ -69,6 +77,11 @@ export default function FarmLocationSection({ lots, farms, onChange }) {
             <button type="button" onClick={save} disabled={saving || lat == null} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-900 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">
               <Save size={15} /> {saving ? 'Guardando…' : 'Guardar ubicación'}
             </button>
+            {msg && (
+              <p className={`rounded-lg border p-2.5 text-xs font-semibold ${msg.type === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700'}`}>
+                {msg.text}
+              </p>
+            )}
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-200">
             <MapContainer center={center} zoom={13} scrollWheelZoom className="h-72 w-full">
