@@ -21,8 +21,11 @@ import { weatherService } from './weatherService';
 //     (división matemática cuando un segmento atraviesa dos
 //     capas). Sin capas configuradas se usan TEMPORALMENTE los
 //     valores generales del perfil (uniform_profile = true).
-//  4. Indicador principal: AGUA ÚTIL (por encima del punto de
-//     marchitez), no el agua total.
+//  4. Dos indicadores sobre la MISMA integración de segmentos:
+//     AGUA ÚTIL (por encima del punto de marchitez) para umbrales,
+//     déficit y recomendación, y AGUA TOTAL DEL PERFIL (mm de agua
+//     almacenada) como indicador principal de monitoreo, con todos
+//     los umbrales convertidos a esa escala de almacenamiento.
 //  5. Sin invención silenciosa: si falta configuración obligatoria
 //     se devuelve configuration_status = "incomplete" +
 //     missing_configuration, sin resultados aparentemente reales.
@@ -152,6 +155,11 @@ async function buildState(profile, channels, readings) {
       coverage_status: null,
       current_available_water_mm: null,
       total_available_water_capacity_mm: null,
+      total_profile_water_mm: null,
+      wilting_storage_mm: null,
+      field_capacity_storage_mm: null,
+      recharge_storage_mm: null,
+      target_storage_mm: null,
       available_water_percent: null,
       recharge_threshold_mm: null,
       target_water_mm: null,
@@ -178,6 +186,8 @@ async function buildState(profile, channels, readings) {
   let currentAvailableMm = 0;
   let tawMm = 0;
   let measuredWaterMm = 0;
+  let wiltingStorageMm = 0;
+  let fcStorageMm = 0;
   for (const seg of segs) {
     const theta = byDepth.get(seg.sensor_depth_cm)?.v;
     if (theta == null) continue; // profundidad sin lectura: no se contabiliza
@@ -190,6 +200,8 @@ async function buildState(profile, channels, readings) {
       currentAvailableMm += availableMm;
       tawMm += totalMm;
       measuredWaterMm += theta * thicknessMm;
+      wiltingStorageMm += wp * thicknessMm;
+      fcStorageMm += fc * thicknessMm;
       layer_breakdown.push({
         depth_top_cm: part.depth_top_cm,
         depth_bottom_cm: part.depth_bottom_cm,
@@ -200,6 +212,7 @@ async function buildState(profile, channels, readings) {
         wilting_point_vwc: wp,
         available_water_mm: round1(availableMm),
         total_available_water_mm: round1(totalMm),
+        profile_water_mm: round1(theta * thicknessMm),
       });
     }
   }
@@ -210,6 +223,15 @@ async function buildState(profile, channels, readings) {
   const rechargeMm = mad != null ? round1(tawMm * (1 - mad / 100)) : null;
   const targetMm = refill != null ? round1(tawMm * refill / 100) : null;
   const deficitMm = targetMm != null ? round1(Math.max(0, targetMm - currentAvailableMm)) : null;
+
+  // Escala de ALMACENAMIENTO (mm de agua total del perfil): mismos
+  // umbrales convertidos a la escala del agua física almacenada.
+  // total_profile_water_mm = SUM(theta × espesor) — sin promedios.
+  const totalProfileMm = round1(measuredWaterMm);
+  const wiltingStorage = round1(wiltingStorageMm);
+  const fcStorage = round1(fcStorageMm);
+  const rechargeStorage = rechargeMm != null ? round1(wiltingStorageMm + rechargeMm) : null;
+  const targetStorage = targetMm != null ? round1(wiltingStorageMm + targetMm) : null;
 
   let status = null;
   if (rechargeMm != null) {
@@ -225,6 +247,11 @@ async function buildState(profile, channels, readings) {
     coverage_status: coverageStatus(rootDepth, measuredDepth),
     current_available_water_mm: round1(currentAvailableMm),
     total_available_water_capacity_mm: round1(tawMm),
+    total_profile_water_mm: totalProfileMm,
+    wilting_storage_mm: wiltingStorage,
+    field_capacity_storage_mm: fcStorage,
+    recharge_storage_mm: rechargeStorage,
+    target_storage_mm: targetStorage,
     available_water_percent: tawMm > 0 ? round1((currentAvailableMm / tawMm) * 100) : null,
     recharge_threshold_mm: rechargeMm,
     target_water_mm: targetMm,
@@ -270,13 +297,16 @@ function usefulWaterSeries(readings, channels, model) {
   byTs.forEach((vals, t) => {
     if (!depths.every(d => vals.has(d))) return; // timestamp incompleto
     let useful = 0;
+    let profile = 0;
     for (const seg of segs) {
       const theta = vals.get(seg.sensor_depth_cm);
       for (const part of splitSegmentWithLayers(seg, layers)) {
-        useful += Math.max(0, (theta - part.layer.wilting_point_vwc) * (part.depth_bottom_cm - part.depth_top_cm) * 10);
+        const th = (part.depth_bottom_cm - part.depth_top_cm) * 10;
+        useful += Math.max(0, (theta - part.layer.wilting_point_vwc) * th);
+        profile += theta * th;
       }
     }
-    series.push({ t, mm: round1(useful) });
+    series.push({ t, mm: round1(useful), profile: round1(profile) });
   });
   return series.sort((a, b) => a.t - b.t);
 }
