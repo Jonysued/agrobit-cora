@@ -47,6 +47,9 @@
     "probe_id": {
       "type": "string"
     },
+    "soil_behavior_model_id": {
+      "type": "string"
+    },
     "pump_id": {
       "type": "string"
     },

@@ -1,0 +1,54 @@
+{
+  "name": "LotWaterState",
+  "type": "object",
+  "properties": {
+    "lot_id": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "profile_water_mm": {
+      "type": "number"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "calculated",
+        "initialized",
+        "manual_adjustment"
+      ]
+    },
+    "model_version": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "lot_id",
+    "timestamp",
+    "profile_water_mm",
+    "source"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
