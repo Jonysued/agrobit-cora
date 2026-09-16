@@ -1,25 +1,29 @@
 import React, { useEffect, useState } from 'react';
 import ModuleHeader from '@/components/waterEnergy/ModuleHeader';
 import LoadingState from '@/components/LoadingState';
-import { waterForecastService, sensorService, energyService } from '@/services/waterEnergy';
+import { waterForecastService, sensorService, energyService, weatherService } from '@/services/waterEnergy';
 import ProfileSection from '@/components/waterEnergy/config/ProfileSection';
 import SensorSection from '@/components/waterEnergy/config/SensorSection';
 import PumpSection from '@/components/waterEnergy/config/PumpSection';
 import TariffSection from '@/components/waterEnergy/config/TariffSection';
 import LinkSection from '@/components/waterEnergy/config/LinkSection';
+import FarmLocationSection from '@/components/waterEnergy/config/FarmLocationSection';
+import WeatherSourceSection from '@/components/waterEnergy/config/WeatherSourceSection';
+import WeatherStationSection from '@/components/waterEnergy/config/WeatherStationSection';
 
 export default function WaterEnergyConfig() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const refresh = async () => {
-    const [lots, profiles, sensors, pumps, tariffs] = await Promise.all([
-      waterForecastService.getLots(),
+    const lots = await waterForecastService.getLots();
+    const [profiles, sensors, pumps, tariffs, weather] = await Promise.all([
       waterForecastService.getProfiles(),
       sensorService.getSensors(),
       energyService.getPumps(),
       energyService.getTariffs(),
+      weatherService.getConfig(lots.map(l => l.farm)),
     ]);
-    setData({ lots, profiles, sensors, pumps, tariffs });
+    setData({ lots, profiles, sensors, pumps, tariffs, farms: weather.farms, stations: weather.stations });
   };
   useEffect(() => { refresh().catch(() => setError(true)); }, []);
   if (!data) return error ? <div className="p-6 text-sm text-slate-500">No se pudo cargar la configuración.</div> : <LoadingState />;
@@ -32,6 +36,9 @@ export default function WaterEnergyConfig() {
         <PumpSection lots={data.lots} pumps={data.pumps} onChange={refresh} />
         <TariffSection tariffs={data.tariffs} onChange={refresh} />
         <LinkSection lots={data.lots} profiles={data.profiles} sensors={data.sensors} pumps={data.pumps} onChange={refresh} />
+        <FarmLocationSection lots={data.lots} farms={data.farms} onChange={refresh} />
+        <WeatherSourceSection lots={data.lots} farms={data.farms} onChange={refresh} />
+        <WeatherStationSection farms={data.farms} stations={data.stations} onChange={refresh} />
       </div>
     </div>
   );

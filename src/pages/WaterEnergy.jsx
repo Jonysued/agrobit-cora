@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ModuleHeader from '@/components/waterEnergy/ModuleHeader';
+import WeatherPanel from '@/components/waterEnergy/WeatherPanel';
 import LotForecastTable from '@/components/waterEnergy/LotForecastTable';
 import MetricCard from '@/components/MetricCard';
 import LoadingState from '@/components/LoadingState';
@@ -16,6 +17,7 @@ export default function WaterEnergy() {
   return (
     <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
       <ModuleHeader />
+      <WeatherPanel />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Estado hídrico actual" value={totals.avgPct == null ? '—' : `${totals.avgPct}%`} detail={`${totals.monitored} de ${totals.lots} lotes monitoreados`} tone={totals.avgPct != null && totals.avgPct < 40 ? 'red' : 'light'} />
         <MetricCard label="Agua requerida · 7 días" value={`${totals.volumeM3.toLocaleString('es-AR')} m³`} detail="Lámina total recomendada" tone="light" />
@@ -28,7 +30,7 @@ export default function WaterEnergy() {
         </p>
       )}
       <LotForecastTable rows={rows.filter(r => r.profile)} onOpen={id => navigate(`/water-energy/lote/${id}`)} />
-      <p className="text-center text-xs text-slate-400">Modelo de balance hídrico EXPERIMENTAL basado en datos simulados — no constituye una predicción agronómica validada.</p>
+      <p className="text-center text-xs text-slate-400">Modelo de balance hídrico EXPERIMENTAL — los datos de clima pueden ser observados (estación propia) o simulados, según la configuración de cada finca. No constituye una predicción agronómica validada.</p>
     </div>
   );
 }

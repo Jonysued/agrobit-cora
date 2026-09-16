@@ -1,0 +1,78 @@
+{
+  "name": "WeatherObservation",
+  "type": "object",
+  "properties": {
+    "farm_id": {
+      "type": "string"
+    },
+    "weather_station_id": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "temperature_c": {
+      "type": "number"
+    },
+    "relative_humidity_percent": {
+      "type": "number"
+    },
+    "rainfall_mm": {
+      "type": "number"
+    },
+    "wind_speed_kmh": {
+      "type": "number"
+    },
+    "wind_gust_kmh": {
+      "type": "number"
+    },
+    "wind_direction_deg": {
+      "type": "number"
+    },
+    "solar_radiation_w_m2": {
+      "type": "number"
+    },
+    "atmospheric_pressure_hpa": {
+      "type": "number"
+    },
+    "eto_mm": {
+      "type": "number"
+    },
+    "source": {
+      "type": "string"
+    },
+    "quality_status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "suspicious",
+        "invalid"
+      ],
+      "default": "ok"
+    }
+  },
+  "required": [
+    "farm_id",
+    "weather_station_id",
+    "timestamp"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
