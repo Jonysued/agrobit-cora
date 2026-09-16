@@ -25,13 +25,8 @@ export const energyService = {
 
   getActiveTariff(tariffs) { return tariffs[0] || DEFAULT_TARIFF; },
 
-  // Bomba asociada al lote: primero la vinculada al perfil de suelo,
-  // luego por lote, por sector, o la general
-  getPumpForLot(pumps, lot, profile) {
-    if (profile?.pump_id) {
-      const linked = pumps.find(p => p.id === profile.pump_id);
-      if (linked) return linked;
-    }
+  // Bomba asociada al lote: por lote, por sector, o la general
+  getPumpForLot(pumps, lot) {
     const active = pumps.filter(p => p.active !== false);
     return active.find(p => p.lot_id === lot?.id)
       || active.find(p => p.irrigation_sector && p.irrigation_sector === lot?.sector)
