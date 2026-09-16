@@ -12,6 +12,15 @@ const isoDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
 const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return d; };
 const round1 = n => Math.round(n * 10) / 10;
 
+// Frescura del dato de estación — no es "online" cualquier dato viejo
+const STALE_MINUTES = 30;
+const stationStatusFor = ageMin => {
+  if (ageMin == null) return 'offline';
+  if (ageMin <= 60) return 'online';
+  if (ageMin <= 24 * 60) return 'delayed';
+  return 'offline';
+};
+
 // Pseudoaleatorio determinista (datos demo estables por lote/fecha)
 const seeded01 = key => {
   let h = 0;
@@ -97,10 +106,35 @@ export const weatherService = {
   },
 
   // ---- OBSERVED WEATHER: datos reales de estación ----
+  // La estación vinculada es la fuente principal del dato observado:
+  // weatherService pide el dato en vivo al backend (credenciales en
+  // secrets) y lo persiste; si la estación no responde, se usa lo último
+  // guardado — nunca se sustituye por el forecast en el período observado.
+  async getStationForFarm(farmId) {
+    const stations = await base44.entities.WeatherStation.list();
+    const linked = stations.filter(s => (s.farm_ids || (s.farm_id ? [s.farm_id] : [])).includes(farmId));
+    return linked.find(s => s.active !== false) || linked[0] || null;
+  },
+  async refreshStationData(stationId) {
+    const res = await base44.functions.invoke('fetchWeatherStationData', { station_id: stationId });
+    return res.data;
+  },
+  async refreshIfStale(farmId, station) {
+    try {
+      station = station || await this.getStationForFarm(farmId);
+      if (!station || station.connection_type === 'webhook' || station.connection_type === 'manual') return null;
+      const [latest] = await base44.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', 1);
+      const ageMin = latest ? (Date.now() - new Date(latest.timestamp).getTime()) / 60000 : Infinity;
+      if (ageMin <= STALE_MINUTES) return null;
+      return await this.refreshStationData(station.id);
+    } catch { return null; } // estación caída → se usa el último dato guardado
+  },
   async getObservedWeather(farmId, limit = 96) {
+    await this.refreshIfStale(farmId);
     return base44.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', limit);
   },
   async getLatestObservation(farmId) {
+    await this.refreshIfStale(farmId);
     const [latest] = await base44.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', 1);
     return latest || null;
   },
@@ -110,9 +144,43 @@ export const weatherService = {
   },
   async saveObservation(data) { return base44.entities.WeatherObservation.create(data); },
 
+  // Diagnóstico de una estación real: último dato en vivo, variables
+  // disponibles y no disponibles, ET0, proveedor, status y antigüedad.
+  async getStationDiagnostics(stationId) {
+    const data = await this.refreshStationData(stationId);
+    if (!data?.ok) return data || null;
+    const obs = data.observation;
+    const data_age_minutes = obs?.timestamp ? Math.round((Date.now() - new Date(obs.timestamp).getTime()) / 60000) : null;
+    return {
+      station: data.station,
+      status: stationStatusFor(data_age_minutes),
+      last_observation_at: obs.timestamp,
+      data_age_minutes,
+      variables: {
+        temperature_c: obs.temperature_c,
+        relative_humidity_percent: obs.relative_humidity_percent,
+        rainfall_daily_mm: obs.rainfall_daily_mm,
+        rain_rate_mm_h: obs.rain_rate_mm_h,
+        wind_speed_kmh: obs.wind_speed_kmh,
+        wind_gust_kmh: obs.wind_gust_kmh,
+        wind_direction_deg: obs.wind_direction_deg,
+        solar_radiation_w_m2: obs.solar_radiation_w_m2,
+        atmospheric_pressure_hpa: obs.atmospheric_pressure_hpa,
+        uv_index: obs.uv_index,
+        et_day_mm: obs.et_day_mm,
+      },
+      eto_mm: obs.et_day_mm ?? obs.eto_mm,
+      eto_source: (obs.et_day_mm != null || obs.eto_mm != null) ? 'weather_station' : 'unavailable',
+    };
+  },
+
   // ---- FORECAST WEATHER: 7 días a partir de mañana ----
   // Con lat/lon de la finca: Open-Meteo real. Sin ubicación: simulado.
   async getForecast(farm) {
+    if (typeof farm === 'string') {
+      const farms = await base44.entities.Farm.list();
+      farm = farms.find(f => f.id === farm) || null;
+    }
     const dates = Array.from({ length: 7 }, (_, i) => isoDate(addDays(i + 1)));
     if (farm?.latitude != null && farm?.longitude != null) {
       try {
@@ -123,24 +191,35 @@ export const weatherService = {
   },
 
   // ---- Vista combinada según el modo de la finca ----
-  // PASADO Y PRESENTE → estación propia · FUTURO 7 DÍAS → forecast provider.
+  // PASADO Y PRESENTE → estación propia (dato real observado)
+  // FUTURO 7 DÍAS → proveedor de forecast. Nunca se mezclan.
   async getCombinedWeather(farm) {
+    if (typeof farm === 'string') {
+      const farms = await base44.entities.Farm.list();
+      farm = farms.find(f => f.id === farm) || null;
+    }
     const mode = farm?.weather_source || 'FORECAST_ONLY';
     const forecast = await this.getForecast(farm);
     let station = null;
     let current = null;
     if (mode !== 'FORECAST_ONLY') {
-      const all = await base44.entities.WeatherStation.list();
-      const stations = all.filter(s => (s.farm_ids || (s.farm_id ? [s.farm_id] : [])).includes(farm.id));
-      station = stations.find(s => s.active !== false) || stations[0] || null;
+      station = await this.getStationForFarm(farm.id);
       current = await this.getLatestObservation(farm.id);
     }
+    const data_age_minutes = current?.timestamp ? Math.round((Date.now() - new Date(current.timestamp).getTime()) / 60000) : null;
     return {
       mode,
       station,
       current,
       forecast,
       forecastSource: forecast[0]?.source === 'open-meteo' ? 'Open-Meteo' : 'Pronóstico simulado',
+      // Observado vs pronosticado, siempre identificado por origen
+      observed_source: current ? 'weather_station' : null,
+      last_observation_at: current?.timestamp || null,
+      data_age_minutes,
+      station_status: station ? stationStatusFor(data_age_minutes) : null,
+      eto_source: current ? (current.eto_mm != null ? 'weather_station' : 'unavailable') : null,
+      forecast_eto_source: 'forecast_provider',
     };
   },
 
