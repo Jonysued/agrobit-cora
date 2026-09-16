@@ -6,7 +6,7 @@ import LoadingState from '@/components/LoadingState';
 import StatusCard from '@/components/waterEnergy/soil/StatusCard';
 import ProfileChart from '@/components/waterEnergy/soil/ProfileChart';
 import RootZoneChart from '@/components/waterEnergy/soil/RootZoneChart';
-import { soilWaterService, waterForecastService, CONFIG_LABELS } from '@/services/waterEnergy';
+import { soilWaterService, CONFIG_LABELS } from '@/services/waterEnergy';
 
 // SENSORES — detalle de la sonda: SOLO MONITOREO en 3 bloques
 // (Estado hídrico · Humedad por profundidad · Agua en el perfil).
@@ -18,18 +18,9 @@ export default function WaterEnergySoilPoint() {
   const { probeId } = useParams();
   const [data, setData] = useState(null);
   const [err, setErr] = useState(false);
-  const [nextIrrigation, setNextIrrigation] = useState(null);
   useEffect(() => {
-    setData(null); setErr(false); setNextIrrigation(null);
-    soilWaterService.getProbeAnalysis(probeId).then(d => {
-      setData(d);
-      // Próximo riego: solo lectura del forecast existente del lote
-      if (d?.lot && d.current_available_water_mm != null) {
-        waterForecastService.getLotDetail(d.lot.id)
-          .then(fd => setNextIrrigation(fd?.recommendation?.recommended_start_date || null))
-          .catch(() => {});
-      }
-    }).catch(() => setErr(true));
+    setData(null); setErr(false);
+    soilWaterService.getProbeAnalysis(probeId).then(setData).catch(() => setErr(true));
   }, [probeId]);
   if (!data) return err ? <div className="p-6 text-sm text-slate-500">No se pudo cargar la sonda.</div> : <LoadingState />;
   const incomplete = data.configuration_status === 'incomplete' && data.current_available_water_mm == null;
@@ -69,11 +60,7 @@ export default function WaterEnergySoilPoint() {
               status={data.status}
               totalProfileMm={data.total_profile_water_mm}
               depthLabel={depthLabel}
-              deficitMm={data.water_deficit_mm}
-              rechargeStorageMm={data.recharge_storage_mm}
-              targetStorageMm={data.target_storage_mm}
               fcStorageMm={data.field_capacity_storage_mm}
-              nextIrrigation={nextIrrigation}
               layerBreakdown={data.layer_breakdown}
             />
           )}
