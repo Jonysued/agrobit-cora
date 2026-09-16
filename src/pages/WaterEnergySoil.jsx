@@ -66,7 +66,7 @@ export default function WaterEnergySoil() {
                 <>
                   <div className="mt-4 flex items-end justify-between">
                     <span className={`text-3xl font-bold tracking-tight ${STATUS_TEXT[row.status] || 'text-charcoal'}`}>{row.total_profile_water_mm} mm</span>
-                    <span className="pb-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">agua en el perfil · 0–{row.root_zone_depth_cm} cm</span>
+                    <span className="pb-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">agua en el perfil · 0–{row.measured_profile_depth_cm ?? row.root_zone_depth_cm} cm</span>
                   </div>
                   <div className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-xs text-slate-600">
                     <p>Estado hídrico: <b>{row.status || 'Sin configurar'}</b></p>

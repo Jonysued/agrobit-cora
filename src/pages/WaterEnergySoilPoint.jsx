@@ -34,7 +34,7 @@ export default function WaterEnergySoilPoint() {
   if (!data) return err ? <div className="p-6 text-sm text-slate-500">No se pudo cargar la sonda.</div> : <LoadingState />;
   const incomplete = data.configuration_status === 'incomplete' && data.current_available_water_mm == null;
   const missingText = (data.missing_configuration || []).map(k => CONFIG_LABELS[k] || k).join(', ');
-  const depthLabel = data.root_zone_depth_cm != null ? `0–${data.root_zone_depth_cm} cm` : '';
+  const depthLabel = data.measured_profile_depth_cm != null ? `0–${data.measured_profile_depth_cm} cm` : '';
   return (
     <div className="mx-auto max-w-[1200px] space-y-5 p-4 md:p-6">
       <ModuleHeader />
@@ -75,7 +75,6 @@ export default function WaterEnergySoilPoint() {
               fcStorageMm={data.field_capacity_storage_mm}
               nextIrrigation={nextIrrigation}
               layerBreakdown={data.layer_breakdown}
-              belowRootBreakdown={data.below_root_breakdown}
             />
           )}
           <ProfileChart readings={data.readings} channels={data.channels} events={data.events} />

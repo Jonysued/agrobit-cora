@@ -169,7 +169,6 @@ async function buildState(profile, channels, readings) {
       lastReadingAt: null,
       source: null,
       layer_breakdown: null,
-      below_root_breakdown: null,
       _model: null,
     };
   }
@@ -182,27 +181,56 @@ async function buildState(profile, channels, readings) {
   const segs = sensorSegments(depths, rootDepth);
   const measuredDepth = segs.length ? segs[segs.length - 1].depth_bottom_cm : 0;
 
-  // Desglose auditable (sensor × capa) y sumas de AGUA ÚTIL
+  // PERFIL COMPLETO DE LA SONDA: todas las profundidades medidas, sin
+  // recorte a la zona radicular. El indicador "Agua en el perfil"
+  // integra TODO el perfil medido (0 → fondo del sensor más profundo,
+  // ej. 0–120 cm). La agronomía del cultivo (agua útil, umbrales,
+  // estado) sigue calculándose sobre la zona radicular.
+  const allDepths = [...new Set(channels.map(c => c.depth_cm))].sort((a, b) => a - b);
+  const fullSegs = sensorSegments(allDepths, Infinity);
+  const fullDepth = fullSegs.length ? fullSegs[fullSegs.length - 1].depth_bottom_cm : 0;
+  // Capas efectivas extendidas al perfil completo: por debajo de la
+  // última capa configurada se usan los valores generales del perfil.
+  const lastLayer = layers[layers.length - 1] || null;
+  const deepFc = profile.field_capacity_vwc ?? lastLayer?.field_capacity_vwc ?? null;
+  const deepWp = profile.wilting_point_vwc ?? lastLayer?.wilting_point_vwc ?? null;
+  const fullLayers = fullDepth > (lastLayer?.depth_bottom_cm ?? 0) && deepFc != null && deepWp != null
+    ? [...layers, { depth_top_cm: lastLayer?.depth_bottom_cm ?? 0, depth_bottom_cm: fullDepth, field_capacity_vwc: deepFc, wilting_point_vwc: deepWp }]
+    : layers;
+
+  // Desglose auditable (sensor × capa) del PERFIL COMPLETO + sumas de
+  // AGUA ÚTIL de la zona radicular
   const layer_breakdown = [];
   let currentAvailableMm = 0;
   let tawMm = 0;
-  let measuredWaterMm = 0;
-  let wiltingStorageMm = 0;
-  let fcStorageMm = 0;
-  for (const seg of segs) {
+  let fullWaterMm = 0;
+  let fullWiltingMm = 0;
+  let fullFcMm = 0;
+  let fullTawMm = 0;
+  for (const seg of fullSegs) {
     const theta = byDepth.get(seg.sensor_depth_cm)?.v;
     if (theta == null) continue; // profundidad sin lectura: no se contabiliza
-    for (const part of splitSegmentWithLayers(seg, layers)) {
+    for (const part of splitSegmentWithLayers(seg, fullLayers)) {
       const thicknessMm = (part.depth_bottom_cm - part.depth_top_cm) * 10;
       const fc = part.layer.field_capacity_vwc;
       const wp = part.layer.wilting_point_vwc;
-      const availableMm = Math.max(0, (theta - wp) * thicknessMm);
-      const totalMm = (fc - wp) * thicknessMm;
-      currentAvailableMm += availableMm;
-      tawMm += totalMm;
-      measuredWaterMm += theta * thicknessMm;
-      wiltingStorageMm += wp * thicknessMm;
-      fcStorageMm += fc * thicknessMm;
+      // PERFIL COMPLETO (0–fullDepth): indicador principal en mm
+      fullWaterMm += theta * thicknessMm;
+      fullWiltingMm += wp * thicknessMm;
+      fullFcMm += fc * thicknessMm;
+      fullTawMm += (fc - wp) * thicknessMm;
+      // ZONA RADICULAR (agronomía del cultivo): agua útil y capacidad útil
+      const rTop = Math.max(0, part.depth_top_cm);
+      const rBottom = Math.min(rootDepth, part.depth_bottom_cm);
+      let availableMm = 0;
+      let totalMm = 0;
+      if (rBottom > rTop) {
+        const rTh = (rBottom - rTop) * 10;
+        availableMm = Math.max(0, (theta - wp) * rTh);
+        totalMm = (fc - wp) * rTh;
+        currentAvailableMm += availableMm;
+        tawMm += totalMm;
+      }
       layer_breakdown.push({
         depth_top_cm: part.depth_top_cm,
         depth_bottom_cm: part.depth_bottom_cm,
@@ -225,42 +253,20 @@ async function buildState(profile, channels, readings) {
   const targetMm = refill != null ? round1(tawMm * refill / 100) : null;
   const deficitMm = targetMm != null ? round1(Math.max(0, targetMm - currentAvailableMm)) : null;
 
-  // Escala de ALMACENAMIENTO (mm de agua total del perfil): mismos
-  // umbrales convertidos a la escala del agua física almacenada.
-  // total_profile_water_mm = SUM(theta × espesor) — sin promedios.
-  const totalProfileMm = round1(measuredWaterMm);
-  const wiltingStorage = round1(wiltingStorageMm);
-  const fcStorage = round1(fcStorageMm);
-  const rechargeStorage = rechargeMm != null ? round1(wiltingStorageMm + rechargeMm) : null;
-  const targetStorage = targetMm != null ? round1(wiltingStorageMm + targetMm) : null;
+  // Escala de ALMACENAMIENTO del PERFIL COMPLETO (0–fullDepth): el
+  // indicador "Agua en el perfil" y sus umbrales (recarga, objetivo,
+  // capacidad de campo) en la misma escala de mm almacenados — sin
+  // promedios. El estado RECARGAR/ÓPTIMO/LLENO del cultivo sigue
+  // calculándose con el agua útil de la zona radicular.
+  const totalProfileMm = round1(fullWaterMm);
+  const wiltingStorage = round1(fullWiltingMm);
+  const fcStorage = round1(fullFcMm);
+  const rechargeStorage = mad != null ? round1(fullWiltingMm + fullTawMm * (1 - mad / 100)) : null;
+  const targetStorage = refill != null ? round1(fullWiltingMm + fullTawMm * refill / 100) : null;
 
   let status = null;
   if (rechargeMm != null) {
     status = currentAvailableMm < rechargeMm ? 'RECARGAR' : (targetMm != null && currentAvailableMm >= targetMm) ? 'LLENO' : 'ÓPTIMO';
-  }
-
-  // MONITOREO BAJO LA ZONA RADICULAR: profundidades de la sonda por
-  // debajo del perfil del cultivo. Se reportan aparte — no suman al
-  // estado hídrico (0–rootDepth) ni a sus umbrales.
-  const below_root_breakdown = [];
-  const allDepths = [...new Set(channels.map(c => c.depth_cm))].sort((a, b) => a - b);
-  for (let i = 0; i < allDepths.length; i++) {
-    const d = allDepths[i];
-    if (d <= rootDepth) continue;
-    const prev = i > 0 ? allDepths[i - 1] : null;
-    const next = i < allDepths.length - 1 ? allDepths[i + 1] : null;
-    const top = Math.max(rootDepth, prev != null ? (prev + d) / 2 : rootDepth);
-    const bottom = next != null ? (d + next) / 2 : d + (d - top);
-    const theta = byDepth.get(d)?.v;
-    if (theta == null || bottom <= top) continue;
-    const thicknessMm = (bottom - top) * 10;
-    below_root_breakdown.push({
-      depth_top_cm: round1(top),
-      depth_bottom_cm: round1(bottom),
-      sensor_depth_cm: d,
-      profile_water_mm: round1(theta * thicknessMm),
-      fc_storage_mm: profile.field_capacity_vwc != null ? round1(profile.field_capacity_vwc * thicknessMm) : null,
-    });
   }
 
   return {
@@ -268,7 +274,7 @@ async function buildState(profile, channels, readings) {
     missing_configuration,
     uniform_profile,
     root_zone_depth_cm: rootDepth,
-    measured_profile_depth_cm: measuredDepth,
+    measured_profile_depth_cm: fullDepth,
     coverage_status: coverageStatus(rootDepth, measuredDepth),
     current_available_water_mm: round1(currentAvailableMm),
     total_available_water_capacity_mm: round1(tawMm),
@@ -282,13 +288,12 @@ async function buildState(profile, channels, readings) {
     target_water_mm: targetMm,
     water_deficit_mm: deficitMm,
     status,
-    currentVwc: measuredDepth > 0 ? round1((measuredWaterMm / (measuredDepth * 10)) * 1000) / 1000 : null,
+    currentVwc: fullDepth > 0 ? round1((fullWaterMm / (fullDepth * 10)) * 1000) / 1000 : null,
     lastReadingAt: lastTs > -Infinity ? new Date(lastTs).toISOString() : null,
     source: lastSource,
     layer_breakdown,
-    below_root_breakdown,
     // Modelo interno (segmentos × capas) — auditoría e historial
-    _model: { segs, layers, depths, rootDepth, measuredDepth },
+    _model: { segs, layers, depths, rootDepth, measuredDepth, allDepths, fullSegs, fullLayers, fullDepth },
   };
 }
 
@@ -309,7 +314,7 @@ async function stateForProbe(probe, lots, profiles) {
 
 // Serie temporal de agua ÚTIL (mm) en la zona radicular medida
 function usefulWaterSeries(readings, channels, model) {
-  const { segs, layers, depths } = model;
+  const { segs, layers, depths, fullSegs, fullLayers } = model;
   const depthByChannel = new Map(channels.map(c => [c.id, c.depth_cm]));
   const byTs = new Map();
   for (const r of readings) {
@@ -322,6 +327,9 @@ function usefulWaterSeries(readings, channels, model) {
   const series = [];
   byTs.forEach((vals, t) => {
     if (!depths.every(d => vals.has(d))) return; // timestamp incompleto
+    // Agua útil de la zona radicular (mm) — base de la calibración del
+    // modelo de suelo. La serie de almacenamiento ("profile") integra el
+    // PERFIL COMPLETO medido por la sonda (misma escala del indicador).
     let useful = 0;
     let profile = 0;
     for (const seg of segs) {
@@ -329,7 +337,13 @@ function usefulWaterSeries(readings, channels, model) {
       for (const part of splitSegmentWithLayers(seg, layers)) {
         const th = (part.depth_bottom_cm - part.depth_top_cm) * 10;
         useful += Math.max(0, (theta - part.layer.wilting_point_vwc) * th);
-        profile += theta * th;
+      }
+    }
+    for (const seg of fullSegs || []) {
+      const theta = vals.get(seg.sensor_depth_cm);
+      if (theta == null) continue;
+      for (const part of splitSegmentWithLayers(seg, fullLayers || layers)) {
+        profile += theta * (part.depth_bottom_cm - part.depth_top_cm) * 10;
       }
     }
     series.push({ t, mm: round1(useful), profile: round1(profile) });
