@@ -159,7 +159,7 @@ export default function MoistureChart({ detail }) {
         </ResponsiveContainer>
       </div>
       <p className="mt-2 text-center text-[11px] text-slate-400">
-        Suma de perfil en mm · negro = actual y su tendencia sin riego · azul = riego programado (cronograma) · verde discontinua = con riego recomendado · línea gris punteada = hoy · barras celestes = mm de lluvia del día (observada y prevista) · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
+        Suma de perfil en mm · negro = actual y su tendencia sin riego · azul = riego programado (cronograma) · verde discontinua = con riego recomendado · línea gris punteada = hoy · barras celestes = mm de lluvia del día (observada y prevista) · el pico de cada riego/lluvia marca los mm completos aplicados; lo que supera la capacidad del suelo drena y la curva vuelve al techo · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
       </p>
     </section>
   );
