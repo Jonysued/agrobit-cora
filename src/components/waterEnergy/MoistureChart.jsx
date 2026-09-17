@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight, PenLine, Ruler, SlidersHorizontal } from 'lucide-react';
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { buildProfileSeries } from './profileChartSeries';
 
 // SUMA DE PERFIL (mm de agua almacenada en el perfil del suelo) —
 // CURVA CALCULADA del lote: reconstrucción diaria desde el estado
@@ -22,10 +23,7 @@ const scrollToId = id => document.getElementById(id)?.scrollIntoView({ behavior:
 const actionBtn = 'inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-emerald-800 transition hover:text-emerald-950 disabled:opacity-30 disabled:hover:text-emerald-800';
 
 export default function MoistureChart({ detail }) {
-  const { state, scenarioNoIrrigation, scenarioWithoutIrrigation, scenarioWithIrrigation, history, recommendation, scheduled_irrigation } = detail;
-  // Lluvia OBSERVADA por día (mm): alimenta las barras del gráfico junto
-  // con la lluvia prevista del forecast.
-  const rainByDate = new Map((detail.events?.rain || []).map(e => [e.date, e.mm]));
+  const { state, recommendation, scheduled_irrigation } = detail;
   // ---- Controles del encabezado ----
   // Por defecto: 15 días hacia atrás y 30 hacia adelante (45 días).
   const [rangeDays, setRangeDays] = useState(45);
@@ -34,15 +32,7 @@ export default function MoistureChart({ detail }) {
   const hasRec = recommendation != null;
   const scheduled = scheduled_irrigation || [];
 
-  // Escala de almacenamiento: agua útil del balance + agua del punto
-  // de marchitez (constante del perfil).
-  const wiltingMm = state.wilting_storage_mm ?? 0;
-  const storage = mm => wiltingMm + mm;
-  const currentMm = state.current_available_water_mm;
-  // Lluvia del día "HOY": la serie histórica ya incluye el día de hoy;
-  // solo se marca aparte si el ancla es hoy y no hay histórico aún.
   const today = isoDay(new Date());
-  const rainToday = (history || []).some(h => h.date === today) ? null : rainByDate.get(today) ?? null;
   // Tres líneas sobre la MISMA escala de Suma de perfil:
   // · ACTUAL (línea negra): curva actual del lote continuada con la
   //   tendencia SIN ningún riego (lluvia − ETc).
@@ -53,17 +43,10 @@ export default function MoistureChart({ detail }) {
   const H = 'Actual (sin riego)';
   const S = 'Riego programado';
   const R = 'Con riego recomendado';
-  const data = [
-    ...(history || []).map(h => ({ t: dayTs(h.date), [H]: storage(h.mm), Lluvia: rainByDate.get(h.date) ?? null })),
-    { t: Date.now(), [H]: storage(currentMm), [S]: storage(currentMm), Lluvia: rainToday, ...(hasRec ? { [R]: storage(currentMm) } : {}) },
-    ...(scenarioWithoutIrrigation || []).map((p, i) => ({
-      t: dayTs(p.date),
-      [H]: storage(scenarioNoIrrigation?.[i]?.available_water_mm ?? null),
-      [S]: storage(p.available_water_mm),
-      Lluvia: (p.rainfall_mm || 0) > 0 ? Math.round(p.rainfall_mm * 10) / 10 : null,
-      ...(hasRec ? { [R]: storage(scenarioWithIrrigation?.[i]?.available_water_mm ?? p.available_water_mm) } : {}),
-    })),
-  ];
+  // Serie del gráfico: un punto por día + punto intermedio a las 00:00
+  // del día siguiente de cada riego o lluvia — el salto lee
+  // EXACTAMENTE los mm aplicados y desde ahí baja con la ETc del día.
+  const data = buildProfileSeries(detail, { H, S, R }, today);
   // Escala propia de las barras de lluvia (eje derecho oculto): mm de
   // lluvia, no de perfil — lluvias chicas siguen siendo visibles.
   const rainMax = Math.max(10, ...data.map(d => d.Lluvia || 0)) * 2.5;

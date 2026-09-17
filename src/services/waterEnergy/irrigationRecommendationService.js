@@ -35,20 +35,31 @@ export const irrigationRecommendationService = {
     // con el próximo cruce real.
     let hit = null;
     let neededMm = 0;
-    let rainNextDay = 0;
+    let discountNotes = [];
     for (const p of scenarioWithoutIrrigation || []) {
       if (p.available_water_mm > threshold) continue;
       const hitIdx = (days || []).findIndex(d => d.date === p.date);
-      const irrScheduled = round1((days || [])[hitIdx]?.irrigation_mm || 0);
-      // REGLA X+1: el riego del día del cruce y la lluvia DE ESE MISMO
-      // día suben el punto del día siguiente, junto con el riego
-      // recomendado — se descuentan AMBAS (más la lluvia prevista del
-      // día siguiente) para que el punto posterior al riego NUNCA
-      // supere el Target máx.
+      // REGLA X+1: el riego recomendado del día del cruce sube el punto
+      // del día SIGUIENTE junto con el riego y la lluvia de ese mismo
+      // día; el punto posterior suma además el riego programado y la
+      // lluvia del día siguiente. Se descuentan TODOS para que la
+      // curva NUNCA supere el Target máx — un programa del día
+      // siguiente ya hace la recarga y no genera recomendación.
+      const irrHit = round1((days || [])[hitIdx]?.irrigation_mm || 0);
+      const irrNext = round1((days || [])[hitIdx + 1]?.irrigation_mm || 0);
       const rainHit = round1((days || [])[hitIdx]?.rainfall_mm ?? 0);
       const rainNext = round1((days || [])[hitIdx + 1]?.rainfall_mm ?? 0);
-      const needed = round1(Math.max(0, target - p.available_water_mm - irrScheduled - rainHit - rainNext));
-      if (needed > 0) { hit = p; neededMm = needed; rainNextDay = round1(rainHit + rainNext); break; }
+      const needed = round1(Math.max(0, target - p.available_water_mm - irrHit - irrNext - rainHit - rainNext));
+      // Un faltante menor a medio mm es ruido de redondeo: el riego ya
+      // programado cubre la recarga y ese cruce no genera recomendación.
+      if (needed > 0.5) {
+        hit = p;
+        neededMm = needed;
+        if (irrNext > 0) discountNotes.push(`${irrNext} mm de riego ya programados para el día siguiente`);
+        if (rainHit > 0) discountNotes.push(`${rainHit} mm de lluvia prevista para el día del riego`);
+        if (rainNext > 0) discountNotes.push(`${rainNext} mm de lluvia prevista para el día siguiente`);
+        break;
+      }
     }
     if (!hit) return { recommendation: null, scenarioWithIrrigation: scenarioWithoutIrrigation };
 
@@ -66,7 +77,7 @@ export const irrigationRecommendationService = {
       recommended_irrigation_m3: volumeM3,
       recommended_start_date: hit.date,
       days_to_threshold: hit.day,
-      reason: `Sin riego adicional al ya programado, el agua útil del perfil alcanza el umbral de recarga (${threshold} mm) dentro de ${hit.day} día${hit.day > 1 ? 's' : ''}. El perfil necesita incorporar ${neededMm} mm para llegar al Target máx (${target} mm) y detenerse ahí — nunca se recomienda pasar ese límite${rainNextDay > 0 ? `; se descuentan ${rainNextDay} mm de lluvia prevista (día del riego y día siguiente)` : ''}; con la eficiencia de recarga aprendida del suelo (${Math.round(eff * 100)}%) eso exige aplicar ${grossMm} mm (además del riego ya programado ese día).`,
+      reason: `Sin riego adicional al ya programado, el agua útil del perfil alcanza el umbral de recarga (${threshold} mm) dentro de ${hit.day} día${hit.day > 1 ? 's' : ''}. El perfil necesita incorporar ${neededMm} mm para llegar al Target máx (${target} mm) y detenerse ahí — nunca se recomienda pasar ese límite${discountNotes.length ? `; se descuentan ${discountNotes.join(', ')}` : ''}; con la eficiencia de recarga aprendida del suelo (${Math.round(eff * 100)}%) eso exige aplicar ${grossMm} mm (además del riego ya programado ese día).`,
       status: 'activa',
     };
     // Escenario CON riego: los mm NETOS de la recomendación se suman
