@@ -6,8 +6,10 @@ import MetricCard from '@/components/MetricCard';
 import LoadingState from '@/components/LoadingState';
 import MoistureChart from '@/components/waterEnergy/MoistureChart';
 import RecommendationCard from '@/components/waterEnergy/RecommendationCard';
+import ScheduledIrrigationPanel from '@/components/waterEnergy/ScheduledIrrigationPanel';
 import InitialStateConfig from '@/components/waterEnergy/InitialStateConfig';
 import { waterForecastService, CONFIG_LABELS } from '@/services/waterEnergy';
+import { base44 } from '@/api/base44Client';
 
 const round1 = n => Math.round(n * 10) / 10;
 const SOURCE_LABEL = {
@@ -40,6 +42,12 @@ export default function WaterEnergyLot() {
       .then(d => (d ? setDetail(d) : setError(true)))
       .catch(() => setError(true));
   }, [lotId, reloadKey]);
+  // Si el productor modifica el cronograma (IrrigationProgram), la
+  // curva futura de Suma de perfil se recalcula inmediatamente.
+  useEffect(() => {
+    const unsubscribe = base44.entities.IrrigationProgram.subscribe(() => setReloadKey(k => k + 1));
+    return unsubscribe;
+  }, []);
   if (!detail) return error ? <div className="p-6 text-sm text-slate-500">Lote no encontrado.</div> : <LoadingState />;
   const { lot, profile, state, model } = detail;
   return (
@@ -86,6 +94,7 @@ export default function WaterEnergyLot() {
                 <MetricCard label="Riego recomendado" value={detail.recommendation ? `${detail.recommendation.recommended_irrigation_mm} mm` : detail.kc_missing ? 'Falta Kc' : 'No requerido'} tone={detail.recommendation ? 'amber' : 'light'} />
               </div>
               <MoistureChart detail={detail} />
+              <ScheduledIrrigationPanel detail={detail} onConfirmed={() => setReloadKey(k => k + 1)} />
               <div id="recomendacion"><RecommendationCard detail={detail} /></div>
               {detail.forecast_confidence === 'partial' && (
                 <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">Confianza del forecast: parcial — el modelo de suelo de referencia todavía no está calibrado con suficientes eventos (se usa la eficiencia de recarga por defecto).</p>

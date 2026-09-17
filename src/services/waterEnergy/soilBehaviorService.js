@@ -29,9 +29,9 @@ const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate
 const dayAfter = (iso, n) => { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + n); return isoDay(d); };
 
 // Lámina de un programa que corresponde a un lote (mm × factor del lote)
-function lotIrrigationMm(program, lotId) {
+function lotIrrigationMm(program, lotId, baseMm) {
   const item = (program.items || []).find(i => i.lot_id === lotId);
-  return (program.mm || 0) * (item?.factor ?? 1);
+  return (baseMm ?? program.mm ?? 0) * (item?.factor ?? 1);
 }
 
 // Riego EJECUTADO en el sitio de referencia (lote de la sonda), por
@@ -48,7 +48,7 @@ async function referenceExecutedIrrigationByDate(lotId) {
   for (const log of logs) {
     const p = programById.get(log.program_id);
     if (!p || !log.date || !(p.lot_ids || []).includes(lotId)) continue;
-    byDate.set(log.date, round1((byDate.get(log.date) || 0) + lotIrrigationMm(p, lotId)));
+    byDate.set(log.date, round1((byDate.get(log.date) || 0) + lotIrrigationMm(p, lotId, log.applied_mm)));
   }
   return byDate;
 }

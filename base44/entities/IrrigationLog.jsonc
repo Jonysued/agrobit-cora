@@ -9,6 +9,10 @@
       "type": "string",
       "format": "date"
     },
+    "applied_mm": {
+      "type": "number",
+      "description": "mm realmente aplicados del riego (l\u00e1mina bruta del programa); si no se registra, se usa la l\u00e1mina programada"
+    },
     "notes": {
       "type": "string"
     }

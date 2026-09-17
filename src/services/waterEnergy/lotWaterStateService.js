@@ -44,45 +44,33 @@ const DEFAULT_ETO_MM = 4.0;
 // Límite de reconstrucción hacia atrás (días) desde el ancla
 const MAX_HISTORY_DAYS = 180;
 
-// Lámina de un programa que corresponde a un lote (mm × factor)
-function lotIrrigationMm(program, lotId) {
+// Lámina de un programa que corresponde a un lote (mm × factor del
+// lote). baseMm permite pasar los mm REALMENTE aplicados del log.
+function lotIrrigationMm(program, lotId, baseMm) {
   const item = (program.items || []).find(i => i.lot_id === lotId);
-  return (program.mm || 0) * (item?.factor ?? 1);
+  return (baseMm ?? program.mm ?? 0) * (item?.factor ?? 1);
 }
 
-// ---- Riegos ejecutados (PASADO) y programados (FUTURO) por lote ----
+// ---- Riegos ejecutados (PASADO) por lote ----
 // PASADO = IrrigationLog: un riego cuenta como ejecutado SOLO si
 // tiene su log (un programa histórico sin log no prueba que ocurrió).
-// FUTURO = IrrigationProgram Programado/Activo con fecha futura.
-function irrigationEventsFrom(logs, programs, lots) {
+// Los mm son los REALMENTE APLICADOS (log.applied_mm); si el log no
+// los registra, se usa la lámina programada como respaldo.
+function executedIrrigationFrom(logs, programs, lots) {
   const lotIds = new Set(lots.map(l => l.id));
   const programById = new Map(programs.map(p => [p.id, p]));
-  const add = (map, lotId, date, mm) => {
-    if (!map.has(lotId)) map.set(lotId, new Map());
-    const cur = map.get(lotId).get(date) || 0;
-    map.get(lotId).set(date, round1(cur + mm));
-  };
   const executed = new Map();
-  const scheduled = new Map();
   for (const log of logs) {
     const p = programById.get(log.program_id);
     if (!p || !log.date) continue;
     for (const lotId of p.lot_ids || []) {
       if (!lotIds.has(lotId)) continue;
-      add(executed, lotId, log.date, lotIrrigationMm(p, lotId));
+      if (!executed.has(lotId)) executed.set(lotId, new Map());
+      const cur = executed.get(lotId).get(log.date) || 0;
+      executed.get(lotId).set(log.date, round1(cur + lotIrrigationMm(p, lotId, log.applied_mm)));
     }
   }
-  const t = todayStr();
-  for (const p of programs) {
-    if (!p.date) continue;
-    for (const lotId of p.lot_ids || []) {
-      if (!lotIds.has(lotId)) continue;
-      if (p.date > t && ['Programado', 'Activo'].includes(p.status)) {
-        add(scheduled, lotId, p.date, lotIrrigationMm(p, lotId));
-      }
-    }
-  }
-  return { executed, scheduled };
+  return executed;
 }
 
 // ---- Clima observado diario por finca: lluvia acumulada y ET0 ----
@@ -158,8 +146,8 @@ async function loadContext(lots) {
   const farmByLot = new Map(lots.map(l => [l.id, farms.find(f => f.name === l.farm) || null]));
   const farmIds = [...new Set([...farmByLot.values()].map(f => f?.id).filter(Boolean))];
   const observed = new Map(await Promise.all(farmIds.map(async id => [id, await dailyObservedWeather(id)])));
-  const { executed, scheduled } = irrigationEventsFrom(logs, programs, lots);
-  return { profiles, models, states, configs, farmByLot, observed, executed, scheduled };
+  const executed = executedIrrigationFrom(logs, programs, lots);
+  return { profiles, models, states, configs, farmByLot, observed, executed, programs };
 }
 
 // ---- Estado de UN lote: ancla + reconstrucción diaria hasta hoy ----
@@ -247,12 +235,26 @@ async function computeLot(lot, ctx, withHistory) {
   }
 
   // ---- Programados del lote (futuro) con eficiencia del modelo ----
-  const scheduledMap = ctx.scheduled.get(lot.id) || new Map();
-  // Solo eventos con lámina real: los programas sin mm definido no
-  // aportan agua ni se marcan en el gráfico.
-  const scheduledEvents = [...scheduledMap.entries()]
-    .map(([date, mm]) => ({ date, mm: round1(mm * efficiency) }))
-    .filter(e => e.mm > 0)
+  // Un evento por PROGRAMA (guarda program_id para poder confirmar la
+  // ejecución desde la UI); los programas sin mm definido no aportan
+  // agua ni se marcan en el gráfico. gross_mm = lámina a aplicar del
+  // cronograma; mm = efecto neto sobre el perfil (gross × eficiencia
+  // de recarga aprendida del suelo).
+  const t = todayStr();
+  const scheduledPrograms = (ctx.programs || [])
+    .filter(p => p.date && p.date > t && ['Programado', 'Activo'].includes(p.status) && (p.lot_ids || []).includes(lot.id))
+    .map(p => {
+      const gross = lotIrrigationMm(p, lot.id);
+      return { date: p.date, gross_mm: round1(gross), mm: round1(gross * efficiency), program_id: p.id, status: p.status };
+    })
+    .filter(e => e.gross_mm > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  // Agregado por fecha para el gráfico (puede haber varios programas
+  // el mismo día).
+  const scheduledAgg = new Map();
+  for (const e of scheduledPrograms) scheduledAgg.set(e.date, round1((scheduledAgg.get(e.date) || 0) + e.mm));
+  const scheduledEvents = [...scheduledAgg.entries()]
+    .map(([date, mm]) => ({ date, mm }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
   return {
@@ -264,7 +266,7 @@ async function computeLot(lot, ctx, withHistory) {
     origin: anchor.source,
     anchored_at: end,
     history: withHistory ? history : null,
-    events: { irrigation: irrigationEvents, scheduled: scheduledEvents, rain: rainEvents },
+    events: { irrigation: irrigationEvents, scheduled: scheduledEvents, scheduledPrograms, rain: rainEvents },
     forecast_status: 'ok',
   };
 }

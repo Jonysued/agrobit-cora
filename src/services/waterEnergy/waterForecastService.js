@@ -160,6 +160,21 @@ export const waterForecastService = {
   // ---- Inicialización del estado de un lote (SOLO valor manual) ----
   initializeManual(lotId, mm) { return lotWaterStateService.initializeManual(lotId, mm); },
 
+  // ---- Confirmar un riego programado como EJECUTADO ----
+  // Guarda el IrrigationLog con los mm realmente aplicados y marca el
+  // programa Finalizado: el evento pasa de "programado" (cronograma,
+  // futuro) a "ejecutado" (histórico). La próxima consulta reconstruye
+  // la curva con los mm reales y recalcula forecast y recomendación.
+  async confirmScheduledIrrigation(programId, appliedMm) {
+    const programs = await base44.entities.IrrigationProgram.list();
+    const program = programs.find(p => p.id === programId);
+    if (!program) throw new Error('Programa de riego no encontrado.');
+    const mm = Math.round((Number(appliedMm) || 0) * 10) / 10;
+    if (!(mm > 0)) throw new Error('Los mm aplicados deben ser mayores que cero.');
+    await base44.entities.IrrigationLog.create({ program_id: programId, date: program.date, applied_mm: mm });
+    await base44.entities.IrrigationProgram.update(programId, { status: 'Finalizado' });
+  },
+
   // ---- Dashboard: filas por lote + totales de 15 días ----
   async getFarmOverview() {
     const [lots, pumps, tariffs, designs] = await Promise.all([
