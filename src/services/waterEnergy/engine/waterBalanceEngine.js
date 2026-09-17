@@ -27,7 +27,9 @@ const round1 = n => Math.round(n * 10) / 10;
 export function stepUsefulWaterDay(availableMm, config, day) {
   const kc = day.kc != null ? day.kc : 0;
   const etcMm = round1((day.eto_mm || 0) * kc);
-  const rainMm = day.effective_rainfall_mm ?? day.rainfall_mm ?? 0;
+  // La lluvia del día se suma COMPLETA a la curva (mismo mm que el
+  // marcador del gráfico); la "efectiva" queda solo como reporte.
+  const rainMm = day.rainfall_mm ?? day.effective_rainfall_mm ?? 0;
   const irrMm = day.irrigation_mm || 0;
   let next = availableMm + rainMm + irrMm - etcMm;
   let drainageMm = 0;
