@@ -10,10 +10,34 @@ import { fetchSentekReadings } from './sentekAdapters.ts';
 // dejó de transmitir por un problema externo, no de la app.
 export const STALE_MS = 12 * 3600000;
 
+// Lote EFECTIVO de una sonda: el vínculo DIRECTO (probe.lot_id) o, si
+// no hay, el derivado de los perfiles que la referencian — directo
+// (profile.probe_id) o como referencia de su modelo de suelo
+// (SoilBehaviorModel.reference_probe_id). Mismo criterio que
+// linkedLotsFor en la app (soilWaterService): una sonda de referencia
+// está vinculada a los lotes que usan su modelo.
+export async function resolveProbeLotId(client, probe) {
+  if (probe.lot_id) return probe.lot_id;
+  const [directProfiles, models] = await Promise.all([
+    client.entities.SoilProfile.filter({ probe_id: probe.id }),
+    client.entities.SoilBehaviorModel.filter({ reference_probe_id: probe.id }),
+  ]);
+  const direct = directProfiles.find(p => p.lot_id);
+  if (direct) return direct.lot_id;
+  const modelIds = new Set(models.map(m => m.id));
+  if (!modelIds.size) return null;
+  const profiles = await client.entities.SoilProfile.list();
+  const viaModel = profiles.find(p => modelIds.has(p.soil_behavior_model_id) && p.lot_id);
+  return viaModel ? viaModel.lot_id : null;
+}
+
 // Sincroniza una sonda: descubre profundidades, crea canales y
 // persiste solo lecturas nuevas (incremental, sin duplicados).
 // `client` es un cliente Base44 (usuario admin o service role).
-export async function syncSentekProbe(client, probe) {
+// `lotId` (opcional) es el lote efectivo resuelto por el llamador —
+// las lecturas lo registran como contexto.
+export async function syncSentekProbe(client, probe, lotId) {
+  const effectiveLotId = lotId || probe.lot_id || null;
   const result = await fetchSentekReadings(probe, probe.last_reading_at);
   if (!result.ok) {
     await client.entities.SoilProbe.update(probe.id, { connection_status: result.status || 'error' });
@@ -71,7 +95,7 @@ export async function syncSentekProbe(client, probe) {
       const rec = {
         probe_id: probe.id,
         probe_channel_id: ch.id,
-        lot_id: probe.lot_id,
+        lot_id: effectiveLotId,
         timestamp: row.timestamp,
         value,
         depth_cm: Number(depth),
