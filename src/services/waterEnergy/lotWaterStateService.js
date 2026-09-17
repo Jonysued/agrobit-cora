@@ -1,4 +1,5 @@
 import { base44 } from '@/api/base44Client';
+import { kcService } from './kcService';
 import { soilWaterService, computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from './soilWaterService';
 import { soilBehaviorService } from './soilBehaviorService';
 
@@ -230,10 +231,10 @@ async function computeLot(lot, ctx, withHistory) {
     const irr = round1((executed.get(d) || 0) * efficiency);
     const rain = obs?.byDay.get(d)?.rain ?? 0;
     const eto = obs?.byDay.get(d)?.eto ?? obs?.meanEto ?? DEFAULT_ETO_MM;
-    // Kc EXPLÍCITO del lote/perfil (current_kc). Las tablas automáticas
-    // de kcService NO participan del balance productivo: sin Kc
-    // configurado no se descuenta demanda y la UI lo informa.
-    const kc = profile.current_kc;
+    // Kc de cada día: el EXPLÍCITO del perfil (current_kc) o, si no
+    // hay, la tabla MENSUAL del cultivo (granadas/olivos): un Kc
+    // distinto según el mes. Sin ninguno no se descuenta demanda.
+    const kc = profile.current_kc != null ? profile.current_kc : kcService.kcForCropDate(lot.crop, d);
     const etc = kc != null ? round1(eto * kc) : 0;
     let next = water + irr + rain - etc;
     if (taw != null && next > taw) next = taw; // excedente = drenaje

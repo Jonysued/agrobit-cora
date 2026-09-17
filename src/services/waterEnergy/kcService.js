@@ -43,7 +43,7 @@ const MONTHLY_KC_TABLES = {
 };
 
 const normalize = c => (c || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-const midpoint = ({ lo, hi }) => (lo + hi) / 2;
+const midpoint = ({ lo, hi }) => Math.round(((lo + hi) / 2) * 1000) / 1000;
 
 // Tabla mensual del cultivo (o null si no tiene tabla cargada)
 function tableFor(crop) {
