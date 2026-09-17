@@ -71,7 +71,7 @@ function simulateFarmDay(dateStr) {
 
 // ---- Open-Meteo: pronóstico real por lat/lon, sin API key ----
 async function fetchOpenMeteoForecast(latitude, longitude) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,rain_sum,et0_fao_evapotranspiration&timezone=auto&forecast_days=8`;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,rain_sum,et0_fao_evapotranspiration&timezone=auto&forecast_days=16`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('Open-Meteo no disponible');
   const json = await res.json();
@@ -176,14 +176,14 @@ export const weatherService = {
     };
   },
 
-  // ---- FORECAST WEATHER: 7 días a partir de mañana ----
+  // ---- FORECAST WEATHER: 15 días a partir de mañana ----
   // Con lat/lon de la finca: Open-Meteo real. Sin ubicación: simulado.
   async getForecast(farm) {
     if (typeof farm === 'string') {
       const farms = await base44.entities.Farm.list();
       farm = farms.find(f => f.id === farm) || null;
     }
-    const dates = Array.from({ length: 7 }, (_, i) => isoDate(addDays(i + 1)));
+    const dates = Array.from({ length: 15 }, (_, i) => isoDate(addDays(i + 1)));
     if (farm?.latitude != null && farm?.longitude != null) {
       try {
         return await fetchOpenMeteoForecast(farm.latitude, farm.longitude);
@@ -225,7 +225,7 @@ export const weatherService = {
     };
   },
 
-  // Map<lot_id, [pronóstico × 7 días a partir de mañana]>
+  // Map<lot_id, [pronóstico × 15 días a partir de mañana]>
   // Con ubicación de finca: Open-Meteo real (ETc calculado por cultivo).
   // Sin ubicación: registros guardados o demo simulado.
   async getFarmForecast(lots) {
@@ -239,7 +239,7 @@ export const weatherService = {
     for (const lot of lots) {
       const farmDays = daysByFarm.get(lot.farm);
       const days = [];
-      for (let i = 1; i <= 7; i++) {
+      for (let i = 1; i <= 15; i++) {
         const dateStr = isoDate(addDays(i));
         const fd = farmDays?.find(d => d.date === dateStr);
         if (fd) {

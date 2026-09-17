@@ -72,7 +72,7 @@ export default function WeatherPanel({ farms: farmsProp, farmId: farmIdProp, onF
           )}
         </div>
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Pronóstico 7 días · Fuente: <b className="text-slate-600">{combined?.forecastSource || '—'}</b></p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Pronóstico 15 días · Fuente: <b className="text-slate-600">{combined?.forecastSource || '—'}</b></p>
           {combined === undefined ? (
             <p className="mt-2 text-sm text-slate-400">Cargando…</p>
           ) : (

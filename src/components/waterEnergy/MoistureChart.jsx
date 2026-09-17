@@ -5,7 +5,7 @@ import { CartesianGrid, ComposedChart, Legend, Line, ReferenceArea, ReferenceLin
 // SUMA DE PERFIL (mm de agua almacenada en el perfil del suelo) —
 // CURVA CALCULADA del lote: reconstrucción diaria desde el estado
 // inicial (riegos ejecutados, lluvia observada, ETc) + HOY +
-// forecast a 7 días con los riegos programados (línea negra) y, si
+// forecast a 15 días con los riegos programados (línea negra) y, si
 // corresponde, el escenario con el riego recomendado (línea verde).
 // Zonas: verde = zona objetivo (Target mín → Target máx), rosa =
 // por debajo del umbral de recarga.
@@ -74,7 +74,7 @@ export default function MoistureChart({ detail }) {
     ...scheduled.filter(e => e.mm > 0).map(e => ({ ...e, kind: 'programado' })),
   ].filter(e => { const t = dayTs(e.date); return t >= winStart - DAY && t <= winEnd; });
 
-  // Lluvia PREVISTA (forecast a 7 días): ya está incluida en la curva,
+  // Lluvia PREVISTA (forecast a 15 días): ya está incluida en la curva,
   // se marca en el día en que va a ocurrir.
   const rainEvents = (scenarioWithoutIrrigation || [])
     .filter(p => (p.rainfall_mm || 0) > 0)

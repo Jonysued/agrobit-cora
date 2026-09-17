@@ -57,8 +57,8 @@ export default function WaterEnergy() {
       <WeatherPanel farms={farms} farmId={farmId} onFarmChange={setFarmId} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Suma de perfil" value={shown.avgStoredMm == null ? '—' : `${shown.avgStoredMm} mm`} detail={`Promedio · ${shown.monitored} de ${shown.lots} lotes monitoreados`} tone={shown.avgPct != null && shown.avgPct < 40 ? 'red' : 'light'} />
-        <MetricCard label="Agua requerida · 7 días" value={`${shown.volumeM3.toLocaleString('es-AR')} m³`} detail="Lámina total recomendada" tone="light" />
-        <MetricCard label="Energía estimada · 7 días" value={`${shown.kwh.toLocaleString('es-AR')} kWh`} detail="Estimación" tone="light" />
+        <MetricCard label="Agua requerida · 15 días" value={`${shown.volumeM3.toLocaleString('es-AR')} m³`} detail="Lámina total recomendada" tone="light" />
+        <MetricCard label="Energía estimada · 15 días" value={`${shown.kwh.toLocaleString('es-AR')} kWh`} detail="Estimación" tone="light" />
         <MetricCard label="Costo energético estimado" value={`$ ${shown.cost.toLocaleString('es-AR')}`} detail="Estimación" tone="dark" />
       </div>
       {shown.unprofiled > 0 && (

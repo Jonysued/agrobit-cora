@@ -81,7 +81,7 @@ export default function WaterEnergyLot() {
                 <MetricCard label="Capacidad de campo" value={state.field_capacity_storage_mm != null ? `${state.field_capacity_storage_mm} mm` : '—'} detail={`Agua útil ${state.total_available_water_capacity_mm} mm · marchitez ${state.wilting_storage_mm} mm`} tone="light" />
                 <MetricCard label="Umbral de recarga" value={state.recharge_storage_mm != null ? `${state.recharge_storage_mm} mm` : '—'} tone="light" />
                 <MetricCard label="Objetivo de recarga" value={state.target_storage_mm != null ? `${state.target_storage_mm} mm` : '—'} tone="light" />
-                <MetricCard label="ETc · 7 días" value={detail.kc_missing ? 'Falta Kc' : `${round1(detail.scenarioWithoutIrrigation.reduce((s, p) => s + (p.etc_mm || 0), 0))} mm`} tone="light" />
+                <MetricCard label="ETc · 15 días" value={detail.kc_missing ? 'Falta Kc' : `${round1(detail.scenarioWithoutIrrigation.reduce((s, p) => s + (p.etc_mm || 0), 0))} mm`} tone="light" />
                 <MetricCard label="Lluvia prevista" value={`${round1(detail.scenarioWithoutIrrigation.reduce((s, p) => s + (p.rainfall_mm || 0), 0))} mm`} tone="light" />
                 <MetricCard label="Riego recomendado" value={detail.recommendation ? `${detail.recommendation.recommended_irrigation_mm} mm` : detail.kc_missing ? 'Falta Kc' : 'No requerido'} tone={detail.recommendation ? 'amber' : 'light'} />
               </div>

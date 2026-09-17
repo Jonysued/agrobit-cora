@@ -147,7 +147,7 @@ export const waterForecastService = {
   initializeManual(lotId, mm) { return lotWaterStateService.initializeManual(lotId, mm); },
   initializeFromReferenceProbe(lotId) { return lotWaterStateService.initializeFromReferenceProbe(lotId); },
 
-  // ---- Dashboard: filas por lote + totales de 7 días ----
+  // ---- Dashboard: filas por lote + totales de 15 días ----
   async getFarmOverview() {
     const [lots, pumps, tariffs, designs] = await Promise.all([
       this.getLots(),
@@ -178,7 +178,7 @@ export const waterForecastService = {
     return { rows, totals, tariff: energyService.getActiveTariff(tariffs) };
   },
 
-  // ---- Detalle de un lote: histórico calculado + HOY + forecast a 7 días ----
+  // ---- Detalle de un lote: histórico calculado + HOY + forecast a 15 días ----
   async getLotDetail(lotId) {
     const lots = await this.getLots();
     const lot = lots.find(l => l.id === lotId);
