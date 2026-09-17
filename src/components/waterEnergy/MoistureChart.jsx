@@ -74,6 +74,13 @@ export default function MoistureChart({ detail }) {
     ...scheduled.filter(e => e.mm > 0).map(e => ({ ...e, kind: 'programado' })),
   ].filter(e => { const t = dayTs(e.date); return t >= winStart - DAY && t <= winEnd; });
 
+  // Lluvia PREVISTA (forecast a 7 días): ya está incluida en la curva,
+  // se marca en el día en que va a ocurrir.
+  const rainEvents = (scenarioWithoutIrrigation || [])
+    .filter(p => (p.rainfall_mm || 0) > 0)
+    .map(p => ({ date: p.date, mm: Math.round(p.rainfall_mm * 10) / 10 }))
+    .filter(e => { const t = dayTs(e.date); return t >= winStart - DAY && t <= winEnd; });
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -137,13 +144,23 @@ export default function MoistureChart({ detail }) {
                 ifOverflow="extendDomain"
               />
             ))}
+            {rainEvents.map((e, i) => (
+              <ReferenceLine
+                key={`rain-${e.date}-${i}`}
+                x={dayTs(e.date)}
+                stroke="#3b82f6"
+                strokeDasharray="2 3"
+                label={{ value: `Lluvia ${e.mm}mm`, fontSize: 9, fill: '#3b82f6', position: 'insideTop', offset: 12 }}
+                ifOverflow="extendDomain"
+              />
+            ))}
             <Line dataKey="Suma del perfil" stroke="#000000" strokeWidth={2} dot={false} connectNulls />
             {hasRec && <Line dataKey="Con riego recomendado" stroke="#1a7350" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
       <p className="mt-2 text-center text-[11px] text-slate-400">
-        Curva calculada (riegos ejecutados, lluvia observada y demanda del cultivo) · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
+        Curva calculada (riegos ejecutados, lluvia observada y demanda del cultivo) · marcas azules = lluvia prevista · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
       </p>
     </section>
   );
