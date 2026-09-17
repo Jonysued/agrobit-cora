@@ -186,9 +186,6 @@ export default function MoistureChart({ detail }) {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <p className="mt-2 text-center text-[11px] text-slate-400">
-        Suma de perfil en mm · negro = actual y su tendencia sin riego · azul = riego programado (cronograma) · verde discontinua = con riego recomendado · línea gris punteada = hoy · violeta punteada = inicialización del estado hídrico (mm y fecha ingresados, arranque de la curva) · barras celestes = mm de lluvia del día (observada y prevista) · línea gris sólida = capacidad de campo (el agua que la supera drena y no se almacena) · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
-      </p>
     </section>
   );
 }
