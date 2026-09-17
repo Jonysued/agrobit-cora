@@ -18,7 +18,6 @@ import Dashboard from '@/pages/Dashboard';
 import Lots from '@/pages/Lots';
 import LotDetail from '@/pages/LotDetail';
 import Production from '@/pages/Production';
-import Health from '@/pages/Health';
 import Irrigation from '@/pages/Irrigation';
 import Documents from '@/pages/Documents';
 import Settings from '@/pages/Settings';
@@ -66,7 +65,6 @@ const AuthenticatedApp = () => {
           <Route path="/lotes" element={<Lots />} />
           <Route path="/lotes/:id" element={<LotDetail />} />
           <Route path="/produccion" element={<Production />} />
-          <Route path="/sanidad" element={<Health />} />
           <Route path="/riego" element={<Irrigation />} />
           <Route path="/water-energy" element={<WaterEnergy />} />
           <Route path="/water-energy/energia" element={<WaterEnergyEnergy />} />
