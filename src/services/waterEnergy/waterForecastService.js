@@ -176,6 +176,12 @@ export const waterForecastService = {
     const programs = await base44.entities.IrrigationProgram.list();
     const program = programs.find(p => p.id === programId);
     if (!program) throw new Error('Programa de riego no encontrado.');
+    // La ejecución SOLO se confirma el día del riego o después: un
+    // riego futuro todavía no ocurrió y no puede entrar al estado
+    // actual del lote (curva negra).
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (program.date > today) throw new Error('No se puede confirmar la ejecución de un riego futuro — confirmalo el día del riego o después.');
     const mm = Math.round((Number(appliedMm) || 0) * 10) / 10;
     if (!(mm > 0)) throw new Error('Los mm aplicados deben ser mayores que cero.');
     await base44.entities.IrrigationLog.create({ program_id: programId, date: program.date, applied_mm: mm });

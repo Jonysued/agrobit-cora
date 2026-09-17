@@ -174,7 +174,7 @@ async function loadContext(lots) {
   const farmIds = [...new Set([...farmByLot.values()].map(f => f?.id).filter(Boolean))];
   const observed = new Map(await Promise.all(farmIds.map(async id => [id, await dailyObservedWeather(id)])));
   const executed = executedIrrigationFrom(logs, programs, lots, designs);
-  return { profiles, models, states, configs, farmByLot, observed, executed, programs, designs };
+  return { profiles, models, states, configs, farmByLot, observed, executed, programs, designs, loggedProgramIds: new Set(logs.map(l => l.program_id)) };
 }
 
 // ---- Estado de UN lote: ancla + reconstrucción diaria hasta hoy ----
@@ -337,6 +337,19 @@ async function computeLot(lot, ctx, withHistory) {
   const scheduledEvents = [...scheduledAgg.entries()]
     .map(([date, mm]) => ({ date, mm }))
     .sort((a, b) => a.date.localeCompare(b.date));
+  // Riegos a CONFIRMAR: programas de HOY o de fechas PASADAS que
+  // siguen sin su IrrigationLog — nunca se confirma una ejecución por
+  // adelantado (un riego futuro todavía no ocurrió). Al confirmarse
+  // con los mm reales entran al histórico y el estado ACTUAL del
+  // lote los refleja (punto de hoy o reconstrucción del pasado).
+  const pendingPrograms = (ctx.programs || [])
+    .filter(p => p.date && p.date <= t && ['Programado', 'Activo'].includes(p.status) && (p.lot_ids || []).includes(lot.id) && !(ctx.loggedProgramIds || new Set()).has(p.id))
+    .map(p => {
+      const gross = lotIrrigationMm(p, lot.id, lot, ctx.designs);
+      return { date: p.date, gross_mm: round1(gross), mm: round1(gross * efficiency), program_id: p.id, status: p.status };
+    })
+    .filter(e => e.gross_mm > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   return {
     lot, profile, config, model,
@@ -347,7 +360,7 @@ async function computeLot(lot, ctx, withHistory) {
     origin: anchor.source,
     anchored_at: end,
     history: withHistory ? history : null,
-    events: { irrigation: irrigationEvents, scheduled: scheduledEvents, scheduledPrograms, rain: rainEvents },
+    events: { irrigation: irrigationEvents, scheduled: scheduledEvents, scheduledPrograms, pendingPrograms, rain: rainEvents },
     forecast_status: 'ok',
   };
 }
