@@ -30,9 +30,15 @@ export default async function (req) {
       return Response.json({ ok: true, observation: obs, persisted: false, station: { name: station.name, provider: station.provider } });
     }
 
-    // Lluvia incremental del día: acumulado diario actual − lo ya guardado hoy
-    const dayKey = obs.timestamp.slice(0, 10);
-    const sameDay = recents.filter(r => (r.timestamp || '').slice(0, 10) === dayKey);
+    // Lluvia incremental del día: acumulado diario actual − lo ya guardado hoy.
+    // El acumulado de la estación se reinicia a medianoche LOCAL de la
+    // finca: se agrupa por día de Argentina, no por día UTC (si no, la
+    // lluvia de la madrugada se descuenta mal y la curva no sube).
+    const localDay = (ts: string) => new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date(ts));
+    const dayKey = localDay(obs.timestamp);
+    const sameDay = recents.filter(r => localDay(r.timestamp || '') === dayKey);
     const storedToday = sameDay.reduce((s, r) => s + (r.rainfall_mm || 0), 0);
     const rainfall_mm = obs.rainfall_daily_mm != null
       ? Math.round(Math.max(0, obs.rainfall_daily_mm - storedToday) * 10) / 10

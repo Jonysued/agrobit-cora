@@ -91,7 +91,10 @@ async function dailyObservedWeather(farmId) {
   const raw = new Map();
   const etos = [];
   for (const o of obs) {
-    const day = o.timestamp.slice(0, 10);
+    // Día LOCAL del registro (la reconstrucción usa fechas locales):
+    // sin esto, la lluvia caída cerca de la medianoche UTC se atribuye
+    // al día siguiente y la subida se dibuja desplazada.
+    const day = isoDay(new Date(o.timestamp));
     const cur = raw.get(day) || { rain: 0, etoSum: 0, etoN: 0 };
     cur.rain += o.rainfall_mm || 0;
     // ET0 = 0 se trata como "sin dato" (la demanda diaria nunca es
