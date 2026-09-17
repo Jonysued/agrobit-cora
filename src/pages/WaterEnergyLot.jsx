@@ -73,8 +73,8 @@ export default function WaterEnergyLot() {
             <>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
                 <MetricCard
-                  label="Agua útil (calculada)"
-                  value={`${state.current_available_water_mm} mm`}
+                  label="Suma de perfil"
+                  value={`${state.total_profile_water_mm} mm`}
                   detail={`${state.available_water_percent}% de la capacidad útil · ${SOURCE_LABEL[state.state_source] || 'calculado'}`}
                   tone={state.status === 'RECARGAR' ? 'red' : 'light'}
                 />

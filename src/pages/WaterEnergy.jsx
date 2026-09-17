@@ -45,6 +45,7 @@ export default function WaterEnergy() {
     monitored: withState.length,
     unprofiled: farmRows.filter(r => !r.profile).length,
     avgPct: pcts.length ? Math.round(pcts.reduce((s, v) => s + v, 0) / pcts.length) : null,
+    avgStoredMm: (() => { const mm = withState.map(r => r.state?.total_profile_water_mm).filter(v => v != null); return mm.length ? Math.round(mm.reduce((s, v) => s + v, 0) / mm.length * 10) / 10 : null; })(),
     volumeM3: Math.round(withState.reduce((s, r) => s + (r.recommendation?.recommended_irrigation_m3 || 0), 0)),
     kwh: Math.round(withState.reduce((s, r) => s + (r.energy?.kwh || 0), 0)),
     cost: Math.round(withState.reduce((s, r) => s + (r.energy?.cost || 0), 0)),
@@ -55,7 +56,7 @@ export default function WaterEnergy() {
       <ModuleHeader />
       <WeatherPanel farms={farms} farmId={farmId} onFarmChange={setFarmId} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Estado hídrico actual" value={shown.avgPct == null ? '—' : `${shown.avgPct}%`} detail={`${shown.monitored} de ${shown.lots} lotes monitoreados`} tone={shown.avgPct != null && shown.avgPct < 40 ? 'red' : 'light'} />
+        <MetricCard label="Suma de perfil" value={shown.avgStoredMm == null ? '—' : `${shown.avgStoredMm} mm`} detail={`Promedio · ${shown.monitored} de ${shown.lots} lotes monitoreados`} tone={shown.avgPct != null && shown.avgPct < 40 ? 'red' : 'light'} />
         <MetricCard label="Agua requerida · 7 días" value={`${shown.volumeM3.toLocaleString('es-AR')} m³`} detail="Lámina total recomendada" tone="light" />
         <MetricCard label="Energía estimada · 7 días" value={`${shown.kwh.toLocaleString('es-AR')} kWh`} detail="Estimación" tone="light" />
         <MetricCard label="Costo energético estimado" value={`$ ${shown.cost.toLocaleString('es-AR')}`} detail="Estimación" tone="dark" />

@@ -170,6 +170,7 @@ export const waterForecastService = {
       monitored: withState.length,
       unprofiled: rows.filter(r => !r.profile).length,
       avgPct: pcts.length ? Math.round(pcts.reduce((s, v) => s + v, 0) / pcts.length) : null,
+      avgStoredMm: (() => { const mm = withState.map(r => r.state?.total_profile_water_mm).filter(v => v != null); return mm.length ? Math.round(mm.reduce((s, v) => s + v, 0) / mm.length * 10) / 10 : null; })(),
       volumeM3: Math.round(withRecommendation.reduce((s, r) => s + (r.recommendation?.recommended_irrigation_m3 || 0), 0)),
       kwh: Math.round(withRecommendation.reduce((s, r) => s + (r.energy?.kwh || 0), 0)),
       cost: Math.round(withRecommendation.reduce((s, r) => s + (r.energy?.cost || 0), 0)),
