@@ -396,7 +396,15 @@ export const lotWaterStateService = {
   // rango físico [punto de marchitez, capacidad de campo] — el
   // excedente drena y no se almacena. A partir de ahí el estado
   // evoluciona solo con los eventos del lote.
-  async initializeManual(lotId, profileWaterMm) {
+  async initializeManual(lotId, profileWaterMm, date) {
+    // La fecha del estado inicial ancla la curva en ese día (hoy o
+    // anterior): la reconstrucción arranca ahí y absorbe los riegos
+    // ejecutados y la lluvia registrados desde entonces.
+    if (date) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > todayStr()) {
+        throw new Error('La fecha del estado inicial debe ser hoy o una fecha anterior.');
+      }
+    }
     const profiles = await base44.entities.SoilProfile.filter({ lot_id: lotId });
     const profile = profiles[0];
     if (!profile) throw new Error('El lote no tiene perfil de suelo configurado.');
@@ -411,7 +419,7 @@ export const lotWaterStateService = {
     await base44.entities.SoilProfile.update(profile.id, { manual_initial_water_mm: useful });
     return base44.entities.LotWaterState.create({
       lot_id: lotId,
-      timestamp: new Date().toISOString(),
+      timestamp: date ? `${date}T12:00:00` : new Date().toISOString(),
       profile_water_mm: stored,
       source: 'manual_adjustment',
       model_version: MODEL_VERSION,

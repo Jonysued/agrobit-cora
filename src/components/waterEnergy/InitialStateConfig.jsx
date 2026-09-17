@@ -16,9 +16,15 @@ const SOURCE_LABEL = {
   manual_adjustment: 'inicialización manual',
 };
 
+const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export default function InitialStateConfig({ detail, onSaved }) {
   const { profile, state } = detail;
   const [value, setValue] = useState('');
+  const [date, setDate] = useState(todayIso());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -62,7 +68,15 @@ export default function InitialStateConfig({ detail, onSaved }) {
               onChange={e => setValue(e.target.value)}
             />
           </div>
-          <Button size="sm" disabled={saving || !valid || parsed == null} onClick={() => run(() => waterForecastService.initializeManual(profile.lot_id, parsed))}>
+          <div>
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Fecha del estado</label>
+            <Input
+              type="date" max={todayIso()} className="h-9 w-40"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+            />
+          </div>
+          <Button size="sm" disabled={saving || !valid || parsed == null || !date} onClick={() => run(() => waterForecastService.initializeManual(profile.lot_id, parsed, date))}>
             <Save size={14} className="mr-1" />Guardar
           </Button>
         </div>
@@ -71,7 +85,7 @@ export default function InitialStateConfig({ detail, onSaved }) {
       {!valid && <p className="mt-2 text-xs font-semibold text-red-600">Ingresá un valor válido en mm (mayor o igual a 0).</p>}
       {state?.field_capacity_storage_mm != null && (
         <p className="mt-2 text-[11px] text-slate-400">
-          Misma escala del gráfico · rango físico: {state.wilting_storage_mm}–{state.field_capacity_storage_mm} mm (marchitez a capacidad de campo) · valores fuera del rango se ajustan al límite más cercano.
+          Misma escala del gráfico · rango físico: {state.wilting_storage_mm}–{state.field_capacity_storage_mm} mm (marchitez a capacidad de campo) · valores fuera del rango se ajustan al límite más cercano. La curva se reconstruye desde la fecha indicada con los eventos del lote.
         </p>
       )}
     </div>

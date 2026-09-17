@@ -165,7 +165,7 @@ export const waterForecastService = {
   async deleteProfile(id) { return base44.entities.SoilProfile.delete(id); },
 
   // ---- Inicialización del estado de un lote (SOLO valor manual) ----
-  initializeManual(lotId, mm) { return lotWaterStateService.initializeManual(lotId, mm); },
+  initializeManual(lotId, mm, date) { return lotWaterStateService.initializeManual(lotId, mm, date); },
 
   // ---- Confirmar un riego programado como EJECUTADO ----
   // Guarda el IrrigationLog con los mm realmente aplicados y marca el
