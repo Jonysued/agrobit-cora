@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Droplets, RefreshCw, Save } from 'lucide-react';
+import { Droplets, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { waterForecastService } from '@/services/waterEnergy';
@@ -7,11 +7,9 @@ import { waterForecastService } from '@/services/waterEnergy';
 // Inicialización del estado hídrico del lote. El estado de cada lote
 // es CALCULADO y evoluciona solo con sus propios eventos (riegos
 // ejecutados, lluvia, ETc). Acá se define SOLO el punto de partida:
-// un valor manual (mm de suma de perfil, la misma escala del gráfico)
-// o una estimación inicial desde
-// la sonda de referencia del modelo de suelo. La sonda no vuelve a
-// igualar el estado del lote: solo aprende el comportamiento del
-// suelo (eficiencia de recarga, agotamiento).
+// un valor manual (mm de suma de perfil, la misma escala del gráfico).
+// La sonda de referencia NUNCA define ni iguala el estado del lote:
+// solo alimenta el modelo de comportamiento del suelo.
 const SOURCE_LABEL = {
   calculated: 'calculado con los eventos del lote',
   initialized: 'inicializado desde la sonda de referencia',
@@ -19,7 +17,7 @@ const SOURCE_LABEL = {
 };
 
 export default function InitialStateConfig({ detail, onSaved }) {
-  const { profile, state, model } = detail;
+  const { profile, state } = detail;
   const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -67,11 +65,6 @@ export default function InitialStateConfig({ detail, onSaved }) {
           <Button size="sm" disabled={saving || !valid || parsed == null} onClick={() => run(() => waterForecastService.initializeManual(profile.lot_id, parsed))}>
             <Save size={14} className="mr-1" />Guardar
           </Button>
-          {(model || profile?.probe_id) && (
-            <Button size="sm" variant="outline" disabled={saving} title="Estimación inicial única desde la sonda de referencia del modelo de suelo (o la sonda vinculada al perfil)" onClick={() => run(() => waterForecastService.initializeFromReferenceProbe(profile.lot_id))}>
-              <RefreshCw size={14} className="mr-1" />Reiniciar desde sonda
-            </Button>
-          )}
         </div>
       </div>
       {error && <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>}

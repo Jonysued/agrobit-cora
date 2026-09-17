@@ -23,8 +23,10 @@ export default async function (req) {
     const farmIds = station.farm_ids || (station.farm_id ? [station.farm_id] : []);
     if (!farmIds.length) return Response.json({ ok: false, error: 'La estación no tiene fincas vinculadas.' }, { status: 400 });
 
-    // Evita duplicar la última lectura ya guardada
-    const recents = await base44.entities.WeatherObservation.filter({ weather_station_id: station_id }, '-timestamp', 30);
+    // Trae TODAS las observaciones necesarias del día local en curso
+    // (no un tope fijo de 30): el acumulado ya persistido se calcula
+    // sobre el día COMPLETO para no contabilizar dos veces.
+    const recents = await base44.entities.WeatherObservation.filter({ weather_station_id: station_id }, '-timestamp', 500);
     const latestTs = recents[0]?.timestamp;
     if (latestTs && new Date(latestTs).getTime() >= new Date(obs.timestamp).getTime()) {
       return Response.json({ ok: true, observation: obs, persisted: false, station: { name: station.name, provider: station.provider } });
@@ -38,7 +40,16 @@ export default async function (req) {
       timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit',
     }).format(new Date(ts));
     const dayKey = localDay(obs.timestamp);
-    const sameDay = recents.filter(r => localDay(r.timestamp || '') === dayKey);
+    // Sin duplicados: observaciones repetidas del mismo timestamp (por
+    // ejemplo, re-sincronizaciones o copias por finca vinculada) se
+    // cuentan UNA sola vez al acumular lo ya persistido del día.
+    const seenDayTs = new Set<number>();
+    const sameDay = recents.filter(r => localDay(r.timestamp || '') === dayKey).filter(r => {
+      const t = new Date(r.timestamp).getTime();
+      if (Number.isNaN(t) || seenDayTs.has(t)) return false;
+      seenDayTs.add(t);
+      return true;
+    });
     const storedToday = sameDay.reduce((s, r) => s + (r.rainfall_mm || 0), 0);
     const rainfall_mm = obs.rainfall_daily_mm != null
       ? Math.round(Math.max(0, obs.rainfall_daily_mm - storedToday) * 10) / 10

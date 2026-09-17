@@ -26,7 +26,7 @@ const noForecastReason = detail => {
     const missing = (state.missing_configuration || []).map(k => CONFIG_LABELS[k] || k).join(', ');
     return `Configuración del perfil incompleta — falta: ${missing}. Completala en Water & Energy → Configuración.`;
   }
-  return 'Este lote todavía no tiene un estado hídrico inicial — definí un valor manual (o inicializá desde la sonda de referencia) en la tarjeta de abajo, y a partir de ahí la curva evoluciona sola con los riegos, la lluvia y la demanda del cultivo.';
+  return 'Este lote todavía no tiene un estado hídrico inicial — definí un valor manual en la tarjeta de abajo, y a partir de ahí la curva evoluciona sola con los riegos, la lluvia y la demanda del cultivo.';
 };
 
 export default function WaterEnergyLot() {

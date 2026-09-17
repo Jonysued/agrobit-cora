@@ -54,10 +54,17 @@ async function referenceExecutedIrrigationByDate(lotId) {
 }
 
 // ---- Calibración: aprender el comportamiento del suelo de referencia ----
-// Cruza el histórico de agua útil de la sonda con los eventos conocidos
-// (riegos con lámina conocida + lluvia observada) y estima:
-//  · eficiencia de recarga = subida observada / agua ingresada
-//  · tasa de agotamiento en días sin eventos
+// Cruza la serie de agua del PERFIL COMPLETO observado por la sonda
+// (todas las profundidades medidas: 0 → fondo del sensor más
+// profundo, SIN recorte a la zona radicular) con los eventos
+// conocidos (riegos EJECUTADOS con lámina conocida + lluvia
+// observada) y estima:
+//  · eficiencia de recarga = subida máxima estabilizada del perfil
+//    tras el evento / agua ingresada (ej. perfil +16 mm con un riego
+//    de 20 mm → 16/20 = 0.80; nunca se asume que la lámina aplicada
+//    se almacena completa).
+//  · velocidad de bajada = variación diaria del perfil completo en
+//    días sin riego ni lluvia significativa.
 async function calibrateModel(model, probes) {
   const probe = probes.find(p => p.id === model.reference_probe_id);
   if (!probe) return { calibration_status: 'sin_sonda' };
@@ -68,33 +75,49 @@ async function calibrateModel(model, probes) {
   const history = analysis?.history || [];
   if (history.length < 3) return { calibration_status: 'sin_datos', sample_count: 0 };
 
-  // Serie diaria de agua útil (mm) del perfil de referencia
+  // Serie diaria de agua del PERFIL COMPLETO de la sonda (mm
+  // almacenados), una lectura por día LOCAL (la última del día). La
+  // profundidad radicular es información agronómica del perfil: NO
+  // recorta esta serie — el modelo aprende de todo el perfil que la
+  // sonda realmente observa.
   const byDay = new Map();
-  for (const h of history) byDay.set(new Date(h.t).toISOString().slice(0, 10), h.mm);
+  for (const h of history) {
+    const d = isoDay(new Date(h.t));
+    const cur = byDay.get(d);
+    if (!cur || h.t >= cur.t) byDay.set(d, { t: h.t, mm: h.profile });
+  }
   const days = [...byDay.keys()].sort();
+  const profileAt = d => byDay.get(d)?.mm;
 
-  // Eventos de entrada de agua con lámina conocida
+  // Eventos de entrada de agua con lámina conocida: solo riegos
+  // EJECUTADOS (IrrigationLog) del lote de la sonda + lluvia observada.
   const irrByDate = await referenceExecutedIrrigationByDate(probe.lot_id);
   const events = [
     ...(analysis.events?.irrigation || []).map(d => ({ date: d, mm: irrByDate.get(d) || 0 })),
     ...(analysis.events?.rain || []),
   ].filter(e => e.mm > 0);
 
-  // Eficiencia de recarga: subida del perfil tras cada evento
+  // Eficiencia de recarga: perfil antes del evento vs MÁXIMO
+  // estabilizado de los 3 días del evento (el agua tarda en
+  // distribuirse); subida observada / mm ingresados.
   const effSamples = [];
   for (const ev of events) {
     const before = [...days].reverse().find(d => d < ev.date);
-    const after = days.find(d => d >= ev.date && d <= dayAfter(ev.date, 2));
-    if (!before || !after) continue;
-    const rise = byDay.get(after) - byDay.get(before);
+    if (!before || profileAt(before) == null) continue;
+    const afterWindow = days.filter(d => d >= ev.date && d <= dayAfter(ev.date, 2)).map(profileAt).filter(v => v != null);
+    if (!afterWindow.length) continue;
+    const rise = Math.max(...afterWindow) - profileAt(before);
     if (rise > 0) effSamples.push(Math.min(1, rise / ev.mm));
   }
-  // Agotamiento diario medio en días sin eventos
+  // Velocidad de bajada: variación diaria del perfil completo en días
+  // sin eventos (ni el día ni el anterior con riego o lluvia). Es la
+  // tasa de descenso observada del suelo — queda preparada para
+  // relacionarse después con ET0, ETc, clima y época del año.
   const eventDays = new Set(events.map(e => e.date));
   const depletionSamples = [];
   for (let i = 1; i < days.length; i++) {
     if (eventDays.has(days[i]) || eventDays.has(days[i - 1])) continue;
-    const delta = byDay.get(days[i]) - byDay.get(days[i - 1]);
+    const delta = profileAt(days[i]) - profileAt(days[i - 1]);
     if (delta < 0 && delta > -10) depletionSamples.push(-delta);
   }
   const recharge_efficiency = effSamples.length

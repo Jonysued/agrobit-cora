@@ -1,7 +1,6 @@
 import { base44 } from '@/api/base44Client';
 import { soilWaterService, computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from './soilWaterService';
 import { soilBehaviorService } from './soilBehaviorService';
-import { kcService } from './kcService';
 
 // ============================================================
 // lotWaterStateService — ESTADO HÍDRICO CALCULADO DE CADA LOTE.
@@ -89,7 +88,6 @@ function irrigationEventsFrom(logs, programs, lots) {
 async function dailyObservedWeather(farmId) {
   const obs = await base44.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', 600);
   const raw = new Map();
-  const etos = [];
   for (const o of obs) {
     // Día LOCAL del registro (la reconstrucción usa fechas locales):
     // sin esto, la lluvia caída cerca de la medianoche UTC se atribuye
@@ -97,17 +95,21 @@ async function dailyObservedWeather(farmId) {
     const day = isoDay(new Date(o.timestamp));
     const cur = raw.get(day) || { rain: 0, etoSum: 0, etoN: 0 };
     cur.rain += o.rainfall_mm || 0;
-    // ET0 = 0 se trata como "sin dato" (la demanda diaria nunca es
-    // exactamente cero): no contabiliza para el promedio del día.
-    if (o.eto_mm > 0) { cur.etoSum += o.eto_mm; cur.etoN++; etos.push(o.eto_mm); }
+    // ET0 diaria = SUMA de los incrementos del día (los registros de
+    // la estación son incrementos: 0.2 + 0.3 + 0.4 + 0.3 = 1.2 mm),
+    // NUNCA promedio. ET0 = 0 se trata como "sin dato" del intervalo.
+    if (o.eto_mm > 0) { cur.etoSum += o.eto_mm; cur.etoN++; }
     raw.set(day, cur);
   }
   const byDay = new Map();
   raw.forEach((v, day) => byDay.set(day, {
     rain: round1(v.rain),
-    eto: v.etoN ? round1(v.etoSum / v.etoN) : null,
+    eto: v.etoN ? round1(v.etoSum) : null,
   }));
-  const meanEto = etos.length ? round1(etos.reduce((s, v) => s + v, 0) / etos.length) : null;
+  // ET0 de respaldo para días sin observaciones: promedio de las ET0
+  // DIARIAS (sumas del día), no de los incrementos individuales.
+  const dailyEtos = [...byDay.values()].map(v => v.eto).filter(v => v != null);
+  const meanEto = dailyEtos.length ? round1(dailyEtos.reduce((s, v) => s + v, 0) / dailyEtos.length) : null;
   return { byDay, meanEto };
 }
 
@@ -228,9 +230,10 @@ async function computeLot(lot, ctx, withHistory) {
     const irr = round1((executed.get(d) || 0) * efficiency);
     const rain = obs?.byDay.get(d)?.rain ?? 0;
     const eto = obs?.byDay.get(d)?.eto ?? obs?.meanEto ?? DEFAULT_ETO_MM;
-    // Kc MENSUAL del cultivo (tabla cargada); el Kc manual del perfil
-    // queda como respaldo para cultivos sin tabla.
-    const kc = kcService.kcForCropDate(lot.crop, d) ?? profile.current_kc;
+    // Kc EXPLÍCITO del lote/perfil (current_kc). Las tablas automáticas
+    // de kcService NO participan del balance productivo: sin Kc
+    // configurado no se descuenta demanda y la UI lo informa.
+    const kc = profile.current_kc;
     const etc = kc != null ? round1(eto * kc) : 0;
     let next = water + irr + rain - etc;
     if (taw != null && next > taw) next = taw; // excedente = drenaje
@@ -304,29 +307,4 @@ export const lotWaterStateService = {
     });
   },
 
-  // Inicialización desde la sonda de referencia del modelo de suelo del
-  // lote (estimación inicial única; luego el estado evoluciona solo).
-  async initializeFromReferenceProbe(lotId) {
-    const profiles = await base44.entities.SoilProfile.filter({ lot_id: lotId });
-    const profile = profiles[0];
-    if (!profile) throw new Error('El lote no tiene perfil de suelo configurado.');
-    const models = await soilBehaviorService.getModels();
-    const model = soilBehaviorService.getModelForProfile(profile, models);
-    const refProbeId = model?.reference_probe_id || profile.probe_id;
-    if (!refProbeId) throw new Error('El lote no tiene modelo de suelo ni sonda vinculada — vinculá uno en Water & Energy → Configuración.');
-    const probeState = await soilWaterService.getProbeWaterState(refProbeId);
-    if (!probeState || probeState.missing || probeState.current_available_water_mm == null) {
-      throw new Error('La sonda de referencia no tiene lecturas suficientes para estimar el estado inicial.');
-    }
-    const config = await soilWaterService.getProfileConfig(profile, await referenceFullDepthCm(profile, models));
-    const stored = round1((config?.wilting_storage_mm || 0) + probeState.current_available_water_mm);
-    await base44.entities.SoilProfile.update(profile.id, { manual_initial_water_mm: null });
-    return base44.entities.LotWaterState.create({
-      lot_id: lotId,
-      timestamp: new Date().toISOString(),
-      profile_water_mm: stored,
-      source: 'initialized',
-      model_version: MODEL_VERSION,
-    });
-  },
 };

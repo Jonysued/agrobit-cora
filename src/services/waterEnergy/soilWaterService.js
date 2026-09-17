@@ -299,7 +299,7 @@ async function stateForProbe(probe, lots, profiles) {
 
 // Serie temporal de agua ÚTIL (mm) en la zona radicular medida
 function usefulWaterSeries(readings, channels, model) {
-  const { segs, layers, depths, fullSegs, fullLayers } = model;
+  const { segs, layers, depths, allDepths, fullSegs, fullLayers } = model;
   const depthByChannel = new Map(channels.map(c => [c.id, c.depth_cm]));
   const byTs = new Map();
   for (const r of readings) {
@@ -310,8 +310,12 @@ function usefulWaterSeries(readings, channels, model) {
     byTs.get(t).set(d, r.value / 100);
   }
   const series = [];
+  // Timestamp completo = TODAS las profundidades REALES de la sonda
+  // (perfil completo observado). La zona radicular NO recorta la
+  // serie: el SoilBehaviorModel aprende de todo el perfil medido.
+  const requiredDepths = (allDepths || []).length ? allDepths : depths;
   byTs.forEach((vals, t) => {
-    if (!depths.every(d => vals.has(d))) return; // timestamp incompleto
+    if (!requiredDepths.every(d => vals.has(d))) return; // timestamp incompleto
     // Agua útil de la zona radicular (mm) — base de la calibración del
     // modelo de suelo. La serie de almacenamiento ("profile") integra el
     // PERFIL COMPLETO medido por la sonda (misma escala del indicador).

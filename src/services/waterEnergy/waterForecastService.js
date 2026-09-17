@@ -3,7 +3,6 @@ import { weatherService } from './weatherService';
 import { energyService } from './energyService';
 import { irrigationRecommendationService } from './irrigationRecommendationService';
 import { lotWaterStateService } from './lotWaterStateService';
-import { kcService } from './kcService';
 import { runUsefulWaterScenario } from './engine/waterBalanceEngine';
 
 // ============================================================
@@ -18,23 +17,24 @@ import { runUsefulWaterScenario } from './engine/waterBalanceEngine';
 //   + Kc del cultivo (ETc = ET0 × Kc)
 //   = CURVA HÍDRICA PROPIA DE CADA LOTE
 //
-// La sonda de referencia NO entrega el estado del lote: el estado
-// inicial es el último LotWaterState persistido (o una inicialización
-// manual / estimación única desde la sonda). Dos lotes con el mismo
-// modelo de suelo tienen curvas completamente distintas.
+// La sonda de referencia NO entrega el estado del lote: solo alimenta
+// el SoilBehaviorModel (comportamiento del suelo). El estado inicial
+// es el último LotWaterState persistido o una inicialización manual
+// explícita. Dos lotes con el mismo modelo de suelo tienen curvas
+// completamente distintas.
 //
 // MODELO EXPERIMENTAL — no es una predicción agronómica validada.
 // ============================================================
 
 const round1 = n => Math.round(n * 10) / 10;
 
-// Insumos diarios del balance futuro: Kc del cultivo por MES (tablas
-// mensuales de Granadas/Olivos) o Kc manual del perfil. Lluvia efectiva
-// = lluvia pronosticada tal cual.
-function forecastInputs(weatherDays, lot, manualKc) {
-  const monthlyKc = kcService.hasMonthlyKc(lot.crop);
+// Insumos diarios del balance futuro: SOLO el Kc EXPLÍCITO del
+// lote/perfil (current_kc) — las tablas automáticas de kcService no
+// participan del balance productivo. Sin Kc configurado no hay demanda
+// (ETc = 0) y la UI lo informa. Lluvia efectiva = lluvia tal cual.
+function forecastInputs(weatherDays, manualKc) {
   return (weatherDays || []).map(w => {
-    const kc = monthlyKc ? kcService.kcForCropDate(lot.crop, w.date) : manualKc;
+    const kc = manualKc ?? null;
     return {
       date: w.date,
       eto_mm: w.eto_mm ?? 0,
@@ -104,13 +104,12 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   if (!usable) return row;
 
   // Balance futuro: clima + riegos PROGRAMADOS del lote (con la
-  // eficiencia de recarga del modelo de suelo de referencia)
-  // Kc: tabla mensual del cultivo (Granadas/Olivos) o Kc manual del perfil
-  const monthlyKc = kcService.hasMonthlyKc(lot.crop);
-  const kc = monthlyKc ? kcService.kcForCropDate(lot.crop, new Date().toISOString().slice(0, 10)) : profile.current_kc ?? null;
-  const kc_missing = !monthlyKc && profile.current_kc == null;
+  // eficiencia de recarga del modelo de suelo de referencia).
+  // Kc: SOLO el explícitamente configurado en el perfil del lote.
+  const kc = profile.current_kc ?? null;
+  const kc_missing = kc == null;
   const scheduledByDate = new Map((curve.events?.scheduled || []).map(e => [e.date, e.mm]));
-  const days = forecastInputs(weatherDays, lot, profile.current_kc).map(d => ({
+  const days = forecastInputs(weatherDays, profile.current_kc).map(d => ({
     ...d,
     irrigation_mm: scheduledByDate.get(d.date) ?? 0,
   }));
@@ -122,7 +121,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const scenarioScheduled = runUsefulWaterScenario(curve.currentUsefulMm, config, days);
   const canRecommend = !kc_missing;
   const { recommendation, scenarioWithIrrigation } = canRecommend
-    ? irrigationRecommendationService.withRecommendation(config, lot, curve.currentUsefulMm, days, scenarioScheduled)
+    ? irrigationRecommendationService.withRecommendation(config, lot, curve.currentUsefulMm, days, scenarioScheduled, efficiency)
     : { recommendation: null, scenarioWithIrrigation: scenarioScheduled };
   const energy = recommendation ? energyService.compute(recommendation.recommended_irrigation_m3, pump, tariff, rateMmH, recommendation.recommended_irrigation_mm) : null;
   return {
@@ -151,9 +150,8 @@ export const waterForecastService = {
   },
   async deleteProfile(id) { return base44.entities.SoilProfile.delete(id); },
 
-  // ---- Inicialización del estado de un lote (manual / sonda de ref.) ----
+  // ---- Inicialización del estado de un lote (SOLO valor manual) ----
   initializeManual(lotId, mm) { return lotWaterStateService.initializeManual(lotId, mm); },
-  initializeFromReferenceProbe(lotId) { return lotWaterStateService.initializeFromReferenceProbe(lotId); },
 
   // ---- Dashboard: filas por lote + totales de 15 días ----
   async getFarmOverview() {

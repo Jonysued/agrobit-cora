@@ -24,6 +24,8 @@ export default function RecommendationCard({ detail }) {
     );
   }
   const rows = [
+    ['Recarga necesaria del perfil', `${recommendation.profile_recharge_needed_mm} mm`],
+    ...(detail.efficiency != null ? [['Eficiencia de recarga del suelo', `${Math.round(detail.efficiency * 100)}%`]] : []),
     ['Volumen', `${recommendation.recommended_irrigation_m3.toLocaleString('es-AR')} m³`],
     ['Ventana recomendada', fmtDate(recommendation.recommended_start_date)],
     ['Tiempo estimado de bombeo', energy ? `${energy.hours} h` : 'Sin bomba asociada'],
@@ -40,7 +42,7 @@ export default function RecommendationCard({ detail }) {
       <div className="mt-4 grid items-center gap-5 md:grid-cols-[auto_1fr]">
         <div className="text-center">
           <p className="text-4xl font-bold tracking-tight">{recommendation.recommended_irrigation_mm}<span className="ml-1 text-base font-semibold text-white/60">mm</span></p>
-          <p className="mt-1 text-xs uppercase tracking-wider text-white/50">lámina recomendada</p>
+          <p className="mt-1 text-xs uppercase tracking-wider text-white/50">mm a aplicar</p>
         </div>
         <div className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
           {rows.map(([k, v]) => (
