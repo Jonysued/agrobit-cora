@@ -31,12 +31,13 @@ export default function RootZoneChart({ history, rechargeStorageMm, targetStorag
     <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
       <h3 className="text-lg font-bold text-charcoal">Agua en el perfil</h3>
       <p className="text-xs text-slate-500">Milímetros de agua almacenada en el perfil{depthLabel ? ` · ${depthLabel}` : ''}{hasRefs ? ' · banda verde = zona objetivo' : ''} — sin extrapolar por debajo de la profundidad medida.</p>
-      <div className="mt-4">
+      <div className="relative mt-4">
+        <span className="absolute left-0 top-0 z-10 text-[10px] font-bold text-slate-400">mm</span>
         <ResponsiveContainer width="100%" height={320}>
-          <AreaChart data={data} margin={{ top: 10, right: 12, bottom: 4, left: -8 }}>
+          <AreaChart data={data} margin={{ top: 10, right: 12, bottom: 4, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis dataKey="t" type="number" domain={['dataMin', 'dataMax']} tickFormatter={fmtX} stroke="#94a3b8" tickMargin={6} />
-            <YAxis domain={[yMin, yMax]} unit=" mm" stroke="#94a3b8" />
+            <YAxis domain={[yMin, yMax]} width={40} tickFormatter={v => Math.round(v)} stroke="#94a3b8" />
             <Tooltip labelFormatter={fmtTip} formatter={v => [`${Math.round(v)} mm`]} />
             {hasRefs && <ReferenceArea y1={rechargeStorageMm} y2={targetStorageMm} fill="#059669" fillOpacity={0.08} strokeOpacity={0} ifOverflow="visible" />}
             {fcStorageMm != null && <ReferenceLine y={fcStorageMm} stroke="#0891b2" strokeDasharray="4 4" label={{ value: 'Capacidad de campo', position: 'insideTopRight', fontSize: 10, fill: '#0891b2' }} />}
