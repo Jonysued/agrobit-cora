@@ -115,15 +115,19 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const kc_source = explicitKc != null ? 'manual' : hasMonthlyKc ? 'tabla_mensual' : null;
   const kc_missing = kc == null;
   const scheduledByDate = new Map((curve.events?.scheduled || []).map(e => [e.date, e.mm]));
-  const days = forecastInputs(weatherDays, explicitKc, lot.crop).map(d => ({
-    ...d,
-    irrigation_mm: scheduledByDate.get(d.date) ?? 0,
-  }));
+  const baseDays = forecastInputs(weatherDays, explicitKc, lot.crop);
   const config = {
     total_available_water_capacity_mm: curve.config.total_available_water_capacity_mm,
     recharge_threshold_mm: curve.config.recharge_threshold_mm,
     target_water_mm: curve.config.target_water_mm,
   };
+  // TENDENCIA SIN RIEGO: continuación natural de la curva actual
+  // (solo lluvia − ETc), sin ningún riego futuro.
+  const scenarioNoIrrigation = runUsefulWaterScenario(curve.currentUsefulMm, config, baseDays);
+  const days = baseDays.map(d => ({
+    ...d,
+    irrigation_mm: scheduledByDate.get(d.date) ?? 0,
+  }));
   const scenarioScheduled = runUsefulWaterScenario(curve.currentUsefulMm, config, days);
   const canRecommend = !kc_missing;
   const { recommendation, scenarioWithIrrigation } = canRecommend
@@ -138,6 +142,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
     efficiency,
     scheduled_irrigation: curve.events?.scheduled || [],
     forecast_confidence: model?.calibration_status === 'calibrated' ? 'complete' : 'partial',
+    scenarioNoIrrigation,
     scenarioWithoutIrrigation: scenarioScheduled,
     scenarioWithIrrigation,
     recommendation,
