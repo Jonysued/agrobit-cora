@@ -100,7 +100,6 @@ export default function WaterEnergyLot() {
                 <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">Confianza del forecast: parcial — el modelo de suelo de referencia todavía no está calibrado con suficientes eventos (se usa la eficiencia de recarga por defecto).</p>
               )}
               {detail.below_wilting && <p className="text-xs font-semibold text-red-600">Advertencia: la proyección del lote alcanza el punto de marchitez (agua útil agotada) sin riego adicional.</p>}
-              <p className="text-center text-xs text-slate-400">Curva hídrica CALCULADA del lote (riegos propios, clima y cultivo) sobre el comportamiento del modelo de suelo de referencia · modelo EXPERIMENTAL. No constituye una predicción agronómica validada.</p>
             </>
           )}
           <div id="estado-inicial"><InitialStateConfig detail={detail} onSaved={() => setReloadKey(k => k + 1)} /></div>
