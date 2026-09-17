@@ -164,8 +164,8 @@ export default function MoistureChart({ detail }) {
               />
             ))}
             {/* Lluvia del día (observada y prevista) en mm: barra celeste
-                sobre su propio eje — la subida de la curva ese día es
-                el aporte de esa lluvia menos la demanda del cultivo. */}
+                sobre su propio eje — al igual que el riego, su aporte
+                sube la curva recién el día SIGUIENTE. */}
             {/* Línea de HOY: separa el histórico (izquierda) del forecast (derecha) */}
             <ReferenceLine x={dayTs(today)} stroke="#64748b" strokeDasharray="3 3" label={{ value: 'Hoy', fontSize: 9, fill: '#64748b', position: 'top' }} ifOverflow="extendDomain" />
             <Bar dataKey="Lluvia" yAxisId="rain" fill="#93c5fd" stroke="#3b82f6" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#1d4ed8' }} />

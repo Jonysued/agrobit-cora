@@ -235,17 +235,17 @@ async function computeLot(lot, ctx, withHistory) {
   const irrigationEvents = [];
   const rainEvents = [];
   let water = anchor.useful;
-  // REGLA DEL GRÁFICO: la curva sube DESPUÉS del riego, nunca antes.
-  // El punto de cada día refleja la lluvia y la demanda (ETc) de ESE
-  // día, pero el riego del día X recién entra al perfil en el punto
-  // del día X+1 (el agua aplicada durante el día X está en el suelo a
-  // partir del día siguiente).
+  // REGLA DEL GRÁFICO: la curva sube DESPUÉS del riego o la lluvia,
+  // nunca antes. El punto de cada día refleja la demanda (ETc) de ESE
+  // día, pero el agua (riego o lluvia) del día X recién entra al
+  // perfil en el punto del día X+1 (el agua caída durante el día X
+  // está en el suelo a partir del día siguiente).
   const history = [{ date: startDay, mm: water }];
   let prev = startDay;
   let d = dayAfter(startDay, 1);
   while (d <= end) {
     const irrPrev = round1((executed.get(prev) || 0) * efficiency);
-    const rain = obs?.byDay.get(d)?.rain ?? 0;
+    const rain = obs?.byDay.get(prev)?.rain ?? 0;
     const eto = obs?.byDay.get(d)?.eto ?? obs?.meanEto ?? DEFAULT_ETO_MM;
     // Kc de cada día: el EXPLÍCITO del perfil (current_kc) o, si no
     // hay, la tabla MENSUAL del cultivo (granadas/olivos): un Kc
@@ -257,40 +257,44 @@ async function computeLot(lot, ctx, withHistory) {
     if (next < 0) next = 0; // nunca baja del punto de marchitez
     water = round1(next);
     if (irrPrev > 0) irrigationEvents.push({ date: prev, mm: irrPrev });
-    if (rain > 0) rainEvents.push({ date: d, mm: rain });
+    if (rain > 0) rainEvents.push({ date: prev, mm: rain });
     history.push({ date: d, mm: water });
     prev = d;
     d = dayAfter(d, 1);
   }
-  // Punto de HOY = estado AHORA: el riego confirmado HOY ya está en el
-  // suelo, así que SÍ se incluye en el punto de hoy (su subida en el
-  // histórico recién se dibuja mañana). Cubre también el ancla de HOY:
-  // el valor ingresado capturó el estado al inicializarse y un riego
-  // confirmado más tarde en el día no estaba incluido.
+  // Punto de HOY = estado AHORA: el riego confirmado HOY y la lluvia
+  // observada HOY ya están en el suelo, así que SÍ se incluyen en el
+  // punto de hoy (su subida en el histórico recién se dibuja mañana).
+  // Cubre también el ancla de HOY: el valor ingresado capturó el
+  // estado al inicializarse y un riego o lluvia más tarde en el día
+  // no estaba incluido.
   const irrToday = round1((executed.get(end) || 0) * efficiency);
-  if (irrToday > 0) {
-    water = round1(Math.min(taw ?? Infinity, water + irrToday));
+  const rainToday = round1(obs?.byDay.get(end)?.rain ?? 0);
+  if (irrToday > 0 || rainToday > 0) {
+    water = round1(Math.min(taw ?? Infinity, water + irrToday + rainToday));
     history[history.length - 1] = { date: end, mm: water };
-    irrigationEvents.push({ date: end, mm: irrToday });
+    if (irrToday > 0) irrigationEvents.push({ date: end, mm: irrToday });
+    if (rainToday > 0) rainEvents.push({ date: end, mm: rainToday });
   }
 
   // ---- Retro-proyección: 15 días antes del punto de partida ----
   // Evolución previa del perfil para el gráfico: el balance diario se
   // INVIERTA desde el punto del día del ancla. Con la regla del
-  // gráfico (el riego del día X sube el punto del día X+1), invertir
-  // un día significa restarle el riego del día que se CALCULA, la
-  // lluvia del día desde el que se parte, y devolverle la ETc de ese
-  // día — acotado al rango físico [0, capacidad útil].
+  // gráfico (el agua del día X sube el punto del día X+1), invertir
+  // un día significa restarle el riego y la lluvia del día que se
+  // CALCULA, y devolverle la ETc del día desde el que se parte —
+  // acotado al rango físico [0, capacidad útil].
   if (withHistory) {
     const back = [];
     let day = startDay;
-    // Si el ancla es HOY y hubo riego confirmado hoy, ese riego ya
-    // está en el punto de HOY pero el día anterior se calcula SIN él.
-    let w = startDay === end && irrToday > 0 ? round1(history[0].mm - irrToday) : history[0].mm;
+    // Si el ancla es HOY y hubo riego confirmado o lluvia hoy, ese
+    // agua ya está en el punto de HOY pero el día anterior se calcula
+    // SIN ella.
+    let w = startDay === end && (irrToday > 0 || rainToday > 0) ? round1(history[0].mm - irrToday - rainToday) : history[0].mm;
     for (let i = 0; i < BACKCAST_DAYS; i++) {
       const target = dayAfter(day, -1);
       const irrTarget = round1((executed.get(target) || 0) * efficiency);
-      const rain = obs?.byDay.get(day)?.rain ?? 0;
+      const rain = obs?.byDay.get(target)?.rain ?? 0;
       const eto = obs?.byDay.get(day)?.eto ?? obs?.meanEto ?? DEFAULT_ETO_MM;
       const kc = profile.current_kc != null ? profile.current_kc : kcService.kcForCropDate(lot.crop, day);
       const etc = kc != null ? round1(eto * kc) : 0;
@@ -300,7 +304,7 @@ async function computeLot(lot, ctx, withHistory) {
       w = round1(before);
       back.push({ date: target, mm: w });
       if (irrTarget > 0) irrigationEvents.push({ date: target, mm: irrTarget });
-      if (rain > 0) rainEvents.push({ date: day, mm: rain });
+      if (rain > 0) rainEvents.push({ date: target, mm: rain });
       day = target;
     }
     history.unshift(...back.reverse());

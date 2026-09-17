@@ -55,15 +55,17 @@ export function stepUsefulWaterDay(availableMm, config, day) {
 export function runUsefulWaterScenario(startMm, config, days) {
   let available = startMm;
   const taw = config.total_available_water_capacity_mm;
-  // REGLA DEL GRÁFICO: la curva sube DESPUÉS del riego, nunca antes.
-  // El riego de cada día entra al perfil recién en el punto del día
-  // SIGUIENTE (queda pendiente del día anterior). El riego de HOY ya
-  // está incluido en startMm: el primer día del escenario no arrastra
-  // pendiente.
+  // REGLA DEL GRÁFICO: la curva sube DESPUÉS del riego o la lluvia,
+  // nunca antes. El agua de cada día (riego o lluvia) entra al perfil
+  // recién en el punto del día SIGUIENTE (queda pendiente del día
+  // anterior). El riego y la lluvia de HOY ya están incluidos en
+  // startMm: el primer día del escenario no arrastra pendiente.
   let pendingIrr = 0;
+  let pendingRain = 0;
   return (days || []).map((d, idx) => {
-    const r = stepUsefulWaterDay(available, config, { ...d, irrigation_mm: pendingIrr });
+    const r = stepUsefulWaterDay(available, config, { ...d, irrigation_mm: pendingIrr, rainfall_mm: pendingRain, effective_rainfall_mm: pendingRain });
     pendingIrr = round1(d.irrigation_mm || 0);
+    pendingRain = round1(d.rainfall_mm ?? 0);
     available = r.availableMm;
     return {
       day: idx + 1,
