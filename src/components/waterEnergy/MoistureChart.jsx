@@ -52,7 +52,10 @@ export default function MoistureChart({ detail }) {
   const maxOffset = Math.max(0, Math.ceil((dataMaxTs - dataMinTs - rangeDays * DAY) / DAY));
   const effOffset = Math.min(offset, maxOffset);
   const winEnd = dataMaxTs - effOffset * DAY;
-  const winStart = winEnd - rangeDays * DAY;
+  // La ventana nunca empieza antes del primer dato: si la curva es más
+  // corta que el rango elegido, el gráfico se ajusta a los datos reales
+  // (la curva arranca al inicio del gráfico, sin vacío a la izquierda).
+  const winStart = Math.max(dataMinTs, winEnd - rangeDays * DAY);
   const filtered = data.filter(d => d.t >= winStart - DAY && d.t <= winEnd + DAY / 2);
   const step = Math.ceil(rangeDays / 2);
 
