@@ -36,10 +36,12 @@ export const irrigationRecommendationService = {
     const neededMm = round1(Math.max(0, target - hit.available_water_mm));
     if (neededMm <= 0) return { recommendation: null, scenarioWithIrrigation: scenarioWithoutIrrigation };
 
-    // Riego a APLICAR = necesidad / eficiencia de recarga del suelo
-    // (redondeo hacia arriba: nunca queda corto del objetivo).
+    // Riego a APLICAR = necesidad / eficiencia de recarga del suelo.
+    // Redondeo hacia ABAJO: la recarga se detiene al llegar al
+    // Target máx y NUNCA lo supera (el techo del balance es el
+    // Target máx; el exceso drena).
     const eff = efficiency != null && efficiency > 0 ? efficiency : 1;
-    const grossMm = Math.ceil(neededMm / eff * 10) / 10;
+    const grossMm = Math.floor(neededMm / eff * 10) / 10;
     const volumeM3 = Math.round(grossMm * (lot.area_ha || 0) * 10); // 1 mm × 1 ha = 10 m³
     const recommendation = {
       lot_id: lot.id,
@@ -48,7 +50,7 @@ export const irrigationRecommendationService = {
       recommended_irrigation_m3: volumeM3,
       recommended_start_date: hit.date,
       days_to_threshold: hit.day,
-      reason: `Sin riego adicional al ya programado, el agua útil del perfil alcanza el umbral de recarga (${threshold} mm) dentro de ${hit.day} día${hit.day > 1 ? 's' : ''}. El perfil necesita incorporar ${neededMm} mm; con la eficiencia de recarga aprendida del suelo (${Math.round(eff * 100)}%) eso exige aplicar ${grossMm} mm (el riego ya programado ese día ya está incluido en el escenario).`,
+      reason: `Sin riego adicional al ya programado, el agua útil del perfil alcanza el umbral de recarga (${threshold} mm) dentro de ${hit.day} día${hit.day > 1 ? 's' : ''}. El perfil necesita incorporar ${neededMm} mm para llegar al Target máx (${target} mm) y detenerse ahí — nunca se recomienda pasar ese límite; con la eficiencia de recarga aprendida del suelo (${Math.round(eff * 100)}%) eso exige aplicar ${grossMm} mm (el riego ya programado ese día ya está incluido en el escenario).`,
       status: 'activa',
     };
     // Escenario CON riego: los mm NETOS de la recomendación se suman
