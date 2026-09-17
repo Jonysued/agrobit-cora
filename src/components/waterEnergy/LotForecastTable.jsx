@@ -1,15 +1,15 @@
 import React from 'react';
 
-// Tabla de forecast por lote — agua útil CALCULADA de cada lote
-// (curva propia: riegos ejecutados/programados, clima y cultivo),
-// proyección a +3/+7 días, próximo riego y lámina recomendada.
+// Tabla de forecast por lote — SUMA DE PERFIL (mm almacenados) de
+// cada lote (curva propia: riegos ejecutados/programados, clima y
+// cultivo), proyección a +3/+7 días, próximo riego y lámina recomendada.
 const DOT = { RECARGAR: 'bg-red-500', LLENO: 'bg-emerald-500', 'ÓPTIMO': 'bg-emerald-500' };
 const fmtDate = s => (s ? new Date(`${s}T00:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) : '—');
 const stateText = r => {
   if (!r.profile) return 'Sin perfil de suelo';
   if (!r.state) return 'Sin estado inicial';
   if (r.state.configuration_status === 'incomplete') return 'Config. incompleta';
-  return `${r.state.current_available_water_mm} mm · ${r.state.available_water_percent}% útil`;
+  return `${r.state.total_profile_water_mm} mm · ${r.state.available_water_percent}% útil`;
 };
 
 export default function LotForecastTable({ rows, onOpen }) {
@@ -20,16 +20,20 @@ export default function LotForecastTable({ rows, onOpen }) {
       </section>
     );
   }
+  // Misma escala que la columna actual: suma de perfil (agua útil
+  // proyectada + agua del punto de marchitez, constante del perfil).
   const cellMm = (r, i) => {
     const p = r.scenarioWithoutIrrigation?.[i];
-    return p ? `${p.available_water_mm} mm` : '—';
+    if (!p) return '—';
+    const wilting = r.state?.wilting_storage_mm ?? 0;
+    return `${Math.round((wilting + p.available_water_mm) * 10) / 10} mm`;
   };
   return (
     <section className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
       <table className="w-full min-w-[860px] text-sm">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
-            {['Lote', 'Agua útil (calculada)', '+3 días', '+7 días', 'Próximo riego', 'MM recomendados', 'Energía estimada'].map(h => <th key={h} className="px-4 py-3">{h}</th>)}
+            {['Lote', 'Suma de perfil', '+3 días', '+7 días', 'Próximo riego', 'MM recomendados', 'Energía estimada'].map(h => <th key={h} className="px-4 py-3">{h}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -40,7 +44,7 @@ export default function LotForecastTable({ rows, onOpen }) {
                 {r.forecast_status !== 'ok' ? (
                   <span className="text-xs font-semibold text-amber-600">{stateText(r)}</span>
                 ) : (
-                  <><span className={`mr-1.5 inline-block h-2.5 w-2.5 rounded-full align-middle ${DOT[r.state.status] || 'bg-slate-300'}`} />{r.state.current_available_water_mm} mm <span className="text-xs text-slate-400">· {r.state.available_water_percent}% útil</span></>
+                  <><span className={`mr-1.5 inline-block h-2.5 w-2.5 rounded-full align-middle ${DOT[r.state.status] || 'bg-slate-300'}`} />{r.state.total_profile_water_mm} mm <span className="text-xs text-slate-400">· {r.state.available_water_percent}% útil</span></>
                 )}
               </td>
               <td className="px-4 py-3">{cellMm(r, 2)}</td>
