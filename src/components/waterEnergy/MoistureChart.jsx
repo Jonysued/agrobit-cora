@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight, PenLine, Ruler, SlidersHorizontal } from 'lucide-react';
-import { CartesianGrid, ComposedChart, Legend, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 // SUMA DE PERFIL (mm de agua almacenada en el perfil del suelo) —
 // CURVA CALCULADA del lote: reconstrucción diaria desde el estado
@@ -11,6 +11,7 @@ import { CartesianGrid, ComposedChart, Legend, Line, ReferenceArea, ReferenceLin
 // por debajo del umbral de recarga.
 const DAY = 86400000;
 const dayTs = d => new Date(`${d}T12:00:00`).getTime();
+const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const fmtX = t => new Date(t).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
 const fmtRange = t => new Date(t).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
 const fmtTip = t => new Date(t).toLocaleDateString('es-AR', { dateStyle: 'medium' });
@@ -21,6 +22,9 @@ const actionBtn = 'inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-eme
 
 export default function MoistureChart({ detail }) {
   const { state, scenarioWithoutIrrigation, scenarioWithIrrigation, history, recommendation, scheduled_irrigation } = detail;
+  // Lluvia OBSERVADA por día (mm): alimenta las barras del gráfico junto
+  // con la lluvia prevista del forecast.
+  const rainByDate = new Map((detail.events?.rain || []).map(e => [e.date, e.mm]));
   // ---- Controles del encabezado ----
   const [rangeDays, setRangeDays] = useState(30);
   const [offset, setOffset] = useState(0); // días que la ventana retrocede respecto del dato más reciente
@@ -33,15 +37,23 @@ export default function MoistureChart({ detail }) {
   const wiltingMm = state.wilting_storage_mm ?? 0;
   const storage = mm => wiltingMm + mm;
   const currentMm = state.current_available_water_mm;
+  // Lluvia del día "HOY": la serie histórica ya incluye el día de hoy;
+  // solo se marca aparte si el ancla es hoy y no hay histórico aún.
+  const today = isoDay(new Date());
+  const rainToday = (history || []).some(h => h.date === today) ? null : rainByDate.get(today) ?? null;
   const data = [
-    ...(history || []).map(h => ({ t: dayTs(h.date), 'Suma del perfil': storage(h.mm) })),
-    { t: Date.now(), 'Suma del perfil': storage(currentMm), ...(hasRec ? { 'Con riego recomendado': storage(currentMm) } : {}) },
+    ...(history || []).map(h => ({ t: dayTs(h.date), 'Suma del perfil': storage(h.mm), Lluvia: rainByDate.get(h.date) ?? null })),
+    { t: Date.now(), 'Suma del perfil': storage(currentMm), Lluvia: rainToday, ...(hasRec ? { 'Con riego recomendado': storage(currentMm) } : {}) },
     ...(scenarioWithoutIrrigation || []).map((p, i) => ({
       t: dayTs(p.date),
       'Suma del perfil': storage(p.available_water_mm),
+      Lluvia: (p.rainfall_mm || 0) > 0 ? Math.round(p.rainfall_mm * 10) / 10 : null,
       ...(hasRec ? { 'Con riego recomendado': storage(scenarioWithIrrigation?.[i]?.available_water_mm ?? p.available_water_mm) } : {}),
     })),
   ];
+  // Escala propia de las barras de lluvia (eje derecho oculto): mm de
+  // lluvia, no de perfil — lluvias chicas siguen siendo visibles.
+  const rainMax = Math.max(10, ...data.map(d => d.Lluvia || 0)) * 2.5;
   const rechargeMm = state.recharge_storage_mm;
   const targetMm = state.target_storage_mm;
   const hasRefs = rechargeMm != null && targetMm != null;
@@ -73,13 +85,6 @@ export default function MoistureChart({ detail }) {
     ...(detail.events?.irrigation || []).map(e => ({ ...e, kind: 'ejecutado' })),
     ...scheduled.filter(e => e.mm > 0).map(e => ({ ...e, kind: 'programado' })),
   ].filter(e => { const t = dayTs(e.date); return t >= winStart - DAY && t <= winEnd; });
-
-  // Lluvia PREVISTA (forecast a 15 días): ya está incluida en la curva,
-  // se marca en el día en que va a ocurrir.
-  const rainEvents = (scenarioWithoutIrrigation || [])
-    .filter(p => (p.rainfall_mm || 0) > 0)
-    .map(p => ({ date: p.date, mm: Math.round(p.rainfall_mm * 10) / 10 }))
-    .filter(e => { const t = dayTs(e.date); return t >= winStart - DAY && t <= winEnd; });
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -120,6 +125,7 @@ export default function MoistureChart({ detail }) {
             <CartesianGrid stroke="#eef2f6" vertical={showGrid} />
             <XAxis dataKey="t" type="number" domain={[winStart, winEnd]} tickFormatter={fmtX} stroke="#666666" tick={{ fontSize: 11 }} tickMargin={8} />
             <YAxis domain={[yMin, yMax]} stroke="#666666" tick={{ fontSize: 11 }} tickMargin={6} />
+            <YAxis yAxisId="rain" orientation="right" hide domain={[0, rainMax]} allowDataOverflow />
             <Tooltip
               labelFormatter={fmtTip}
               formatter={(v, name) => [v != null ? `${Math.round(v * 10) / 10} mm` : '—', name]}
@@ -144,23 +150,17 @@ export default function MoistureChart({ detail }) {
                 ifOverflow="extendDomain"
               />
             ))}
-            {rainEvents.map((e, i) => (
-              <ReferenceLine
-                key={`rain-${e.date}-${i}`}
-                x={dayTs(e.date)}
-                stroke="#3b82f6"
-                strokeDasharray="2 3"
-                label={{ value: `Lluvia ${e.mm}mm`, fontSize: 9, fill: '#3b82f6', position: 'insideTop', offset: 12 }}
-                ifOverflow="extendDomain"
-              />
-            ))}
-            <Line dataKey="Suma del perfil" stroke="#000000" strokeWidth={2} dot={false} connectNulls />
-            {hasRec && <Line dataKey="Con riego recomendado" stroke="#1a7350" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />}
+            {/* Lluvia del día (observada y prevista) en mm: barra celeste
+                sobre su propio eje — la subida de la curva ese día es
+                el aporte de esa lluvia menos la demanda del cultivo. */}
+            <Bar dataKey="Lluvia" yAxisId="rain" fill="#93c5fd" stroke="#3b82f6" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#1d4ed8' }} />
+            <Line dataKey="Suma del perfil" stroke="#000000" strokeWidth={2} dot={{ r: 2, fill: '#000000', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
+            {hasRec && <Line dataKey="Con riego recomendado" stroke="#1a7350" strokeWidth={1.8} strokeDasharray="5 4" dot={{ r: 2, fill: '#1a7350', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
       <p className="mt-2 text-center text-[11px] text-slate-400">
-        Curva calculada (riegos ejecutados, lluvia observada y demanda del cultivo) · marcas azules = lluvia prevista · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
+        Curva calculada (riegos ejecutados, lluvia observada y demanda del cultivo) · barras celestes = mm de lluvia del día (observada y prevista) · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
       </p>
     </section>
   );

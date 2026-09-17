@@ -221,6 +221,7 @@ async function computeLot(lot, ctx, withHistory) {
   const obs = farm ? ctx.observed.get(farm.id) : null;
   const history = [{ date: startDay, mm: anchor.useful }];
   const irrigationEvents = [];
+  const rainEvents = [];
   let water = anchor.useful;
   let d = dayAfter(startDay, 1);
   while (d <= end) {
@@ -236,6 +237,7 @@ async function computeLot(lot, ctx, withHistory) {
     if (next < 0) next = 0; // suelo del ancla nunca baja del punto de marchitez
     water = round1(next);
     if (irr > 0) irrigationEvents.push({ date: d, mm: irr });
+    if (rain > 0) rainEvents.push({ date: d, mm: rain });
     history.push({ date: d, mm: water });
     d = dayAfter(d, 1);
   }
@@ -258,7 +260,7 @@ async function computeLot(lot, ctx, withHistory) {
     origin: anchor.source,
     anchored_at: end,
     history: withHistory ? history : null,
-    events: { irrigation: irrigationEvents, scheduled: scheduledEvents },
+    events: { irrigation: irrigationEvents, scheduled: scheduledEvents, rain: rainEvents },
     forecast_status: 'ok',
   };
 }
