@@ -33,7 +33,13 @@ export const irrigationRecommendationService = {
 
     // Necesidad NETA del perfil (el cruce ya incluye el riego
     // programado de ese día: solo falta la diferencia al objetivo).
-    const neededMm = round1(Math.max(0, target - hit.available_water_mm));
+    // LLUVIA DEL DÍA SIGUIENTE: si el pronóstico anuncia lluvia al día
+    // siguiente del riego, se descuenta de la necesidad — no se riega
+    // el agua que la lluvia va a aportar. Con esa lluvia el perfil
+    // completa su recarga sin pasar del Target máx.
+    const hitIdx = (days || []).findIndex(d => d.date === hit.date);
+    const rainNextDay = round1((days || [])[hitIdx + 1]?.rainfall_mm ?? 0);
+    const neededMm = round1(Math.max(0, target - hit.available_water_mm - rainNextDay));
     if (neededMm <= 0) return { recommendation: null, scenarioWithIrrigation: scenarioWithoutIrrigation };
 
     // Riego a APLICAR = necesidad / eficiencia de recarga del suelo.
@@ -50,7 +56,7 @@ export const irrigationRecommendationService = {
       recommended_irrigation_m3: volumeM3,
       recommended_start_date: hit.date,
       days_to_threshold: hit.day,
-      reason: `Sin riego adicional al ya programado, el agua útil del perfil alcanza el umbral de recarga (${threshold} mm) dentro de ${hit.day} día${hit.day > 1 ? 's' : ''}. El perfil necesita incorporar ${neededMm} mm para llegar al Target máx (${target} mm) y detenerse ahí — nunca se recomienda pasar ese límite; con la eficiencia de recarga aprendida del suelo (${Math.round(eff * 100)}%) eso exige aplicar ${grossMm} mm (el riego ya programado ese día ya está incluido en el escenario).`,
+      reason: `Sin riego adicional al ya programado, el agua útil del perfil alcanza el umbral de recarga (${threshold} mm) dentro de ${hit.day} día${hit.day > 1 ? 's' : ''}. El perfil necesita incorporar ${neededMm} mm para llegar al Target máx (${target} mm) y detenerse ahí — nunca se recomienda pasar ese límite${rainNextDay > 0 ? `; se descuentan ${rainNextDay} mm de lluvia prevista para el día siguiente` : ''}; con la eficiencia de recarga aprendida del suelo (${Math.round(eff * 100)}%) eso exige aplicar ${grossMm} mm (el riego ya programado ese día ya está incluido en el escenario).`,
       status: 'activa',
     };
     // Escenario CON riego: los mm NETOS de la recomendación se suman
