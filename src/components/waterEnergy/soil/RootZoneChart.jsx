@@ -36,7 +36,7 @@ export default function RootZoneChart({ history, rechargeStorageMm, targetStorag
           <AreaChart data={data} margin={{ top: 10, right: 12, bottom: 4, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis dataKey="t" type="number" domain={['dataMin', 'dataMax']} tickFormatter={fmtX} stroke="#94a3b8" tickMargin={6} />
-            <YAxis domain={[yMin, yMax]} width={52} unit=" mm" tickFormatter={v => Math.round(v)} stroke="#94a3b8" />
+            <YAxis domain={[yMin, yMax]} width={52} tickFormatter={v => `${Math.round(v)} mm`} stroke="#94a3b8" />
             <Tooltip labelFormatter={fmtTip} formatter={v => [`${Math.round(v)} mm`]} />
             {hasRefs && <ReferenceArea y1={rechargeStorageMm} y2={targetStorageMm} fill="#059669" fillOpacity={0.08} strokeOpacity={0} ifOverflow="visible" />}
             {fcStorageMm != null && <ReferenceLine y={fcStorageMm} stroke="#0891b2" strokeDasharray="4 4" label={{ value: 'Capacidad de campo', position: 'insideTopRight', fontSize: 10, fill: '#0891b2' }} />}
