@@ -12,8 +12,21 @@ const fmtTip = t => new Date(t).toLocaleDateString('es-AR', { dateStyle: 'medium
 
 export default function RootZoneChart({ history, rechargeStorageMm, targetStorageMm, fcStorageMm, depthLabel }) {
   const data = (history || []).map(h => ({ t: h.t, hist: h.profile }));
-  const yMax = Math.round(Math.max(fcStorageMm || 0, ...data.map(d => d.hist || 0), 10) * 1.1);
+  // Encuadre del eje Y sobre el rango real de la curva y sus
+  // referencias (con margen), no desde 0 hasta la capacidad de campo:
+  // si el agua del perfil está lejos de ese techo, la curva quedaba
+  // aplastada en una franja y el gráfico se veía mal encuadrado.
+  const histVals = data.map(d => d.hist).filter(v => v != null);
   const hasRefs = rechargeStorageMm != null && targetStorageMm != null;
+  let yMin = 0;
+  let yMax = 10;
+  if (histVals.length) {
+    const maxV = Math.max(...histVals, targetStorageMm ?? 0, fcStorageMm ?? 0);
+    const minV = Math.min(...histVals, rechargeStorageMm ?? Infinity);
+    const span = Math.max(maxV - minV, 20);
+    yMin = Math.max(0, Math.floor((minV - span * 0.15) / 10) * 10);
+    yMax = Math.ceil((maxV + span * 0.08) / 10) * 10;
+  }
   return (
     <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
       <h3 className="text-lg font-bold text-charcoal">Agua en el perfil</h3>
@@ -23,7 +36,7 @@ export default function RootZoneChart({ history, rechargeStorageMm, targetStorag
           <AreaChart data={data} margin={{ top: 10, right: 12, bottom: 4, left: -8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis dataKey="t" type="number" domain={['dataMin', 'dataMax']} tickFormatter={fmtX} stroke="#94a3b8" tickMargin={6} />
-            <YAxis domain={[0, yMax]} unit=" mm" stroke="#94a3b8" />
+            <YAxis domain={[yMin, yMax]} unit=" mm" stroke="#94a3b8" />
             <Tooltip labelFormatter={fmtTip} formatter={v => [`${Math.round(v)} mm`]} />
             {hasRefs && <ReferenceArea y1={rechargeStorageMm} y2={targetStorageMm} fill="#059669" fillOpacity={0.08} strokeOpacity={0} ifOverflow="visible" />}
             {fcStorageMm != null && <ReferenceLine y={fcStorageMm} stroke="#0891b2" strokeDasharray="4 4" label={{ value: 'Capacidad de campo', position: 'insideTopRight', fontSize: 10, fill: '#0891b2' }} />}
