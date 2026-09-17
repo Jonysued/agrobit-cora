@@ -10,10 +10,11 @@
 //   ETc = ET0 × Kc
 //
 // Límites:
-//  · El agua útil nunca supera el TECHO DE GESTIÓN = Target máx
-//    (objetivo de recarga; si no hay, la capacidad útil total TAW).
-//    El exceso por encima del techo drena y se informa como
-//    drainage_mm: nunca se almacena agua por encima del Target máx.
+//  · El agua útil nunca supera la capacidad útil total (TAW):
+//    el exceso se informa como drainage_mm. Lluvias y riegos
+//    programados PUEDEN superar el Target máx y se muestran tal
+//    cual — solo la RECOMENDACIÓN de riego se detiene en el Target
+//    máx (ver irrigationRecommendationService).
 //  · El agua útil nunca cae por debajo de 0:
 //    se marca below_wilting = true.
 //
@@ -36,14 +37,9 @@ export function stepUsefulWaterDay(availableMm, config, day) {
   let next = availableMm + rainMm + irrMm - etcMm;
   let drainageMm = 0;
   const taw = config.total_available_water_capacity_mm;
-  // Techo de gestión: Target máx (nunca por encima del objetivo);
-  // acotado además a la capacidad física del perfil.
-  const cap = config.target_water_mm != null
-    ? (taw != null ? Math.min(config.target_water_mm, taw) : config.target_water_mm)
-    : taw;
-  if (cap != null && next > cap) {
-    drainageMm = round1(next - cap);
-    next = cap;
+  if (taw != null && next > taw) {
+    drainageMm = round1(next - taw);
+    next = taw;
   }
   let belowWilting = false;
   if (next < 0) {
