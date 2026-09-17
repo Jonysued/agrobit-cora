@@ -227,6 +227,20 @@ async function computeLot(lot, ctx, withHistory) {
   // forecast recorte la curva y el gráfico no refleje el valor inicial.
   if (taw != null && anchor.useful > taw) anchor = { ...anchor, useful: taw };
   if (anchor.useful < 0) anchor = { ...anchor, useful: 0 };
+  // REGLA DE CONFIRMACIONES: el punto de partida se ubica siempre
+  // ANTES del primer riego EJECUTADO registrado del lote (aunque ese
+  // riego sea de una fecha anterior a la inicialización). Así toda
+  // confirmación queda dentro de la reconstrucción y la curva Actual
+  // refleja sus mm en el estado actual del lote — sin esto, un ancla
+  // fechada "hoy" dejaría a los riegos de días previos fuera de la
+  // curva y la confirmación no se vería nunca.
+  const firstExecuted = ctx.executed.get(lot.id) ? [...ctx.executed.get(lot.id).keys()].sort()[0] : null;
+  if (firstExecuted) {
+    const beforeFirst = dayAfter(firstExecuted, -1);
+    if (beforeFirst < anchor.date && beforeFirst <= todayStr()) {
+      anchor = { ...anchor, date: beforeFirst };
+    }
+  }
 
   // ---- Reconstrucción diaria: ancla → hoy ----
   // eventos propios del lote + clima observado + demanda del cultivo,
