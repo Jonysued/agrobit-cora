@@ -18,18 +18,27 @@ export default function WaterEnergy() {
   useEffect(() => {
     weatherService.getFarms().then(fs => { setFarms(fs); if (fs.length) setFarmId(fs[0].id); }).catch(() => setFarms([]));
   }, []);
-  const loadOverview = () => {
+  // "Failed to fetch" = falla transitoria de red: la carga del panel
+  // dispara ~25 consultas en paralelo y, en una conexión inestable,
+  // si una sola se cae el panel entero muestra error. Se reintenta
+  // una vez automáticamente antes de mostrar el cartel.
+  const isNetworkError = e => /failed to fetch|network|load failed|connection|timed?\s?out/i.test(e?.message || '');
+  const loadOverview = (retries = 1) => {
     setError(null);
     waterForecastService.getFarmOverview()
       .then(setData)
-      .catch(e => { console.error('[WaterEnergy] getFarmOverview:', e); setError(e?.message || 'Error desconocido'); });
+      .catch(e => {
+        if (retries > 0 && isNetworkError(e)) { loadOverview(retries - 1); return; }
+        console.error('[WaterEnergy] getFarmOverview:', e);
+        setError(isNetworkError(e) ? 'Falla de conexión al cargar el panel. Revisá tu conexión a internet y reintentá.' : (e?.message || 'Error desconocido'));
+      });
   };
-  useEffect(loadOverview, []);
+  useEffect(() => { loadOverview(); }, []);
   if (!data) return error ? (
     <div className="mx-auto max-w-md space-y-3 p-8 text-center">
       <p className="text-sm font-semibold text-slate-600">No se pudo cargar Water &amp; Energy.</p>
       <p className="break-words rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">{error}</p>
-      <Button onClick={loadOverview}>Reintentar</Button>
+      <Button onClick={() => loadOverview()}>Reintentar</Button>
     </div>
   ) : <LoadingState />;
   const { rows, totals } = data;
