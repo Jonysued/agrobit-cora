@@ -22,7 +22,7 @@ const scrollToId = id => document.getElementById(id)?.scrollIntoView({ behavior:
 const actionBtn = 'inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-emerald-800 transition hover:text-emerald-950 disabled:opacity-30 disabled:hover:text-emerald-800';
 
 export default function MoistureChart({ detail }) {
-  const { state, scenarioWithoutIrrigation, scenarioWithIrrigation, history, recommendation, scheduled_irrigation } = detail;
+  const { state, scenarioNoIrrigation, scenarioWithoutIrrigation, scenarioWithIrrigation, history, recommendation, scheduled_irrigation } = detail;
   // Lluvia OBSERVADA por día (mm): alimenta las barras del gráfico junto
   // con la lluvia prevista del forecast.
   const rainByDate = new Map((detail.events?.rain || []).map(e => [e.date, e.mm]));
@@ -42,18 +42,22 @@ export default function MoistureChart({ detail }) {
   // solo se marca aparte si el ancla es hoy y no hay histórico aún.
   const today = isoDay(new Date());
   const rainToday = (history || []).some(h => h.date === today) ? null : rainByDate.get(today) ?? null;
-  // Tres series distintas sobre la MISMA escala de Suma de perfil:
-  // histórico (riegos EJECUTADOS · IrrigationLog), cronograma (riegos
-  // PROGRAMADOS · IrrigationProgram) y escenario CON el riego
-  // recomendado (Water & Energy).
-  const H = 'Histórico (riegos ejecutados)';
-  const S = 'Cronograma (riegos programados)';
+  // Tres líneas sobre la MISMA escala de Suma de perfil:
+  // · ACTUAL (línea negra): curva actual del lote continuada con la
+  //   tendencia SIN ningún riego (lluvia − ETc).
+  // · RIEGO EJECUTADO (línea azul): escenario con los riegos del
+  //   cronograma (IrrigationProgram de la pestaña Riego).
+  // · CON RIEGO RECOMENDADO (verde discontinua): cronograma + riego
+  //   recomendado por el modelo.
+  const H = 'Actual (sin riego)';
+  const S = 'Riego ejecutado';
   const R = 'Con riego recomendado';
   const data = [
     ...(history || []).map(h => ({ t: dayTs(h.date), [H]: storage(h.mm), Lluvia: rainByDate.get(h.date) ?? null })),
     { t: Date.now(), [H]: storage(currentMm), [S]: storage(currentMm), Lluvia: rainToday, ...(hasRec ? { [R]: storage(currentMm) } : {}) },
     ...(scenarioWithoutIrrigation || []).map((p, i) => ({
       t: dayTs(p.date),
+      [H]: storage(scenarioNoIrrigation?.[i]?.available_water_mm ?? null),
       [S]: storage(p.available_water_mm),
       Lluvia: (p.rainfall_mm || 0) > 0 ? Math.round(p.rainfall_mm * 10) / 10 : null,
       ...(hasRec ? { [R]: storage(scenarioWithIrrigation?.[i]?.available_water_mm ?? p.available_water_mm) } : {}),
@@ -169,7 +173,7 @@ export default function MoistureChart({ detail }) {
         </ResponsiveContainer>
       </div>
       <p className="mt-2 text-center text-[11px] text-slate-400">
-        Suma de perfil en mm · negro = histórico (riegos ejecutados) · azul = cronograma (riegos programados) · verde discontinua = con riego recomendado · barras celestes = mm de lluvia del día (observada y prevista) · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
+        Suma de perfil en mm · negro = actual y su tendencia sin riego · azul = riego ejecutado (cronograma) · verde discontinua = con riego recomendado · barras celestes = mm de lluvia del día (observada y prevista) · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
       </p>
     </section>
   );
