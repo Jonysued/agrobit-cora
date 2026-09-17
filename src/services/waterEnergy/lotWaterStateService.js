@@ -229,10 +229,21 @@ async function computeLot(lot, ctx, withHistory) {
   const executed = ctx.executed.get(lot.id) || new Map();
   const farm = ctx.farmByLot.get(lot.id);
   const obs = farm ? ctx.observed.get(farm.id) : null;
-  const history = [{ date: startDay, mm: anchor.useful }];
   const irrigationEvents = [];
   const rainEvents = [];
   let water = anchor.useful;
+  // Riego confirmado el MISMO día del ancla (ancla de HOY): el valor
+  // de partida capturó el estado al momento de inicializarse, así que
+  // un riego confirmado más tarde en el día (típico: el turno se
+  // confirma en la pestaña Riego después de inicializar el lote) no
+  // está incluido. Se suma al valor de partida y se marca como riego
+  // ejecutado del día en el gráfico.
+  if (startDay === end && (executed.get(startDay) || 0) > 0) {
+    const irr = round1(executed.get(startDay) * efficiency);
+    water = round1(Math.min(taw ?? Infinity, water + irr));
+    irrigationEvents.push({ date: startDay, mm: irr });
+  }
+  const history = [{ date: startDay, mm: water }];
   let d = dayAfter(startDay, 1);
   while (d <= end) {
     const irr = round1((executed.get(d) || 0) * efficiency);

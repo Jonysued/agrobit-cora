@@ -45,12 +45,12 @@ export default function MoistureChart({ detail }) {
   // Tres líneas sobre la MISMA escala de Suma de perfil:
   // · ACTUAL (línea negra): curva actual del lote continuada con la
   //   tendencia SIN ningún riego (lluvia − ETc).
-  // · RIEGO EJECUTADO (línea azul): escenario con los riegos del
+  // · RIEGO PROGRAMADO (línea azul): escenario con los riegos del
   //   cronograma (IrrigationProgram de la pestaña Riego).
   // · CON RIEGO RECOMENDADO (verde discontinua): cronograma + riego
   //   recomendado por el modelo.
   const H = 'Actual (sin riego)';
-  const S = 'Riego ejecutado';
+  const S = 'Riego programado';
   const R = 'Con riego recomendado';
   const data = [
     ...(history || []).map(h => ({ t: dayTs(h.date), [H]: storage(h.mm), Lluvia: rainByDate.get(h.date) ?? null })),
@@ -173,7 +173,7 @@ export default function MoistureChart({ detail }) {
         </ResponsiveContainer>
       </div>
       <p className="mt-2 text-center text-[11px] text-slate-400">
-        Suma de perfil en mm · negro = actual y su tendencia sin riego · azul = riego ejecutado (cronograma) · verde discontinua = con riego recomendado · barras celestes = mm de lluvia del día (observada y prevista) · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
+        Suma de perfil en mm · negro = actual y su tendencia sin riego · azul = riego programado (cronograma) · verde discontinua = con riego recomendado · barras celestes = mm de lluvia del día (observada y prevista) · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
       </p>
     </section>
   );
