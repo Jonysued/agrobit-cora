@@ -72,10 +72,14 @@ function buildState(curve) {
 }
 
 // Fila de análisis de un lote (compartida por dashboard y detalle)
-function buildRow(lot, curve, weatherDays, pumps, tariffs) {
+function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const { profile, model, efficiency } = curve;
   const pump = energyService.getPumpForLot(pumps, lot, profile);
   const tariff = energyService.getActiveTariff(tariffs);
+  // Diseño de riego del lote: define la lámina que el equipo puede
+  // aplicar por hora (mm/h) — base del tiempo de bombeo.
+  const design = (designs || []).find(d => d.lot_id === lot.id) || null;
+  const rateMmH = energyService.applicationRateMmH(design, lot);
   const usable = curve.forecast_status === 'ok'
     && curve.config?.configuration_status === 'complete'
     && curve.currentUsefulMm != null;
@@ -112,7 +116,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs) {
   const { recommendation, scenarioWithIrrigation } = canRecommend
     ? irrigationRecommendationService.withRecommendation(config, lot, curve.currentUsefulMm, days, scenarioScheduled)
     : { recommendation: null, scenarioWithIrrigation: scenarioScheduled };
-  const energy = recommendation ? energyService.compute(recommendation.recommended_irrigation_m3, pump, tariff) : null;
+  const energy = recommendation ? energyService.compute(recommendation.recommended_irrigation_m3, pump, tariff, rateMmH, recommendation.recommended_irrigation_mm) : null;
   return {
     ...row,
     kc,
@@ -123,6 +127,8 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs) {
     scenarioWithoutIrrigation: scenarioScheduled,
     scenarioWithIrrigation,
     recommendation,
+    irrigation_design: design,
+    application_rate_mm_h: rateMmH,
     energy,
     below_wilting: scenarioScheduled.some(p => p.below_wilting),
   };
@@ -143,17 +149,18 @@ export const waterForecastService = {
 
   // ---- Dashboard: filas por lote + totales de 7 días ----
   async getFarmOverview() {
-    const [lots, pumps, tariffs] = await Promise.all([
+    const [lots, pumps, tariffs, designs] = await Promise.all([
       this.getLots(),
       energyService.getPumps(),
       energyService.getTariffs(),
+      base44.entities.IrrigationDesign.list(),
     ]);
     const curves = await lotWaterStateService.getLotStates(lots, { withHistory: false });
     const weather = await weatherService.getFarmForecast(lots);
     const rows = lots.map(lot => {
       const curve = curves.get(lot.id);
       if (!curve?.profile) return { lot, profile: null, state: null, forecast_status: 'no_disponible' };
-      return buildRow(lot, curve, weather.get(lot.id) || [], pumps, tariffs);
+      return buildRow(lot, curve, weather.get(lot.id) || [], pumps, tariffs, designs);
     });
     const withState = rows.filter(r => r.forecast_status === 'ok');
     const withRecommendation = withState.filter(r => r.recommendation);
@@ -175,15 +182,16 @@ export const waterForecastService = {
     const lots = await this.getLots();
     const lot = lots.find(l => l.id === lotId);
     if (!lot) return null;
-    const [pumps, tariffs, curves] = await Promise.all([
+    const [pumps, tariffs, curves, designs] = await Promise.all([
       energyService.getPumps(),
       energyService.getTariffs(),
       lotWaterStateService.getLotStates([lot], { withHistory: true }),
+      base44.entities.IrrigationDesign.filter({ lot_id: lotId }),
     ]);
     const curve = curves.get(lotId);
     if (!curve?.profile) return { lot, profile: null, forecast_status: 'no_disponible' };
     const weather = await weatherService.getFarmForecast([lot]);
-    const row = buildRow(lot, curve, weather.get(lot.id) || [], pumps, tariffs);
+    const row = buildRow(lot, curve, weather.get(lot.id) || [], pumps, tariffs, designs);
     // Serie calculada del lote (agua útil mm por día) + eventos propios
     return {
       ...row,

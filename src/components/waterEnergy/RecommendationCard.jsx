@@ -27,6 +27,7 @@ export default function RecommendationCard({ detail }) {
     ['Volumen', `${recommendation.recommended_irrigation_m3.toLocaleString('es-AR')} m³`],
     ['Ventana recomendada', fmtDate(recommendation.recommended_start_date)],
     ['Tiempo estimado de bombeo', energy ? `${energy.hours} h` : 'Sin bomba asociada'],
+    ...(detail.application_rate_mm_h ? [['Lámina por hora del equipo', `${detail.application_rate_mm_h} mm/h`]] : []),
     ['Consumo estimado', energy ? `${energy.kwh.toLocaleString('es-AR')} kWh` : '—'],
     ['Costo energético estimado', energy ? `$ ${energy.cost.toLocaleString('es-AR')}` : '—'],
   ];

@@ -39,17 +39,35 @@ export const energyService = {
       || null;
   },
 
-  // ESTIMACIÓN — energía para bombear volumeM3
-  compute(volumeM3, pump, tariff) {
-    if (!pump || !pump.flow_m3_h || !volumeM3) return null;
-    const hours = volumeM3 / pump.flow_m3_h;
+  // LÁMINA POR HORA del equipo de riego del lote (mm/h): caudal del
+  // emisor repartido en el área que cubre cada emisor, según el
+  // DISEÑO DE RIEGO del lote (líneas de goteo por hilera, espaciado
+  // de emisores) y el marco de plantación (distancia entre hileras).
+  // Es la capacidad real de aplicación del equipo.
+  applicationRateMmH(design, lot) {
+    if (!design?.emitter_flow_lh || !design?.emitter_spacing_m) return null;
+    const linesPerRow = design.drip_lines_per_row || 1;
+    if (!lot?.row_spacing || linesPerRow <= 0) return null;
+    const areaPerEmitterM2 = design.emitter_spacing_m * (lot.row_spacing / linesPerRow);
+    if (areaPerEmitterM2 <= 0) return null;
+    return Math.round((design.emitter_flow_lh / areaPerEmitterM2) * 100) / 100;
+  },
+
+  // ESTIMACIÓN — energía para bombear volumeM3. Si el lote tiene
+  // DISEÑO DE RIEGO, las horas se calculan con la lámina que el
+  // equipo aplica por hora (mm/h); si no, con el caudal de la bomba.
+  compute(volumeM3, pump, tariff, rateMmH = null, recommendedMm = null) {
+    const hours = rateMmH && recommendedMm ? recommendedMm / rateMmH
+      : (pump?.flow_m3_h && volumeM3 ? volumeM3 / pump.flow_m3_h : null);
+    if (hours == null || !pump?.power_kw) return null;
     const kwh = hours * pump.power_kw;
     const cost = kwh * (tariff?.price_per_kwh ?? DEFAULT_TARIFF.price_per_kwh);
     return {
       hours: Math.round(hours * 10) / 10,
       kwh: Math.round(kwh),
       cost: Math.round(cost),
-      kwhPerM3: Math.round((pump.power_kw / pump.flow_m3_h) * 1000) / 1000,
+      kwhPerM3: pump.flow_m3_h ? Math.round((pump.power_kw / pump.flow_m3_h) * 1000) / 1000 : null,
+      applicationRateMmH: rateMmH,
     };
   },
 
