@@ -71,9 +71,18 @@ function simulateFarmDay(dateStr) {
 // ---- Open-Meteo: pronóstico real por lat/lon, sin API key ----
 async function fetchOpenMeteoForecast(latitude, longitude) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,rain_sum,et0_fao_evapotranspiration&timezone=auto&forecast_days=16`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Open-Meteo no disponible');
-  const json = await res.json();
+  // Timeout: si Open-Meteo no responde, se usa el pronóstico simulado
+  // en vez de dejar la pestaña cargando indefinidamente.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  let json;
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error('Open-Meteo no disponible');
+    json = await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
   return json.daily.time.slice(1).map((date, i) => ({
     date,
     temperature_max_c: round1(json.daily.temperature_2m_max[i + 1] ?? 0),
@@ -125,7 +134,10 @@ export const weatherService = {
       const [latest] = await base44.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', 1);
       const ageMin = latest ? (Date.now() - new Date(latest.timestamp).getTime()) / 60000 : Infinity;
       if (ageMin <= STALE_MINUTES) return null;
-      return await this.refreshStationData(station.id);
+      // La estación no puede bloquear la carga: si no responde en 20 s
+      // se usa el último dato guardado.
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Estación sin respuesta')), 20000));
+      return await Promise.race([this.refreshStationData(station.id), timeout]);
     } catch { return null; } // estación caída → se usa el último dato guardado
   },
   async getObservedWeather(farmId, limit = 96) {
