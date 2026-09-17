@@ -40,9 +40,15 @@ export const irrigationRecommendationService = {
       if (p.available_water_mm > threshold) continue;
       const hitIdx = (days || []).findIndex(d => d.date === p.date);
       const irrScheduled = round1((days || [])[hitIdx]?.irrigation_mm || 0);
+      // REGLA X+1: el riego del día del cruce y la lluvia DE ESE MISMO
+      // día suben el punto del día siguiente, junto con el riego
+      // recomendado — se descuentan AMBAS (más la lluvia prevista del
+      // día siguiente) para que el punto posterior al riego NUNCA
+      // supere el Target máx.
+      const rainHit = round1((days || [])[hitIdx]?.rainfall_mm ?? 0);
       const rainNext = round1((days || [])[hitIdx + 1]?.rainfall_mm ?? 0);
-      const needed = round1(Math.max(0, target - p.available_water_mm - irrScheduled - rainNext));
-      if (needed > 0) { hit = p; neededMm = needed; rainNextDay = rainNext; break; }
+      const needed = round1(Math.max(0, target - p.available_water_mm - irrScheduled - rainHit - rainNext));
+      if (needed > 0) { hit = p; neededMm = needed; rainNextDay = round1(rainHit + rainNext); break; }
     }
     if (!hit) return { recommendation: null, scenarioWithIrrigation: scenarioWithoutIrrigation };
 
@@ -60,7 +66,7 @@ export const irrigationRecommendationService = {
       recommended_irrigation_m3: volumeM3,
       recommended_start_date: hit.date,
       days_to_threshold: hit.day,
-      reason: `Sin riego adicional al ya programado, el agua útil del perfil alcanza el umbral de recarga (${threshold} mm) dentro de ${hit.day} día${hit.day > 1 ? 's' : ''}. El perfil necesita incorporar ${neededMm} mm para llegar al Target máx (${target} mm) y detenerse ahí — nunca se recomienda pasar ese límite${rainNextDay > 0 ? `; se descuentan ${rainNextDay} mm de lluvia prevista para el día siguiente` : ''}; con la eficiencia de recarga aprendida del suelo (${Math.round(eff * 100)}%) eso exige aplicar ${grossMm} mm (además del riego ya programado ese día).`,
+      reason: `Sin riego adicional al ya programado, el agua útil del perfil alcanza el umbral de recarga (${threshold} mm) dentro de ${hit.day} día${hit.day > 1 ? 's' : ''}. El perfil necesita incorporar ${neededMm} mm para llegar al Target máx (${target} mm) y detenerse ahí — nunca se recomienda pasar ese límite${rainNextDay > 0 ? `; se descuentan ${rainNextDay} mm de lluvia prevista (día del riego y día siguiente)` : ''}; con la eficiencia de recarga aprendida del suelo (${Math.round(eff * 100)}%) eso exige aplicar ${grossMm} mm (además del riego ya programado ese día).`,
       status: 'activa',
     };
     // Escenario CON riego: los mm NETOS de la recomendación se suman
