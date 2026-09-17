@@ -36,7 +36,7 @@ export default function WaterEnergyConfig() {
       <ModuleHeader />
       <div className="space-y-5">
         <ProfileSection lots={data.lots} profiles={data.profiles} onChange={refresh} />
-        <SensorSection lots={data.lots} probes={data.probes} onChange={refresh} />
+        <SensorSection lots={data.lots} probes={data.probes} profiles={data.profiles} models={data.models} onChange={refresh} />
         <PumpSection lots={data.lots} pumps={data.pumps} onChange={refresh} />
         <TariffSection tariffs={data.tariffs} onChange={refresh} />
         <LinkSection lots={data.lots} profiles={data.profiles} probes={data.probes} models={data.models} pumps={data.pumps} onChange={refresh} />

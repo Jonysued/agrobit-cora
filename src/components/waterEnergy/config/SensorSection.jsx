@@ -3,6 +3,7 @@ import { Pencil, Trash2, Plus, X, Loader2, PlugZap, RefreshCw } from 'lucide-rea
 import { base44 } from '@/api/base44Client';
 import ConfigPanel, { Field, inputCls } from './ConfigPanel';
 import { sensorService } from '@/services/waterEnergy';
+import { linkedLotsFor } from '@/services/waterEnergy/soilWaterService';
 
 // Registro de sondas y su vínculo con la API del proveedor.
 // El lote de cada sonda se asigna en "Vinculación de perfiles".
@@ -10,9 +11,14 @@ const PROVIDERS = [['sentek', 'Sentek · IrriMAX Live'], ['wiseconn', 'WiseConn'
 const EMPTY_PROBE = { name: '', provider: '', external_device_id: '', active: true };
 const rel = ts => { if (!ts) return '—'; const h = Math.round((Date.now() - new Date(ts).getTime()) / 3600000); return h < 1 ? 'hace instantes' : h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`; };
 const lotName = (lots, id) => lots.find(l => l.id === id)?.name || 'Sin vincular';
+// El lote de la sonda: directo o derivado de su modelo de suelo
+const lotLabel = (s, lots, profiles, models) => {
+  const linked = linkedLotsFor(s, lots, profiles, models);
+  return linked.length ? (linked.length > 1 ? `${linked[0].name} (+${linked.length - 1})` : linked[0].name) : 'Sin vincular';
+};
 const STATUS = { connected: '🟢 Conectada', disconnected: '🔴 Desconectada', error: '🔴 Error de conexión', missing_credentials: '🟡 Falta credencial', misconfigured: '🟡 Config. incompleta' };
 
-export default function SensorSection({ lots, probes, onChange }) {
+export default function SensorSection({ lots, probes, profiles, models, onChange }) {
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [tests, setTests] = useState({});
@@ -79,7 +85,7 @@ export default function SensorSection({ lots, probes, onChange }) {
                   <React.Fragment key={s.id}>
                     <tr className="border-b border-slate-100">
                       <td className="py-2 pr-3"><b className="text-slate-700">{s.name}</b></td>
-                      <td className="pr-3 text-slate-600">{lotName(lots, s.lot_id)}</td>
+                      <td className="pr-3 text-slate-600">{lotLabel(s, lots, profiles, models)}</td>
                       <td className="pr-3 text-slate-600">{s.provider || '—'}</td>
                       <td className="pr-3 text-slate-600">{s.external_device_id || '—'}</td>
                       <td className="pr-3 text-slate-600">{rel(s.last_reading_at)}</td>
