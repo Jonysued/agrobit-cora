@@ -4,12 +4,10 @@
 // Un punto por día + un PUNTO INTERMEDIO a las 00:00 del día
 // siguiente de cada riego o lluvia. Con la regla X+1 (el agua del día
 // X entra al perfil en el día X+1), el punto intermedio sube
-// EXACTAMENTE los mm aplicados (riego del programa + lluvia del día),
-// SIN recorte por capacidad: el pico siempre refleja fielmente los mm
-// regados. Desde ahí la curva baja con la ETc del día, y si el pico
-// superó la capacidad útil del perfil (TAW), el excedente drena y el
-// punto diario del día vuelve al techo — el agua que el suelo no
-// puede almacenar no se acumula.
+// EXACTAMENTE los mm aplicados (riego del programa + lluvia del día)
+// y desde ahí baja con la ETc del día. El salto se acota a la
+// capacidad útil del perfil (TAW): el agua que no entra drena y no se
+// dibuja (la línea de capacidad de campo del gráfico marca el techo).
 // ============================================================
 const DAY = 86400000;
 const dayTs = d => new Date(`${d}T12:00:00`).getTime();
@@ -24,6 +22,8 @@ export function buildProfileSeries(detail, L, today) {
   // Escala de almacenamiento: agua útil del balance + agua del punto
   // de marchitez (constante del perfil).
   const wiltingMm = state.wilting_storage_mm ?? 0;
+  const tawMm = state.total_available_water_capacity_mm ?? null;
+  const capMm = mm => Math.max(0, tawMm != null ? Math.min(mm, tawMm) : mm);
   const storage = mm => wiltingMm + mm;
   const currentMm = state.current_available_water_mm;
 
@@ -37,7 +37,7 @@ export function buildProfileSeries(detail, L, today) {
     if (i > 0) {
       const prev = history[i - 1];
       const jump = (executedByDate.get(prev.date) || 0) + (rainByDate.get(prev.date) || 0);
-      if (jump > 0) data.push({ t: midTs(h.date), [L.H]: storage(prev.mm + jump) });
+      if (jump > 0) data.push({ t: midTs(h.date), [L.H]: storage(capMm(prev.mm + jump)) });
     }
     data.push({ t: dayTs(h.date), [L.H]: storage(h.mm), Lluvia: rainByDate.get(h.date) ?? null });
   });
@@ -50,13 +50,13 @@ export function buildProfileSeries(detail, L, today) {
       const mid = { t: midTs(p.date) };
       const prevS = scenarioWithoutIrrigation[i - 1];
       const jumpS = (prevS.irrigation_mm || 0) + (prevS.rainfall_mm || 0);
-      if (jumpS > 0) mid[L.S] = storage(prevS.available_water_mm + jumpS);
+      if (jumpS > 0) mid[L.S] = storage(capMm(prevS.available_water_mm + jumpS));
       const prevH = scenarioNoIrrigation?.[i - 1];
-      if (prevH && (prevH.rainfall_mm || 0) > 0) mid[L.H] = storage(prevH.available_water_mm + prevH.rainfall_mm);
+      if (prevH && (prevH.rainfall_mm || 0) > 0) mid[L.H] = storage(capMm(prevH.available_water_mm + prevH.rainfall_mm));
       const prevR = hasRec ? scenarioWithIrrigation?.[i - 1] : null;
       if (prevR) {
         const jumpR = (prevR.irrigation_mm || 0) + (prevR.rainfall_mm || 0);
-        if (jumpR > 0) mid[L.R] = storage(prevR.available_water_mm + jumpR);
+        if (jumpR > 0) mid[L.R] = storage(capMm(prevR.available_water_mm + jumpR));
       }
       if (mid[L.S] != null || mid[L.H] != null || mid[L.R] != null) data.push(mid);
     }

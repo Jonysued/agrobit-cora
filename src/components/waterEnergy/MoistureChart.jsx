@@ -52,6 +52,7 @@ export default function MoistureChart({ detail }) {
   const rainMax = Math.max(10, ...data.map(d => d.Lluvia || 0)) * 2.5;
   const rechargeMm = state.recharge_storage_mm;
   const targetMm = state.target_storage_mm;
+  const fcMm = state.field_capacity_storage_mm;
   const hasRefs = rechargeMm != null && targetMm != null;
 
   // ---- Ventana visible (RANGO DE FECHAS) ----
@@ -69,7 +70,7 @@ export default function MoistureChart({ detail }) {
 
   // Escala Y recortada al rango visible (como la referencia), no desde 0
   const curveVals = filtered.flatMap(d => [d[H], d[S]].filter(v => v != null));
-  const maxV = Math.max(...curveVals, targetMm ?? 0);
+  const maxV = Math.max(...curveVals, targetMm ?? 0, fcMm ?? 0);
   const minV = Math.min(...curveVals, rechargeMm ?? Infinity);
   const span = Math.max(maxV - minV, 20);
   const yMin = Math.max(0, Math.floor((minV - span * 0.15) / 10) * 10);
@@ -128,6 +129,9 @@ export default function MoistureChart({ detail }) {
               contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}
             />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} iconType="plainline" />
+            {fcMm != null && (
+              <ReferenceLine y={fcMm} stroke="#334155" label={{ value: 'Capacidad de campo', fontSize: 9, fill: '#334155', position: 'insideTopLeft' }} ifOverflow="visible" />
+            )}
             {hasRefs && (
               <>
                 <ReferenceArea y1={rechargeMm} y2={targetMm} fill="#eefaf3" strokeOpacity={0} ifOverflow="visible" />
@@ -159,7 +163,7 @@ export default function MoistureChart({ detail }) {
         </ResponsiveContainer>
       </div>
       <p className="mt-2 text-center text-[11px] text-slate-400">
-        Suma de perfil en mm · negro = actual y su tendencia sin riego · azul = riego programado (cronograma) · verde discontinua = con riego recomendado · línea gris punteada = hoy · barras celestes = mm de lluvia del día (observada y prevista) · el pico de cada riego/lluvia marca los mm completos aplicados; lo que supera la capacidad del suelo drena y la curva vuelve al techo · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
+        Suma de perfil en mm · negro = actual y su tendencia sin riego · azul = riego programado (cronograma) · verde discontinua = con riego recomendado · línea gris punteada = hoy · barras celestes = mm de lluvia del día (observada y prevista) · línea gris sólida = capacidad de campo (el agua que la supera drena y no se almacena) · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
       </p>
     </section>
   );
