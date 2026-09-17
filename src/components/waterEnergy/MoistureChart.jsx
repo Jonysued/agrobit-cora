@@ -166,6 +166,8 @@ export default function MoistureChart({ detail }) {
             {/* Lluvia del día (observada y prevista) en mm: barra celeste
                 sobre su propio eje — la subida de la curva ese día es
                 el aporte de esa lluvia menos la demanda del cultivo. */}
+            {/* Línea de HOY: separa el histórico (izquierda) del forecast (derecha) */}
+            <ReferenceLine x={dayTs(today)} stroke="#64748b" strokeDasharray="3 3" label={{ value: 'Hoy', fontSize: 9, fill: '#64748b', position: 'top' }} ifOverflow="extendDomain" />
             <Bar dataKey="Lluvia" yAxisId="rain" fill="#93c5fd" stroke="#3b82f6" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#1d4ed8' }} />
             <Line dataKey={H} stroke="#000000" strokeWidth={2} dot={{ r: 2, fill: '#000000', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
             <Line dataKey={S} stroke="#0284c7" strokeWidth={2} dot={{ r: 2, fill: '#0284c7', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
@@ -174,7 +176,7 @@ export default function MoistureChart({ detail }) {
         </ResponsiveContainer>
       </div>
       <p className="mt-2 text-center text-[11px] text-slate-400">
-        Suma de perfil en mm · negro = actual y su tendencia sin riego · azul = riego programado (cronograma) · verde discontinua = con riego recomendado · barras celestes = mm de lluvia del día (observada y prevista) · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
+        Suma de perfil en mm · negro = actual y su tendencia sin riego · azul = riego programado (cronograma) · verde discontinua = con riego recomendado · línea gris punteada = hoy · barras celestes = mm de lluvia del día (observada y prevista) · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
       </p>
     </section>
   );
