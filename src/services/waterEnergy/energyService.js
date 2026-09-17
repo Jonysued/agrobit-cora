@@ -1,4 +1,5 @@
 import { base44 } from '@/api/base44Client';
+import { densityOf } from '@/lib/farmCalculations';
 
 // ============================================================
 // energyService — bombas, tarifas y cálculo energético.
@@ -39,18 +40,18 @@ export const energyService = {
       || null;
   },
 
-  // LÁMINA POR HORA del equipo de riego del lote (mm/h): caudal del
-  // emisor repartido en el área que cubre cada emisor, según el
-  // DISEÑO DE RIEGO del lote (líneas de goteo por hilera, espaciado
-  // de emisores) y el marco de plantación (distancia entre hileras).
-  // Es la capacidad real de aplicación del equipo.
+  // LÁMINA POR HORA del equipo de riego del lote (mm/h) — MISMA
+  // fórmula que la vista previa de la pestaña Riego y que la lámina
+  // de los programas en la curva hídrica (lotIrrigationMm): caudal
+  // por planta (emisor × emisores por planta) repartido en el marco
+  // de plantación. Una sola fórmula garantiza que las horas de la
+  // recomendación coincidan con las horas de un programa de riego
+  // para la misma lámina.
   applicationRateMmH(design, lot) {
-    if (!design?.emitter_flow_lh || !design?.emitter_spacing_m) return null;
-    const linesPerRow = design.drip_lines_per_row || 1;
-    if (!lot?.row_spacing || linesPerRow <= 0) return null;
-    const areaPerEmitterM2 = design.emitter_spacing_m * (lot.row_spacing / linesPerRow);
-    if (areaPerEmitterM2 <= 0) return null;
-    return Math.round((design.emitter_flow_lh / areaPerEmitterM2) * 100) / 100;
+    if (!design?.emitter_flow_lh || !design?.emitters_per_plant) return null;
+    if (!lot?.row_spacing || !lot?.plant_spacing) return null;
+    const mmh = design.emitter_flow_lh * design.emitters_per_plant * densityOf(lot) / 10000;
+    return mmh > 0 ? Math.round(mmh * 100) / 100 : null;
   },
 
   // ESTIMACIÓN — energía para bombear volumeM3. Si el lote tiene
