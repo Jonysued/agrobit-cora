@@ -129,9 +129,11 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
     irrigation_mm: scheduledByDate.get(d.date) ?? 0,
   }));
   const scenarioScheduled = runUsefulWaterScenario(curve.currentUsefulMm, config, days);
+  // La recomendación sigue mirando la ventana de 15 días del modelo,
+  // aunque los escenarios (y el gráfico) proyecten 30 días.
   const canRecommend = !kc_missing;
   const { recommendation, scenarioWithIrrigation } = canRecommend
-    ? irrigationRecommendationService.withRecommendation(config, lot, curve.currentUsefulMm, days, scenarioScheduled, efficiency)
+    ? irrigationRecommendationService.withRecommendation(config, lot, curve.currentUsefulMm, days, scenarioScheduled.slice(0, 15), efficiency)
     : { recommendation: null, scenarioWithIrrigation: scenarioScheduled };
   const energy = recommendation ? energyService.compute(recommendation.recommended_irrigation_m3, pump, tariff, rateMmH, recommendation.recommended_irrigation_mm) : null;
   return {
@@ -211,7 +213,7 @@ export const waterForecastService = {
     return { rows, totals, tariff: energyService.getActiveTariff(tariffs) };
   },
 
-  // ---- Detalle de un lote: histórico calculado + HOY + forecast a 15 días ----
+  // ---- Detalle de un lote: histórico calculado + HOY + forecast a 30 días ----
   async getLotDetail(lotId) {
     const lots = await this.getLots();
     const lot = lots.find(l => l.id === lotId);

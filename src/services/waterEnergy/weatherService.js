@@ -236,9 +236,11 @@ export const weatherService = {
     };
   },
 
-  // Map<lot_id, [pronóstico × 15 días a partir de mañana]>
-  // Con ubicación de finca: Open-Meteo real (ETc calculado por cultivo).
-  // Sin ubicación: registros guardados o demo simulado.
+  // Map<lot_id, [pronóstico × 30 días a partir de mañana]>
+  // Con ubicación de finca: Open-Meteo real hasta donde alcanza el
+  // pronóstico (ETc calculado por cultivo); el resto son registros
+  // guardados o demo simulado. Sin ubicación: registros guardados o
+  // demo simulado para los 30 días.
   async getFarmForecast(lots) {
     const [stored, farms] = await Promise.all([base44.entities.WeatherForecast.list(), base44.entities.Farm.list()]);
     const daysByFarm = new Map();
@@ -250,7 +252,7 @@ export const weatherService = {
     for (const lot of lots) {
       const farmDays = daysByFarm.get(lot.farm);
       const days = [];
-      for (let i = 1; i <= 15; i++) {
+      for (let i = 1; i <= 30; i++) {
         const dateStr = isoDate(addDays(i));
         const fd = farmDays?.find(d => d.date === dateStr);
         if (fd) {

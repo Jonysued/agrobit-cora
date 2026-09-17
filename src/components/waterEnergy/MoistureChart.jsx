@@ -5,7 +5,7 @@ import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceArea, Referen
 // SUMA DE PERFIL (mm de agua almacenada en el perfil del suelo) —
 // CURVA CALCULADA del lote: reconstrucción diaria desde el estado
 // inicial (riegos EJECUTADOS, lluvia observada, ETc) como línea
-// negra + HOY + forecast a 15 días con los riegos PROGRAMADOS (línea
+// negra + HOY + forecast a 30 días con los riegos PROGRAMADOS (línea
 // azul) y, si corresponde, el escenario con el riego RECOMENDADO
 // (línea verde discontinua).
 // Zonas: verde = zona objetivo (Target mín → Target máx), rosa =
@@ -17,7 +17,7 @@ const fmtX = t => new Date(t).toLocaleDateString('es-AR', { day: '2-digit', mont
 const fmtRange = t => new Date(t).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
 const fmtTip = t => new Date(t).toLocaleDateString('es-AR', { dateStyle: 'medium' });
 
-const RANGES = [[30, '30 días'], [60, '60 días'], [90, '90 días'], [180, '180 días']];
+const RANGES = [[45, '45 días'], [60, '60 días'], [90, '90 días'], [180, '180 días']];
 const scrollToId = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 const actionBtn = 'inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-emerald-800 transition hover:text-emerald-950 disabled:opacity-30 disabled:hover:text-emerald-800';
 
@@ -27,7 +27,8 @@ export default function MoistureChart({ detail }) {
   // con la lluvia prevista del forecast.
   const rainByDate = new Map((detail.events?.rain || []).map(e => [e.date, e.mm]));
   // ---- Controles del encabezado ----
-  const [rangeDays, setRangeDays] = useState(30);
+  // Por defecto: 15 días hacia atrás y 30 hacia adelante (45 días).
+  const [rangeDays, setRangeDays] = useState(45);
   const [offset, setOffset] = useState(0); // días que la ventana retrocede respecto del dato más reciente
   const [showGrid, setShowGrid] = useState(true);
   const hasRec = recommendation != null;
