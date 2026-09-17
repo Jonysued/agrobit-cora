@@ -50,7 +50,6 @@ export default function RecommendationCard({ detail }) {
           ))}
         </div>
       </div>
-      <p className="mt-4 rounded-xl bg-white/10 p-3 text-sm text-white/80">{recommendation.reason}</p>
     </section>
   );
 }
