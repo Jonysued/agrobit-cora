@@ -240,6 +240,10 @@ export const waterForecastService = {
       history: curve.history || [],
       events: curve.events,
       efficiency: curve.efficiency,
+      // Punto de partida de la curva: el gráfico encuadra su ventana y
+      // marca este punto (fecha + mm de la inicialización).
+      anchor_date: curve.anchor_date,
+      anchor_storage_mm: curve.anchor_storage_mm,
     };
   },
 };

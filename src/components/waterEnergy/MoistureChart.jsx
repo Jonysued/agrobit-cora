@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight, PenLine, Ruler, SlidersHorizontal } from 'lucide-react';
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { buildProfileSeries } from './profileChartSeries';
@@ -25,10 +25,13 @@ const actionBtn = 'inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-eme
 export default function MoistureChart({ detail }) {
   const { state, recommendation, scheduled_irrigation } = detail;
   // ---- Controles del encabezado ----
-  // Por defecto: 15 días hacia atrás y 30 hacia adelante (45 días).
-  const [rangeDays, setRangeDays] = useState(45);
+  // Rango null = AUTOMÁTICO (incluye el punto de inicialización).
+  const [rangeDays, setRangeDays] = useState(null);
   const [offset, setOffset] = useState(0); // días que la ventana retrocede respecto del dato más reciente
   const [showGrid, setShowGrid] = useState(true);
+  // Nueva inicialización del estado: el gráfico vuelve a encuadrar
+  // la ventana sobre el nuevo punto de partida.
+  useEffect(() => { setRangeDays(null); setOffset(0); }, [detail.anchor_date]);
   const hasRec = recommendation != null;
   const scheduled = scheduled_irrigation || [];
 
@@ -58,15 +61,27 @@ export default function MoistureChart({ detail }) {
   // ---- Ventana visible (RANGO DE FECHAS) ----
   const dataMinTs = Math.min(...data.map(d => d.t));
   const dataMaxTs = Math.max(...data.map(d => d.t));
-  const maxOffset = Math.max(0, Math.ceil((dataMaxTs - dataMinTs - rangeDays * DAY) / DAY));
+  // Rango AUTOMÁTICO por defecto: la ventana incluye siempre el punto
+  // de INICIALIZACIÓN del estado hídrico, así la curva se ve arrancar
+  // en la fecha y los mm ingresados. Con inicialización reciente
+  // queda en los 45 días estándar (15 atrás + 30 de forecast); el
+  // usuario puede fijar otro rango desde el selector.
+  const anchorTs = detail.anchor_date ? dayTs(detail.anchor_date) : null;
+  const autoRange = (() => {
+    if (!anchorTs) return 45;
+    const need = Math.ceil((dataMaxTs - anchorTs) / DAY);
+    return RANGES.map(([v]) => v).find(v => v >= need) ?? 180;
+  })();
+  const effRange = rangeDays ?? autoRange;
+  const maxOffset = Math.max(0, Math.ceil((dataMaxTs - dataMinTs - effRange * DAY) / DAY));
   const effOffset = Math.min(offset, maxOffset);
   const winEnd = dataMaxTs - effOffset * DAY;
   // La ventana nunca empieza antes del primer dato: si la curva es más
   // corta que el rango elegido, el gráfico se ajusta a los datos reales
   // (la curva arranca al inicio del gráfico, sin vacío a la izquierda).
-  const winStart = Math.max(dataMinTs, winEnd - rangeDays * DAY);
+  const winStart = Math.max(dataMinTs, winEnd - effRange * DAY);
   const filtered = data.filter(d => d.t >= winStart - DAY && d.t <= winEnd + DAY / 2);
-  const step = Math.ceil(rangeDays / 2);
+  const step = Math.ceil(effRange / 2);
 
   // Escala Y recortada al rango visible (como la referencia), no desde 0
   const curveVals = filtered.flatMap(d => [d[H], d[S]].filter(v => v != null));
@@ -99,7 +114,7 @@ export default function MoistureChart({ detail }) {
             <div className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700">
               <Calendar size={14} className="text-slate-400" />
               {fmtRange(winStart)} - {fmtRange(winEnd)}
-              <select value={rangeDays} onChange={e => setRangeDays(+e.target.value)} className="cursor-pointer border-0 bg-transparent text-xs font-semibold text-slate-500 outline-none" aria-label="Duración del rango">
+              <select value={effRange} onChange={e => setRangeDays(+e.target.value)} className="cursor-pointer border-0 bg-transparent text-xs font-semibold text-slate-500 outline-none" aria-label="Duración del rango">
                 {RANGES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
@@ -155,6 +170,15 @@ export default function MoistureChart({ detail }) {
                 sube la curva recién el día SIGUIENTE. */}
             {/* Línea de HOY: separa el histórico (izquierda) del forecast (derecha) */}
             <ReferenceLine x={dayTs(today)} stroke="#64748b" strokeDasharray="3 3" label={{ value: 'Hoy', fontSize: 9, fill: '#64748b', position: 'top' }} ifOverflow="extendDomain" />
+            {/* INICIALIZACIÓN del estado hídrico: fecha y mm desde donde
+                arranca la curva calculada (si quedó dentro de la ventana) */}
+            {anchorTs && anchorTs < dayTs(today) && anchorTs >= winStart - DAY && anchorTs <= winEnd && (
+              <ReferenceLine
+                x={anchorTs} stroke="#7c3aed" strokeDasharray="1 3"
+                label={{ value: `Inicialización · ${detail.anchor_storage_mm} mm`, fontSize: 9, fill: '#7c3aed', position: 'top' }}
+                ifOverflow="extendDomain"
+              />
+            )}
             <Bar dataKey="Lluvia" yAxisId="rain" fill="#93c5fd" stroke="#3b82f6" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#1d4ed8' }} />
             <Line dataKey={H} stroke="#000000" strokeWidth={2} dot={{ r: 2, fill: '#000000', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
             <Line dataKey={S} stroke="#0284c7" strokeWidth={2} dot={{ r: 2, fill: '#0284c7', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
@@ -163,7 +187,7 @@ export default function MoistureChart({ detail }) {
         </ResponsiveContainer>
       </div>
       <p className="mt-2 text-center text-[11px] text-slate-400">
-        Suma de perfil en mm · negro = actual y su tendencia sin riego · azul = riego programado (cronograma) · verde discontinua = con riego recomendado · línea gris punteada = hoy · barras celestes = mm de lluvia del día (observada y prevista) · línea gris sólida = capacidad de campo (el agua que la supera drena y no se almacena) · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
+        Suma de perfil en mm · negro = actual y su tendencia sin riego · azul = riego programado (cronograma) · verde discontinua = con riego recomendado · línea gris punteada = hoy · violeta punteada = inicialización del estado hídrico (mm y fecha ingresados, arranque de la curva) · barras celestes = mm de lluvia del día (observada y prevista) · línea gris sólida = capacidad de campo (el agua que la supera drena y no se almacena) · zona verde = objetivo · zona rosa = bajo umbral de recarga · modelo EXPERIMENTAL
       </p>
     </section>
   );

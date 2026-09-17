@@ -373,6 +373,11 @@ async function computeLot(lot, ctx, withHistory) {
     state_source: anchor.source,
     origin: anchor.source,
     anchored_at: end,
+    // Punto de partida de la curva (fecha + valor en escala de Suma de
+    // perfil): el gráfico encuadra su ventana y marca este punto para
+    // que la inicialización se vea reflejada.
+    anchor_date: anchor.date,
+    anchor_storage_mm: round1(wilting + anchor.useful),
     history: withHistory ? history : null,
     events: { irrigation: irrigationEvents, scheduled: scheduledEvents, scheduledPrograms, pendingPrograms, rain: rainEvents },
     forecast_status: 'ok',
@@ -417,6 +422,15 @@ export const lotWaterStateService = {
     if (useful < 0) useful = 0;
     const stored = round1(wilting + useful);
     await base44.entities.SoilProfile.update(profile.id, { manual_initial_water_mm: useful });
+    // Una nueva inicialización REINICIA la curva: se eliminan los
+    // estados explícitos previos del lote. Sin esto, una
+    // re-inicialización con fecha ANTERIOR perdería contra el registro
+    // previo (el ancla se elige por el timestamp más reciente) y el
+    // gráfico seguiría mostrando la inicialización vieja.
+    const priorStates = await base44.entities.LotWaterState.filter({ lot_id: lotId });
+    await Promise.all(priorStates
+      .filter(s => s.source === 'manual_adjustment' || s.source === 'initialized')
+      .map(s => base44.entities.LotWaterState.delete(s.id)));
     return base44.entities.LotWaterState.create({
       lot_id: lotId,
       timestamp: date ? `${date}T12:00:00` : new Date().toISOString(),
