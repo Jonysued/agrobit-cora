@@ -74,6 +74,10 @@ export default async function (req) {
       solar_radiation_w_m2: obs.solar_radiation_w_m2,
       atmospheric_pressure_hpa: obs.atmospheric_pressure_hpa,
       eto_mm: eto_increment,
+      // ET0 acumulada del día a la fecha: fuente autoritativa de la
+      // ET0 diaria (el balance toma el mayor acumulado del día, no la
+      // suma de incrementos, que duplica valores repetidos de la API).
+      et_day_mm: obs.et_day_mm ?? null,
       source: station.provider,
       quality_status: 'ok',
     };

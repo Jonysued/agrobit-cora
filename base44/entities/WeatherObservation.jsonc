@@ -39,6 +39,10 @@
     "eto_mm": {
       "type": "number"
     },
+    "et_day_mm": {
+      "type": "number",
+      "description": "ET0 acumulada del d\u00eda hasta el momento del registro (d\u00eda a la fecha, reportada por la estaci\u00f3n)"
+    },
     "source": {
       "type": "string"
     },

@@ -103,18 +103,23 @@ async function dailyObservedWeather(farmId) {
     // sin esto, la lluvia caída cerca de la medianoche UTC se atribuye
     // al día siguiente y la subida se dibuja desplazada.
     const day = isoDay(new Date(o.timestamp));
-    const cur = raw.get(day) || { rain: 0, etoSum: 0, etoN: 0 };
+    const cur = raw.get(day) || { rain: 0, etoSum: 0, etoN: 0, etDayMax: null };
     cur.rain += o.rainfall_mm || 0;
-    // ET0 diaria = SUMA de los incrementos del día (los registros de
-    // la estación son incrementos: 0.2 + 0.3 + 0.4 + 0.3 = 1.2 mm),
-    // NUNCA promedio. ET0 = 0 se trata como "sin dato" del intervalo.
+    // ET0 diaria: el ACUMULADO del día (et_day, día a la fecha que
+    // reporta la estación) es la fuente AUTORITATIVA — se toma el
+    // mayor acumulado del día. Sumar los incrementos individuales
+    // duplica la demanda cuando la API repite valores (la respuesta
+    // "current conditions" puede venir cacheada). Para registros
+    // legados sin et_day se suman los incrementos (eto_mm > 0; el 0
+    // se trata como "sin dato" del intervalo).
+    if (o.et_day_mm != null && o.et_day_mm > (cur.etDayMax ?? -Infinity)) cur.etDayMax = o.et_day_mm;
     if (o.eto_mm > 0) { cur.etoSum += o.eto_mm; cur.etoN++; }
     raw.set(day, cur);
   }
   const byDay = new Map();
   raw.forEach((v, day) => byDay.set(day, {
     rain: round1(v.rain),
-    eto: v.etoN ? round1(v.etoSum) : null,
+    eto: (v.etDayMax != null || v.etoN) ? round1(Math.max(v.etDayMax ?? 0, v.etoSum)) : null,
   }));
   // ET0 de respaldo para días sin observaciones: promedio de las ET0
   // DIARIAS (sumas del día), no de los incrementos individuales.
