@@ -3,6 +3,7 @@ import { weatherService } from './weatherService';
 import { energyService } from './energyService';
 import { irrigationRecommendationService } from './irrigationRecommendationService';
 import { lotWaterStateService } from './lotWaterStateService';
+import { kcService } from './kcService';
 import { runUsefulWaterScenario } from './engine/waterBalanceEngine';
 
 // ============================================================
@@ -27,17 +28,22 @@ import { runUsefulWaterScenario } from './engine/waterBalanceEngine';
 
 const round1 = n => Math.round(n * 10) / 10;
 
-// Insumos diarios del balance futuro. V1: lluvia efectiva = lluvia
-// pronosticada tal cual (variables separadas para el futuro).
-function forecastInputs(weatherDays, kc) {
-  return (weatherDays || []).map(w => ({
-    date: w.date,
-    eto_mm: w.eto_mm ?? 0,
-    kc: kc != null ? kc : null,
-    etc_mm: kc != null ? round1((w.eto_mm ?? 0) * kc) : 0,
-    rainfall_mm: w.rainfall_mm ?? 0,
-    effective_rainfall_mm: w.rainfall_mm ?? 0,
-  }));
+// Insumos diarios del balance futuro: Kc del cultivo por MES (tablas
+// mensuales de Granadas/Olivos) o Kc manual del perfil. Lluvia efectiva
+// = lluvia pronosticada tal cual.
+function forecastInputs(weatherDays, lot, manualKc) {
+  const monthlyKc = kcService.hasMonthlyKc(lot.crop);
+  return (weatherDays || []).map(w => {
+    const kc = monthlyKc ? kcService.kcForCropDate(lot.crop, w.date) : manualKc;
+    return {
+      date: w.date,
+      eto_mm: w.eto_mm ?? 0,
+      kc: kc != null ? kc : null,
+      etc_mm: kc != null ? round1((w.eto_mm ?? 0) * kc) : 0,
+      rainfall_mm: w.rainfall_mm ?? 0,
+      effective_rainfall_mm: w.rainfall_mm ?? 0,
+    };
+  });
 }
 
 // Estado sintético para la UI (escala de agua útil + almacenamiento)
@@ -99,10 +105,12 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
 
   // Balance futuro: clima + riegos PROGRAMADOS del lote (con la
   // eficiencia de recarga del modelo de suelo de referencia)
-  const kc = profile.current_kc;
-  const kc_missing = kc == null;
+  // Kc: tabla mensual del cultivo (Granadas/Olivos) o Kc manual del perfil
+  const monthlyKc = kcService.hasMonthlyKc(lot.crop);
+  const kc = monthlyKc ? kcService.kcForCropDate(lot.crop, new Date().toISOString().slice(0, 10)) : profile.current_kc ?? null;
+  const kc_missing = !monthlyKc && profile.current_kc == null;
   const scheduledByDate = new Map((curve.events?.scheduled || []).map(e => [e.date, e.mm]));
-  const days = forecastInputs(weatherDays, kc).map(d => ({
+  const days = forecastInputs(weatherDays, lot, profile.current_kc).map(d => ({
     ...d,
     irrigation_mm: scheduledByDate.get(d.date) ?? 0,
   }));

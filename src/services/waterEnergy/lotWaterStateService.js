@@ -1,6 +1,7 @@
 import { base44 } from '@/api/base44Client';
 import { soilWaterService, computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from './soilWaterService';
 import { soilBehaviorService } from './soilBehaviorService';
+import { kcService } from './kcService';
 
 // ============================================================
 // lotWaterStateService — ESTADO HÍDRICO CALCULADO DE CADA LOTE.
@@ -212,7 +213,6 @@ async function computeLot(lot, ctx, withHistory) {
   const end = todayStr();
   let startDay = anchor.date;
   if (startDay < dayAfter(end, -(MAX_HISTORY_DAYS - 1))) startDay = dayAfter(end, -(MAX_HISTORY_DAYS - 1));
-  const kc = profile.current_kc;
   const executed = ctx.executed.get(lot.id) || new Map();
   const farm = ctx.farmByLot.get(lot.id);
   const obs = farm ? ctx.observed.get(farm.id) : null;
@@ -224,6 +224,9 @@ async function computeLot(lot, ctx, withHistory) {
     const irr = round1((executed.get(d) || 0) * efficiency);
     const rain = obs?.byDay.get(d)?.rain ?? 0;
     const eto = obs?.byDay.get(d)?.eto ?? obs?.meanEto ?? DEFAULT_ETO_MM;
+    // Kc MENSUAL del cultivo (tabla cargada); el Kc manual del perfil
+    // queda como respaldo para cultivos sin tabla.
+    const kc = kcService.kcForCropDate(lot.crop, d) ?? profile.current_kc;
     const etc = kc != null ? round1(eto * kc) : 0;
     let next = water + irr + rain - etc;
     if (taw != null && next > taw) next = taw; // excedente = drenaje

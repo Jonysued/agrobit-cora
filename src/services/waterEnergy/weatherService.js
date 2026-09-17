@@ -1,4 +1,5 @@
 import { base44 } from '@/api/base44Client';
+import { kcService } from './kcService';
 
 // ============================================================
 // weatherService — capa meteorológica desacoplada.
@@ -28,15 +29,13 @@ const seeded01 = key => {
   return ((h % 997) / 997 + (h % 89) / 89) / 2;
 };
 
-const kcFor = lot => {
-  const c = (lot.crop || '').toLowerCase();
-  if (c.includes('oli')) return 0.6;
-  if (c.includes('gran')) return 0.7;
-  return 0.65;
-};
+// Kc por MES del cultivo (tablas de Granadas/Olivos); valores por
+// defecto solo para cultivos sin tabla mensual.
+const kcFor = (lot, dateStr) => kcService.kcForCropDate(lot.crop, dateStr)
+  ?? (() => { const c = (lot.crop || '').toLowerCase(); if (c.includes('oli')) return 0.6; if (c.includes('gran')) return 0.7; return 0.65; })();
 
 function simulateForLot(lot, dateStr) {
-  const kc = kcFor(lot);
+  const kc = kcFor(lot, dateStr);
   const eto = round1(3.6 + 2.2 * seeded01(`${lot.id}|eto|${dateStr}`));
   const rainChance = seeded01(`${lot.id}|rain|${dateStr}`);
   const rainfall = rainChance > 0.85 ? round1(rainChance * 8) : 0;
@@ -243,7 +242,7 @@ export const weatherService = {
         const dateStr = isoDate(addDays(i));
         const fd = farmDays?.find(d => d.date === dateStr);
         if (fd) {
-          const kc = kcFor(lot);
+          const kc = kcFor(lot, dateStr);
           days.push({ lot_id: lot.id, ...fd, kc, etc_mm: round1(fd.eto_mm * kc), effective_rainfall_mm: fd.rainfall_mm ? round1(fd.rainfall_mm * 0.7) : 0, simulated: false });
           continue;
         }

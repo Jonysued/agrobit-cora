@@ -19,7 +19,7 @@ export default function RecommendationCard({ detail }) {
     return (
       <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
         <h3 className="font-bold text-emerald-900">Recomendación</h3>
-        <p className="mt-1 text-sm text-emerald-800">No se requiere riego en los próximos 7 días: el modelo estima que el agua útil se mantiene sobre el umbral de recarga.</p>
+        <p className="mt-1 text-sm text-emerald-800">No se requiere riego en los próximos 15 días: el modelo estima que el agua útil se mantiene sobre el umbral de recarga.</p>
       </section>
     );
   }

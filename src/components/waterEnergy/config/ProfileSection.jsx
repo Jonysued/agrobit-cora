@@ -176,7 +176,7 @@ export default function ProfileSection({ lots, profiles, onChange }) {
             <Field label="Humedad inicial (mm)"><input type="number" step="any" min="0" value={mmInputs.initial ?? ''} onChange={e => setMmInputs(m => ({ ...m, initial: e.target.value }))} className={inputCls} /></Field>
             <Field label="Kc del cultivo">
               <input type="number" step="any" min="0" value={form.current_kc ?? ''} onChange={e => set('current_kc', e.target.value)} className={inputCls} placeholder="0.65" />
-              <p className="text-[10px] leading-tight text-slate-400">Coeficiente de cultivo usado por el forecast hídrico (ETc = ET0 × Kc). Sin Kc no se genera recomendación de riego.</p>
+              <p className="text-[10px] leading-tight text-slate-400">Coeficiente de cultivo del forecast hídrico (ETc = ET0 × Kc). Granadas y Olivos usan automáticamente su tabla de Kc mensual — este valor aplica solo a otros cultivos. Sin Kc no se genera recomendación de riego.</p>
             </Field>
             <div className="sm:col-span-2"><Field label="Notas"><input value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} className={inputCls} placeholder="Observaciones…" /></Field></div>
           </div>
