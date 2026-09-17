@@ -1,4 +1,5 @@
 import { base44 } from '@/api/base44Client';
+import { densityOf } from '@/lib/farmCalculations';
 import { kcService } from './kcService';
 import { soilWaterService, computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from './soilWaterService';
 import { soilBehaviorService } from './soilBehaviorService';
@@ -44,11 +45,27 @@ const DEFAULT_ETO_MM = 4.0;
 // Límite de reconstrucción hacia atrás (días) desde el ancla
 const MAX_HISTORY_DAYS = 180;
 
+// Factor del lote en el programa: suma de sus porciones (p.ej.
+// Oeste + Este = lote completo).
+function lotFactor(program, lotId) {
+  const items = (program.items || []).filter(i => i.lot_id === lotId);
+  return items.length ? items.reduce((s, i) => s + (i.factor ?? 1), 0) : 1;
+}
+
 // Lámina de un programa que corresponde a un lote (mm × factor del
 // lote). baseMm permite pasar los mm REALMENTE aplicados del log.
-function lotIrrigationMm(program, lotId, baseMm) {
-  const item = (program.items || []).find(i => i.lot_id === lotId);
-  return (baseMm ?? program.mm ?? 0) * (item?.factor ?? 1);
+// Los programas de la pestaña Riego suelen crearse sin mm explícito:
+// en ese caso la lámina se deriva del DISEÑO DE RIEGO del lote y la
+// duración del programa, con la misma fórmula que la vista previa de
+// la pestaña Riego (mm/h del equipo × horas de riego × factor).
+function lotIrrigationMm(program, lotId, lot, designs, baseMm) {
+  const factor = lotFactor(program, lotId);
+  if (baseMm != null) return baseMm * factor;
+  if (program.mm != null) return program.mm * factor;
+  const design = (designs || []).find(d => d.lot_id === lotId);
+  if (!design || !lot) return 0;
+  const mmh = (design.emitter_flow_lh || 0) * (design.emitters_per_plant || 0) * densityOf(lot) / 10000;
+  return mmh * ((program.duration_min || 0) / 60) * factor;
 }
 
 // ---- Riegos ejecutados (PASADO) por lote ----
@@ -56,8 +73,9 @@ function lotIrrigationMm(program, lotId, baseMm) {
 // tiene su log (un programa histórico sin log no prueba que ocurrió).
 // Los mm son los REALMENTE APLICADOS (log.applied_mm); si el log no
 // los registra, se usa la lámina programada como respaldo.
-function executedIrrigationFrom(logs, programs, lots) {
+function executedIrrigationFrom(logs, programs, lots, designs) {
   const lotIds = new Set(lots.map(l => l.id));
+  const lotById = new Map(lots.map(l => [l.id, l]));
   const programById = new Map(programs.map(p => [p.id, p]));
   const executed = new Map();
   for (const log of logs) {
@@ -67,7 +85,7 @@ function executedIrrigationFrom(logs, programs, lots) {
       if (!lotIds.has(lotId)) continue;
       if (!executed.has(lotId)) executed.set(lotId, new Map());
       const cur = executed.get(lotId).get(log.date) || 0;
-      executed.get(lotId).set(log.date, round1(cur + lotIrrigationMm(p, lotId, log.applied_mm)));
+      executed.get(lotId).set(log.date, round1(cur + lotIrrigationMm(p, lotId, lotById.get(lotId), designs, log.applied_mm)));
     }
   }
   return executed;
@@ -116,7 +134,7 @@ async function referenceFullDepthCm(profile, models) {
 
 // ---- Contexto compartido (una sola pasada para todos los lotes) ----
 async function loadContext(lots) {
-  const [profiles, models, states, logs, programs, farms, allLayers, allChannels] = await Promise.all([
+  const [profiles, models, states, logs, programs, farms, allLayers, allChannels, designs] = await Promise.all([
     base44.entities.SoilProfile.list(),
     soilBehaviorService.getModels(),
     base44.entities.LotWaterState.list('-timestamp', 2000),
@@ -125,6 +143,7 @@ async function loadContext(lots) {
     base44.entities.Farm.list(),
     base44.entities.SoilLayer.list(),
     base44.entities.SoilProbeChannel.list(),
+    base44.entities.IrrigationDesign.list(),
   ]);
   // Configuración estática de cada perfil (SIN sonda) — capas cargadas
   // UNA sola vez para todos los perfiles: sin consultas por perfil.
@@ -146,8 +165,8 @@ async function loadContext(lots) {
   const farmByLot = new Map(lots.map(l => [l.id, farms.find(f => f.name === l.farm) || null]));
   const farmIds = [...new Set([...farmByLot.values()].map(f => f?.id).filter(Boolean))];
   const observed = new Map(await Promise.all(farmIds.map(async id => [id, await dailyObservedWeather(id)])));
-  const executed = executedIrrigationFrom(logs, programs, lots);
-  return { profiles, models, states, configs, farmByLot, observed, executed, programs };
+  const executed = executedIrrigationFrom(logs, programs, lots, designs);
+  return { profiles, models, states, configs, farmByLot, observed, executed, programs, designs };
 }
 
 // ---- Estado de UN lote: ancla + reconstrucción diaria hasta hoy ----
@@ -236,15 +255,15 @@ async function computeLot(lot, ctx, withHistory) {
 
   // ---- Programados del lote (futuro) con eficiencia del modelo ----
   // Un evento por PROGRAMA (guarda program_id para poder confirmar la
-  // ejecución desde la UI); los programas sin mm definido no aportan
-  // agua ni se marcan en el gráfico. gross_mm = lámina a aplicar del
-  // cronograma; mm = efecto neto sobre el perfil (gross × eficiencia
-  // de recarga aprendida del suelo).
+  // ejecución desde la UI). gross_mm = lámina a aplicar del
+  // cronograma (mm explícitos del programa o derivados de su diseño
+  // de riego y duración); mm = efecto neto sobre el perfil (gross ×
+  // eficiencia de recarga aprendida del suelo).
   const t = todayStr();
   const scheduledPrograms = (ctx.programs || [])
     .filter(p => p.date && p.date > t && ['Programado', 'Activo'].includes(p.status) && (p.lot_ids || []).includes(lot.id))
     .map(p => {
-      const gross = lotIrrigationMm(p, lot.id);
+      const gross = lotIrrigationMm(p, lot.id, lot, ctx.designs);
       return { date: p.date, gross_mm: round1(gross), mm: round1(gross * efficiency), program_id: p.id, status: p.status };
     })
     .filter(e => e.gross_mm > 0)
