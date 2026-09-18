@@ -127,14 +127,14 @@ export default function MoistureChart({ detail }) {
             />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} iconType="plainline" />
             {fcMm != null && (
-              <ReferenceLine y={fcMm} stroke="#334155" label={{ value: 'Capacidad de campo', fontSize: 9, fill: '#334155', position: 'insideTopLeft' }} ifOverflow="visible" />
+              <ReferenceLine y={fcMm} stroke="#334155" ifOverflow="visible" />
             )}
             {hasRefs && (
               <>
                 <ReferenceArea y1={rechargeMm} y2={targetMm} fill="#eefaf3" strokeOpacity={0} ifOverflow="visible" />
                 <ReferenceArea y1={yMin} y2={rechargeMm} fill="#fff0f2" strokeOpacity={0} ifOverflow="visible" />
-                <ReferenceLine y={targetMm} stroke="#3498db" strokeDasharray="2 4" label={{ value: 'Objetivo máx', fontSize: 9, fill: '#3498db', position: 'insideTopRight' }} ifOverflow="visible" />
-                <ReferenceLine y={rechargeMm} stroke="#a93226" strokeDasharray="2 4" label={{ value: 'Umbral de recarga', fontSize: 9, fill: '#a93226', position: 'insideBottomRight' }} ifOverflow="visible" />
+                <ReferenceLine y={targetMm} stroke="#3498db" strokeDasharray="2 4" ifOverflow="visible" />
+                <ReferenceLine y={rechargeMm} stroke="#a93226" strokeDasharray="2 4" ifOverflow="visible" />
               </>
             )}
             {/* Lluvia y riego en mm del día (observados y previstos):
