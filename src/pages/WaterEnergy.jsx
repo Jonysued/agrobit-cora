@@ -16,7 +16,7 @@ export default function WaterEnergy() {
   const [farms, setFarms] = useState([]);
   const [farmId, setFarmId] = useState(null);
   useEffect(() => {
-    weatherService.getFarms().then(fs => { setFarms(fs); if (fs.length) setFarmId(fs[0].id); }).catch(() => setFarms([]));
+    weatherService.getFarms().then(fs => { setFarms(fs); const preferred = fs.find(f => f.name === 'Las 500'); if (fs.length) setFarmId((preferred || fs[0]).id); }).catch(() => setFarms([]));
   }, []);
   // "Failed to fetch" = falla transitoria de red: la carga del panel
   // dispara ~25 consultas en paralelo y, en una conexión inestable,
