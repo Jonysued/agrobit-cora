@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, PenLine, Ruler, SlidersHorizontal } from 'lucide-react';
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { buildProfileSeries } from './profileChartSeries';
 
@@ -19,8 +19,7 @@ const fmtRange = t => new Date(t).toLocaleDateString('es-AR', { day: 'numeric', 
 const fmtTip = t => new Date(t).toLocaleDateString('es-AR', { dateStyle: 'medium' });
 
 const RANGES = [[45, '45 días'], [60, '60 días'], [90, '90 días'], [180, '180 días']];
-const scrollToId = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-const actionBtn = 'inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-emerald-800 transition hover:text-emerald-950 disabled:opacity-30 disabled:hover:text-emerald-800';
+
 
 export default function MoistureChart({ detail }) {
   const { state, recommendation, scheduled_irrigation } = detail;
@@ -28,7 +27,7 @@ export default function MoistureChart({ detail }) {
   // Rango null = AUTOMÁTICO (incluye el punto de inicialización).
   const [rangeDays, setRangeDays] = useState(null);
   const [offset, setOffset] = useState(0); // días que la ventana retrocede respecto del dato más reciente
-  const [showGrid, setShowGrid] = useState(true);
+  const showGrid = true;
   // Nueva inicialización del estado: el gráfico vuelve a encuadrar
   // la ventana sobre el nuevo punto de partida.
   useEffect(() => { setRangeDays(null); setOffset(0); }, [detail.anchor_date]);
@@ -121,14 +120,7 @@ export default function MoistureChart({ detail }) {
             <button onClick={() => setOffset(o => Math.max(0, o - step))} disabled={effOffset <= 0} aria-label="Avanzar" className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-30"><ChevronRight size={15} /></button>
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Acciones</p>
-          <div className="mt-1 flex flex-col items-end gap-0.5 text-[11px] font-semibold">
-            <button disabled={!hasRec} onClick={() => scrollToId('recomendacion')} className={actionBtn}><PenLine size={13} /> Add recomendación</button>
-            <button onClick={() => setShowGrid(v => !v)} className={actionBtn}><Ruler size={13} /> Regla</button>
-            <button onClick={() => scrollToId('estado-inicial')} className={actionBtn}><SlidersHorizontal size={13} /> Puntos de ajuste</button>
-          </div>
-        </div>
+
       </div>
       <div className="relative mt-4 h-80">
         <span className="absolute left-0 top-0 z-10 text-[10px] font-bold text-slate-400">mm</span>
