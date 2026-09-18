@@ -139,7 +139,7 @@ export default function MoistureChart({ detail }) {
             )}
             {/* Lluvia y riego en mm del día (observados y previstos):
                 barras sobre su propio eje — verde = riego ejecutado
-                (confirmado), ámbar = riego programado. Su aporte sube
+                (confirmado), violeta = riego programado. Su aporte sube
                 la curva recién el día SIGUIENTE. */}
             {/* Línea de HOY: separa el histórico (izquierda) del forecast (derecha) */}
             <ReferenceLine x={dayTs(today)} stroke="#64748b" strokeDasharray="3 3" label={{ value: 'Hoy', fontSize: 9, fill: '#64748b', position: 'top' }} ifOverflow="extendDomain" />
@@ -154,7 +154,7 @@ export default function MoistureChart({ detail }) {
             )}
             <Bar dataKey="Lluvia" yAxisId="rain" fill="#93c5fd" stroke="#3b82f6" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#1d4ed8' }} />
             <Bar dataKey="Riego" name="Riego ejecutado" yAxisId="rain" fill="#a7f3d0" stroke="#10b981" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#047857' }} />
-            <Bar dataKey="Programado" name="Riego programado" yAxisId="rain" fill="#fde68a" stroke="#f59e0b" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#b45309' }} />
+            <Bar dataKey="Programado" name="Riego programado" yAxisId="rain" fill="#c4b5fd" stroke="#7c3aed" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#5b21b6' }} />
             <Line dataKey={H} stroke="#000000" strokeWidth={2} dot={{ r: 2, fill: '#000000', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
             <Line dataKey={S} stroke="#0284c7" strokeWidth={2} dot={{ r: 2, fill: '#0284c7', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
             {hasRec && <Line dataKey={R} stroke="#1a7350" strokeWidth={1.8} strokeDasharray="5 4" dot={{ r: 2, fill: '#1a7350', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />}
