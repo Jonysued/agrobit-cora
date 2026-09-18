@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { buildProfileSeries } from './profileChartSeries';
 
@@ -101,10 +101,7 @@ export default function MoistureChart({ detail }) {
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Mediciones</p>
-          <div className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700">
-            Suma del perfil <ChevronDown size={14} className="text-slate-400" />
-          </div>
+          <h2 className="text-lg font-bold text-charcoal">Suma del perfil</h2>
         </div>
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Rango de fechas</p>
