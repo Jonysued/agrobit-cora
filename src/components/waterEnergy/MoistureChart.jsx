@@ -97,6 +97,28 @@ export default function MoistureChart({ detail }) {
     ...scheduled.filter(e => e.mm > 0).map(e => ({ ...e, kind: 'programado' })),
   ].filter(e => { const t = dayTs(e.date); return t >= winStart - DAY && t <= winEnd; });
 
+  // ---- Etiquetas en FILAS ESCALONADAS ----
+  // Los rótulos de los eventos verticales (riegos, programados,
+  // inicialización) bajan a la primera fila con espacio libre: dos
+  // eventos a menos de 4 días de distancia quedan en filas distintas
+  // y sus textos nunca se superponen.
+  const ROWS = [4, 19, 34];
+  const GAP_DAYS = 4;
+  const anchorVisible = anchorTs && anchorTs < dayTs(today) && anchorTs >= winStart - DAY && anchorTs <= winEnd;
+  const markers = [
+    ...irrEvents.map(e => ({ date: e.date })),
+    ...(anchorVisible ? [{ date: detail.anchor_date }] : []),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+  const rowOf = new Map();
+  const lastInRow = new Map();
+  for (const m of markers) {
+    const t = dayTs(m.date);
+    let row = 0;
+    while (row < ROWS.length - 1 && lastInRow.has(row) && (t - lastInRow.get(row)) / DAY < GAP_DAYS) row++;
+    rowOf.set(m.date, row);
+    lastInRow.set(row, t);
+  }
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
