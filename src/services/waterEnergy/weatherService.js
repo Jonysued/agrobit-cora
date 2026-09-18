@@ -37,8 +37,10 @@ const kcFor = (lot, dateStr) => kcService.kcForCropDate(lot.crop, dateStr)
 function simulateForLot(lot, dateStr) {
   const kc = kcFor(lot, dateStr);
   const eto = round1(3.6 + 2.2 * seeded01(`${lot.id}|eto|${dateStr}`));
-  const rainChance = seeded01(`${lot.id}|rain|${dateStr}`);
-  const rainfall = rainChance > 0.85 ? round1(rainChance * 8) : 0;
+  // Más allá del horizonte del proveedor NO se inventa lluvia: si no
+  // hay pronóstico real para el día, el escenario simulado asume día
+  // seco (la lluvia simulada mostraba eventos que nadie pronosticó).
+  const rainfall = 0;
   return {
     lot_id: lot.id,
     date: dateStr,
