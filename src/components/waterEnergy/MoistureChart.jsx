@@ -50,7 +50,7 @@ export default function MoistureChart({ detail }) {
   const data = buildProfileSeries(detail, { H, S, R }, today);
   // Escala propia de las barras de lluvia (eje derecho oculto): mm de
   // lluvia, no de perfil — lluvias chicas siguen siendo visibles.
-  const rainMax = Math.max(10, ...data.map(d => Math.max(d.Lluvia || 0, d.Riego || 0))) * 2.5;
+  const rainMax = Math.max(10, ...data.map(d => Math.max(d.Lluvia || 0, d.Riego || 0, d.Programado || 0))) * 2.5;
   const rechargeMm = state.recharge_storage_mm;
   const targetMm = state.target_storage_mm;
   const fcMm = state.field_capacity_storage_mm;
@@ -138,8 +138,9 @@ export default function MoistureChart({ detail }) {
               </>
             )}
             {/* Lluvia y riego en mm del día (observados y previstos):
-                barras sobre su propio eje — su aporte sube la curva
-                recién el día SIGUIENTE. */}
+                barras sobre su propio eje — verde = riego ejecutado
+                (confirmado), ámbar = riego programado. Su aporte sube
+                la curva recién el día SIGUIENTE. */}
             {/* Línea de HOY: separa el histórico (izquierda) del forecast (derecha) */}
             <ReferenceLine x={dayTs(today)} stroke="#64748b" strokeDasharray="3 3" label={{ value: 'Hoy', fontSize: 9, fill: '#64748b', position: 'top' }} ifOverflow="extendDomain" />
             {/* INICIALIZACIÓN del estado hídrico: fecha y mm desde donde
@@ -152,7 +153,8 @@ export default function MoistureChart({ detail }) {
               />
             )}
             <Bar dataKey="Lluvia" yAxisId="rain" fill="#93c5fd" stroke="#3b82f6" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#1d4ed8' }} />
-            <Bar dataKey="Riego" yAxisId="rain" fill="#a7f3d0" stroke="#10b981" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#047857' }} />
+            <Bar dataKey="Riego" name="Riego ejecutado" yAxisId="rain" fill="#a7f3d0" stroke="#10b981" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#047857' }} />
+            <Bar dataKey="Programado" name="Riego programado" yAxisId="rain" fill="#fde68a" stroke="#f59e0b" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#b45309' }} />
             <Line dataKey={H} stroke="#000000" strokeWidth={2} dot={{ r: 2, fill: '#000000', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
             <Line dataKey={S} stroke="#0284c7" strokeWidth={2} dot={{ r: 2, fill: '#0284c7', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
             {hasRec && <Line dataKey={R} stroke="#1a7350" strokeWidth={1.8} strokeDasharray="5 4" dot={{ r: 2, fill: '#1a7350', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />}

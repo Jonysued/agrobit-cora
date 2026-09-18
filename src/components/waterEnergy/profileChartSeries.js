@@ -67,7 +67,7 @@ export function buildProfileSeries(detail, L, today) {
       [L.H]: storage(scenarioNoIrrigation?.[i]?.available_water_mm ?? null),
       [L.S]: storage(p.available_water_mm),
       Lluvia: (p.rainfall_mm || 0) > 0 ? Math.round(p.rainfall_mm * 10) / 10 : null,
-      Riego: (p.irrigation_mm || 0) > 0 ? Math.round(p.irrigation_mm * 10) / 10 : null,
+      Programado: (p.irrigation_mm || 0) > 0 ? Math.round(p.irrigation_mm * 10) / 10 : null,
       ...(hasRec ? { [L.R]: storage(scenarioWithIrrigation?.[i]?.available_water_mm ?? p.available_water_mm) } : {}),
     });
   });
