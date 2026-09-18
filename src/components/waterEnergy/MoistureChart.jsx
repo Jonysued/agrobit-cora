@@ -172,7 +172,7 @@ export default function MoistureChart({ detail }) {
                 x={dayTs(e.date)}
                 stroke={e.kind === 'ejecutado' ? '#1a7350' : '#0284c7'}
                 strokeDasharray={e.kind === 'ejecutado' ? '' : '4 3'}
-                label={{ value: `${e.kind === 'ejecutado' ? 'Riego' : 'Prog.'} ${e.mm}mm`, fontSize: 9, fill: e.kind === 'ejecutado' ? '#1a7350' : '#0284c7', angle: -90, position: 'insideTopLeft' }}
+                label={{ value: `${e.kind === 'ejecutado' ? 'Riego' : 'Prog.'} ${e.mm}mm`, fontSize: 9, fill: e.kind === 'ejecutado' ? '#1a7350' : '#0284c7', position: 'insideTop', offset: ROWS[rowOf.get(e.date) ?? 0] }}
                 ifOverflow="extendDomain"
               />
             ))}
@@ -186,7 +186,7 @@ export default function MoistureChart({ detail }) {
             {anchorTs && anchorTs < dayTs(today) && anchorTs >= winStart - DAY && anchorTs <= winEnd && (
               <ReferenceLine
                 x={anchorTs} stroke="#7c3aed" strokeDasharray="1 3"
-                label={{ value: `Inicialización · ${detail.anchor_storage_mm} mm`, fontSize: 9, fill: '#7c3aed', angle: -90, position: 'insideTopRight' }}
+                label={{ value: `Inicialización · ${detail.anchor_storage_mm} mm`, fontSize: 9, fill: '#7c3aed', position: 'insideTop', offset: ROWS[rowOf.get(detail.anchor_date) ?? 0] }}
                 ifOverflow="extendDomain"
               />
             )}
