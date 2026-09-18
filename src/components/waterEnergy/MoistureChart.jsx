@@ -32,7 +32,6 @@ export default function MoistureChart({ detail }) {
   // la ventana sobre el nuevo punto de partida.
   useEffect(() => { setRangeDays(null); setOffset(0); }, [detail.anchor_date]);
   const hasRec = recommendation != null;
-  const scheduled = scheduled_irrigation || [];
 
   const today = isoDay(new Date());
   // Tres líneas sobre la MISMA escala de Suma de perfil:
@@ -51,7 +50,7 @@ export default function MoistureChart({ detail }) {
   const data = buildProfileSeries(detail, { H, S, R }, today);
   // Escala propia de las barras de lluvia (eje derecho oculto): mm de
   // lluvia, no de perfil — lluvias chicas siguen siendo visibles.
-  const rainMax = Math.max(10, ...data.map(d => d.Lluvia || 0)) * 2.5;
+  const rainMax = Math.max(10, ...data.map(d => Math.max(d.Lluvia || 0, d.Riego || 0))) * 2.5;
   const rechargeMm = state.recharge_storage_mm;
   const targetMm = state.target_storage_mm;
   const fcMm = state.field_capacity_storage_mm;
@@ -90,34 +89,6 @@ export default function MoistureChart({ detail }) {
   const yMin = Math.max(0, Math.floor((minV - span * 0.15) / 10) * 10);
   const yMax = Math.ceil((maxV + span * 0.08) / 10) * 10;
 
-  // Eventos de riego dentro de la ventana: ejecutados (pasado,
-  // calculados) y programados (futuro, aún no aplicados)
-  const irrEvents = [
-    ...(detail.events?.irrigation || []).map(e => ({ ...e, kind: 'ejecutado' })),
-    ...scheduled.filter(e => e.mm > 0).map(e => ({ ...e, kind: 'programado' })),
-  ].filter(e => { const t = dayTs(e.date); return t >= winStart - DAY && t <= winEnd; });
-
-  // ---- Etiquetas en FILAS ESCALONADAS ----
-  // Los rótulos de los eventos verticales (riegos, programados,
-  // inicialización) bajan a la primera fila con espacio libre: dos
-  // eventos a menos de 4 días de distancia quedan en filas distintas
-  // y sus textos nunca se superponen.
-  const ROWS = [4, 19, 34];
-  const GAP_DAYS = 4;
-  const anchorVisible = anchorTs && anchorTs < dayTs(today) && anchorTs >= winStart - DAY && anchorTs <= winEnd;
-  const markers = [
-    ...irrEvents.map(e => ({ date: e.date })),
-    ...(anchorVisible ? [{ date: detail.anchor_date }] : []),
-  ].sort((a, b) => a.date.localeCompare(b.date));
-  const rowOf = new Map();
-  const lastInRow = new Map();
-  for (const m of markers) {
-    const t = dayTs(m.date);
-    let row = 0;
-    while (row < ROWS.length - 1 && lastInRow.has(row) && (t - lastInRow.get(row)) / DAY < GAP_DAYS) row++;
-    rowOf.set(m.date, row);
-    lastInRow.set(row, t);
-  }
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -166,19 +137,9 @@ export default function MoistureChart({ detail }) {
                 <ReferenceLine y={rechargeMm} stroke="#a93226" strokeDasharray="2 4" label={{ value: 'Umbral de recarga', fontSize: 9, fill: '#a93226', position: 'insideBottomRight' }} ifOverflow="visible" />
               </>
             )}
-            {irrEvents.map((e, i) => (
-              <ReferenceLine
-                key={`${e.date}-${i}`}
-                x={dayTs(e.date)}
-                stroke={e.kind === 'ejecutado' ? '#1a7350' : '#0284c7'}
-                strokeDasharray={e.kind === 'ejecutado' ? '' : '4 3'}
-                label={{ value: `${e.kind === 'ejecutado' ? 'Riego' : 'Prog.'} ${e.mm}mm`, fontSize: 9, fill: e.kind === 'ejecutado' ? '#1a7350' : '#0284c7', position: 'insideTop', offset: ROWS[rowOf.get(e.date) ?? 0] }}
-                ifOverflow="extendDomain"
-              />
-            ))}
-            {/* Lluvia del día (observada y prevista) en mm: barra celeste
-                sobre su propio eje — al igual que el riego, su aporte
-                sube la curva recién el día SIGUIENTE. */}
+            {/* Lluvia y riego en mm del día (observados y previstos):
+                barras sobre su propio eje — su aporte sube la curva
+                recién el día SIGUIENTE. */}
             {/* Línea de HOY: separa el histórico (izquierda) del forecast (derecha) */}
             <ReferenceLine x={dayTs(today)} stroke="#64748b" strokeDasharray="3 3" label={{ value: 'Hoy', fontSize: 9, fill: '#64748b', position: 'top' }} ifOverflow="extendDomain" />
             {/* INICIALIZACIÓN del estado hídrico: fecha y mm desde donde
@@ -186,11 +147,12 @@ export default function MoistureChart({ detail }) {
             {anchorTs && anchorTs < dayTs(today) && anchorTs >= winStart - DAY && anchorTs <= winEnd && (
               <ReferenceLine
                 x={anchorTs} stroke="#7c3aed" strokeDasharray="1 3"
-                label={{ value: `Inicialización · ${detail.anchor_storage_mm} mm`, fontSize: 9, fill: '#7c3aed', position: 'insideTop', offset: ROWS[rowOf.get(detail.anchor_date) ?? 0] }}
+                label={{ value: `Inicialización · ${detail.anchor_storage_mm} mm`, fontSize: 9, fill: '#7c3aed', position: 'insideTop', offset: 19 }}
                 ifOverflow="extendDomain"
               />
             )}
             <Bar dataKey="Lluvia" yAxisId="rain" fill="#93c5fd" stroke="#3b82f6" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#1d4ed8' }} />
+            <Bar dataKey="Riego" yAxisId="rain" fill="#a7f3d0" stroke="#10b981" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#047857' }} />
             <Line dataKey={H} stroke="#000000" strokeWidth={2} dot={{ r: 2, fill: '#000000', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
             <Line dataKey={S} stroke="#0284c7" strokeWidth={2} dot={{ r: 2, fill: '#0284c7', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
             {hasRec && <Line dataKey={R} stroke="#1a7350" strokeWidth={1.8} strokeDasharray="5 4" dot={{ r: 2, fill: '#1a7350', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />}

@@ -30,6 +30,8 @@ export function buildProfileSeries(detail, L, today) {
   // Lluvia del día "HOY": la serie histórica ya incluye el día de hoy;
   // solo se marca aparte si el ancla es hoy y no hay histórico aún.
   const rainToday = (history || []).some(h => h.date === today) ? null : rainByDate.get(today) ?? null;
+  // Riego EJECUTADO del día "HOY" (misma regla que la lluvia)
+  const riegoToday = (history || []).some(h => h.date === today) ? null : executedByDate.get(today) ?? null;
 
   const data = [];
   // ---- Histórico (línea negra): un punto por día + salto ----
@@ -39,10 +41,10 @@ export function buildProfileSeries(detail, L, today) {
       const jump = (executedByDate.get(prev.date) || 0) + (rainByDate.get(prev.date) || 0);
       if (jump > 0) data.push({ t: midTs(h.date), [L.H]: storage(capMm(prev.mm + jump)) });
     }
-    data.push({ t: dayTs(h.date), [L.H]: storage(h.mm), Lluvia: rainByDate.get(h.date) ?? null });
+    data.push({ t: dayTs(h.date), [L.H]: storage(h.mm), Lluvia: rainByDate.get(h.date) ?? null, Riego: executedByDate.get(h.date) ?? null });
   });
   // ---- HOY: punto de partida de los escenarios ----
-  data.push({ t: Date.now(), [L.H]: storage(currentMm), [L.S]: storage(currentMm), Lluvia: rainToday, ...(hasRec ? { [L.R]: storage(currentMm) } : {}) });
+  data.push({ t: Date.now(), [L.H]: storage(currentMm), [L.S]: storage(currentMm), Lluvia: rainToday, Riego: riegoToday, ...(hasRec ? { [L.R]: storage(currentMm) } : {}) });
   // ---- Forecast (30 días): un punto por día + salto por escenario ----
   // El salto de la línea verde incluye además el riego recomendado.
   (scenarioWithoutIrrigation || []).forEach((p, i) => {
@@ -65,6 +67,7 @@ export function buildProfileSeries(detail, L, today) {
       [L.H]: storage(scenarioNoIrrigation?.[i]?.available_water_mm ?? null),
       [L.S]: storage(p.available_water_mm),
       Lluvia: (p.rainfall_mm || 0) > 0 ? Math.round(p.rainfall_mm * 10) / 10 : null,
+      Riego: (p.irrigation_mm || 0) > 0 ? Math.round(p.irrigation_mm * 10) / 10 : null,
       ...(hasRec ? { [L.R]: storage(scenarioWithIrrigation?.[i]?.available_water_mm ?? p.available_water_mm) } : {}),
     });
   });
