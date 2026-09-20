@@ -41,7 +41,7 @@ export default function MoistureChart({ detail }) {
   // · CON RIEGO RECOMENDADO (verde discontinua): cronograma + riego
   //   recomendado por el modelo.
   const H = 'Actual (sin riego)';
-  const S = 'Con riego programado';
+  const S = 'Riego programado';
   const R = 'Con riego recomendado';
   // Serie del gráfico: un punto por día + punto intermedio a las 00:00
   // del día siguiente de cada riego o lluvia — el salto lee
