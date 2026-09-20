@@ -73,6 +73,7 @@ function buildState(curve) {
     recharge_storage_mm: config.recharge_storage_mm,
     target_storage_mm: config.target_storage_mm,
     total_profile_water_mm: curve.currentStoredMm,
+    daily_change_mm: curve.daily_change_mm,
     state_source: curve.state_source,
     origin: curve.origin,
     last_state_at: curve.anchored_at,

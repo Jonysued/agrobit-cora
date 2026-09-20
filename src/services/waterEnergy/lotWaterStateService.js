@@ -365,9 +365,16 @@ async function computeLot(lot, ctx, withHistory) {
     .filter(e => e.gross_mm > 0)
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  // Movimiento de las últimas 24 h: variación del agua del perfil
+  // entre el punto de AYER y el de HOY (misma variación en escala de
+  // agua útil y de Suma de perfil — difieren en la constante de
+  // marchitez).
+  const yesterdayPoint = history.length >= 2 ? history[history.length - 2] : null;
+  const daily_change_mm = yesterdayPoint != null ? round1(water - yesterdayPoint.mm) : null;
   return {
     lot, profile, config, model,
     efficiency,
+    daily_change_mm,
     currentUsefulMm: water,
     currentStoredMm: round1(wilting + water),
     state_source: anchor.source,

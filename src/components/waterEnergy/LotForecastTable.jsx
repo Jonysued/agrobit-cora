@@ -4,6 +4,17 @@ import React from 'react';
 // cada lote (curva propia: riegos ejecutados/programados, clima y
 // cultivo), proyección a +3/+7 días, próximo riego y lámina recomendada.
 const DOT = { RECARGAR: 'bg-red-500', LLENO: 'bg-emerald-500', 'ÓPTIMO': 'bg-emerald-500' };
+// Variación del agua del perfil en las últimas 24 h (mm movidos).
+function DailyChange({ mm }) {
+  if (mm == null) return <span className="text-slate-300">—</span>;
+  if (mm === 0) return <span className="text-xs font-semibold text-slate-500">Sin variación</span>;
+  const up = mm > 0;
+  return (
+    <span className={`text-xs font-bold ${up ? 'text-emerald-700' : 'text-amber-700'}`}>
+      {up ? `▲ +${mm} mm` : `▼ ${mm} mm`}
+    </span>
+  );
+}
 const fmtDate = s => (s ? new Date(`${s}T00:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) : '—');
 const stateText = r => {
   if (!r.profile) return 'Sin perfil de suelo';
@@ -33,7 +44,7 @@ export default function LotForecastTable({ rows, onOpen }) {
       <table className="w-full min-w-[860px] text-sm">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
-            {['Lote', 'Suma de perfil', '+3 días', '+7 días', 'Próximo riego', 'MM recomendados', 'Energía estimada'].map(h => <th key={h} className="px-4 py-3">{h}</th>)}
+            {['Lote', 'Suma de perfil', 'Últimas 24 h', '+3 días', '+7 días', 'Próximo riego', 'MM recomendados', 'Energía estimada'].map(h => <th key={h} className="px-4 py-3">{h}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -47,6 +58,7 @@ export default function LotForecastTable({ rows, onOpen }) {
                   <><span className={`mr-1.5 inline-block h-2.5 w-2.5 rounded-full align-middle ${DOT[r.state.status] || 'bg-slate-300'}`} />{r.state.total_profile_water_mm} mm <span className="text-xs text-slate-400">· {r.state.available_water_percent}% útil</span></>
                 )}
               </td>
+              <td className="px-4 py-3"><DailyChange mm={r.forecast_status === 'ok' ? r.state?.daily_change_mm : null} /></td>
               <td className="px-4 py-3">{cellMm(r, 2)}</td>
               <td className="px-4 py-3">{cellMm(r, 6)}</td>
               <td className="px-4 py-3">{r.recommendation ? fmtDate(r.recommendation.recommended_start_date) : (r.kc_missing ? <span className="text-xs font-semibold text-amber-600">Falta Kc</span> : '—')}</td>
