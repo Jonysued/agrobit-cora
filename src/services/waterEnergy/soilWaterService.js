@@ -317,15 +317,23 @@ async function stateForProbe(probe, lots, profiles, models) {
   // último punto 24 h antes. Sin un punto ≥ 24 h atrás no hay
   // variación calculable (—).
   let dailyChange = null;
+  let lastSignalTs = null;
   if (state._model) {
     const history = usefulWaterSeries(readings, channels, state._model);
     if (history.length >= 2) {
       const last = history[history.length - 1];
-      const prev = [...history].reverse().find(h => h.t <= last.t - DAY_MS);
-      if (prev) dailyChange = round1(last.profile - prev.profile);
+      lastSignalTs = last.t;
+      // Variación SOLO con señal reciente (≤26 h): una sonda caída
+      // (ej. BARNEA desconectada hace días) no puede mostrar variación
+      // calculada con lecturas viejas — se informa la última señal.
+      const fresh = (Date.now() - last.t) <= 26 * 3600000;
+      if (fresh) {
+        const prev = [...history].reverse().find(h => h.t <= last.t - DAY_MS);
+        if (prev) dailyChange = round1(last.profile - prev.profile);
+      }
     }
   }
-  return { probe, probeId: probe.id, lot, lotName, probeProvider: probe.provider, connectionStatus: probe.connection_status, daily_change_mm: dailyChange, ...state };
+  return { probe, probeId: probe.id, lot, lotName, probeProvider: probe.provider, connectionStatus: probe.connection_status, last_signal_ts: lastSignalTs, daily_change_mm: dailyChange, ...state };
 }
 
 // Serie temporal de agua ÚTIL (mm) en la zona radicular medida

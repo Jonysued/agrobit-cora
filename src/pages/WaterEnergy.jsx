@@ -65,8 +65,10 @@ export default function WaterEnergy() {
     cost: Math.round(withState.reduce((s, r) => s + (r.energy?.cost || 0), 0)),
   };
   const shown = farm ? farmTotals : totals;
-  // Sondas de la finca seleccionada (o todas, sin finca elegida)
-  const farmProbes = probes.filter(p => p.lot && (!farm || p.lot.farm === farm.name));
+  // TODAS las sondas activas: la variación es un estado propio de cada
+  // sensor, independiente de la finca seleccionada (una sonda sin lote
+  // vinculado o de otra finca también se muestra).
+  const farmProbes = probes;
   return (
     <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
       <ModuleHeader />

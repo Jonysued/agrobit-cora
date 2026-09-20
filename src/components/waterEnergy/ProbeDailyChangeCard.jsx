@@ -4,6 +4,15 @@ import React from 'react';
 // cada SONDA de la finca en las últimas 24 h (escala Suma de perfil,
 // mm). Un cuadrado por sonda: verde ▲ subió, ámbar ▲ bajó, gris — sin
 // dato calculable.
+// Motivo cuando no hay variación calculable: prioridad al mensaje de
+// la sonda (sin lote vinculado / sin lecturas); si tiene señal vieja,
+// se informa desde cuándo no emite.
+const noDataReason = p => {
+  if (p.missing) return p.missing;
+  if (p.last_signal_ts) return `Sin señal desde ${new Date(p.last_signal_ts).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}`;
+  return 'Sin lecturas suficientes';
+};
+
 export default function ProbeDailyChangeCard({ probes, onOpen }) {
   if (!probes.length) return null;
   return (
@@ -27,7 +36,7 @@ export default function ProbeDailyChangeCard({ probes, onOpen }) {
                 {mm == null ? '—' : up ? `▲ +${mm}` : down ? `▼ ${mm}` : '0.0'}
                 <span className="ml-1 text-sm font-semibold text-slate-400">mm</span>
               </p>
-              {mm == null && <p className="text-[11px] text-slate-400">Sin lecturas suficientes</p>}
+              {mm == null && <p className="text-[11px] text-slate-400">{noDataReason(p)}</p>}
             </div>
           );
         })}
