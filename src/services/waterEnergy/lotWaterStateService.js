@@ -44,9 +44,7 @@ const dayAfter = (iso, n) => { const d = new Date(`${iso}T12:00:00`); d.setDate(
 const DEFAULT_ETO_MM = 4.0;
 // Límite de reconstrucción hacia atrás (días) desde el ancla
 const MAX_HISTORY_DAYS = 180;
-// Retro-proyección del gráfico (días): evolución previa al punto de
-// partida, invirtiendo el balance diario con los eventos observados.
-const BACKCAST_DAYS = 15;
+
 
 // Factor del lote en el programa: suma de sus porciones (p.ej.
 // Oeste + Este = lote completo).
@@ -296,38 +294,10 @@ async function computeLot(lot, ctx, withHistory) {
     if (rainToday > 0) rainEvents.push({ date: end, mm: rainToday });
   }
 
-  // ---- Retro-proyección: 15 días antes del punto de partida ----
-  // Evolución previa del perfil para el gráfico: el balance diario se
-  // INVIERTA desde el punto del día del ancla. Con la regla del
-  // gráfico (el agua del día X sube el punto del día X+1), invertir
-  // un día significa restarle el riego y la lluvia del día que se
-  // CALCULA, y devolverle la ETc del día desde el que se parte —
-  // acotado al rango físico [0, capacidad útil].
-  if (withHistory) {
-    const back = [];
-    let day = startDay;
-    // Si el ancla es HOY y hubo riego confirmado o lluvia hoy, ese
-    // agua ya está en el punto de HOY pero el día anterior se calcula
-    // SIN ella.
-    let w = startDay === end && (irrToday > 0 || rainToday > 0) ? round1(history[0].mm - irrToday - rainToday) : history[0].mm;
-    for (let i = 0; i < BACKCAST_DAYS; i++) {
-      const target = dayAfter(day, -1);
-      const irrTarget = round1((executed.get(target) || 0) * efficiency);
-      const rain = obs?.byDay.get(target)?.rain ?? 0;
-      const eto = obs?.byDay.get(day)?.eto ?? obs?.meanEto ?? DEFAULT_ETO_MM;
-      const kc = profile.current_kc != null ? profile.current_kc : kcService.kcForCropDate(lot.crop, day);
-      const etc = kc != null ? round1(eto * kc) : 0;
-      let before = w - irrTarget - rain + etc;
-      if (taw != null && before > taw) before = taw;
-      if (before < 0) before = 0;
-      w = round1(before);
-      back.push({ date: target, mm: w });
-      if (irrTarget > 0) irrigationEvents.push({ date: target, mm: irrTarget });
-      if (rain > 0) rainEvents.push({ date: target, mm: rain });
-      day = target;
-    }
-    history.unshift(...back.reverse());
-  }
+  // ---- Sin retro-proyección ----
+  // La curva calculada ARRANCA en la fecha de inicialización del
+  // estado hídrico: no se dibuja evolución previa (la línea no se ve
+  // hacia atrás del punto de partida).
 
   // ---- Programados del lote (futuro) con eficiencia del modelo ----
   // Un evento por PROGRAMA (guarda program_id para poder confirmar la
