@@ -30,7 +30,7 @@ function depthRows(breakdown) {
   return rows.sort((a, b) => a.sensor_depth_cm - b.sensor_depth_cm);
 }
 
-export default function StatusCard({ status, totalProfileMm, depthLabel, fcStorageMm, layerBreakdown }) {
+export default function StatusCard({ status, totalProfileMm, depthLabel, fcStorageMm, layerBreakdown, dailyChangeMm }) {
   const scale = fcStorageMm > 0 ? fcStorageMm : null;
   const rows = depthRows(layerBreakdown);
   const pos = scale && totalProfileMm != null ? clamp(Math.round((totalProfileMm / scale) * 100)) : 0;
@@ -45,6 +45,11 @@ export default function StatusCard({ status, totalProfileMm, depthLabel, fcStora
         <p className="mt-1 text-5xl font-bold tracking-tight text-charcoal">
           {totalProfileMm == null ? '—' : totalProfileMm}<span className="ml-1.5 text-lg font-semibold text-slate-400">mm</span>
         </p>
+        {dailyChangeMm != null && (
+          <p className={`mt-1.5 text-xs font-bold ${dailyChangeMm > 0 ? 'text-emerald-700' : dailyChangeMm < 0 ? 'text-amber-700' : 'text-slate-500'}`}>
+            {dailyChangeMm > 0 ? `▲ +${dailyChangeMm} mm` : dailyChangeMm < 0 ? `▼ ${dailyChangeMm} mm` : 'Sin variación'} en las últimas 24 h
+          </p>
+        )}
       </div>
       <div className="mt-6">
         <div className="relative">

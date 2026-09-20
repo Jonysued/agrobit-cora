@@ -26,6 +26,21 @@ export default function WaterEnergySoilPoint() {
   const incomplete = data.configuration_status === 'incomplete' && data.current_available_water_mm == null;
   const missingText = (data.missing_configuration || []).map(k => CONFIG_LABELS[k] || k).join(', ');
   const depthLabel = data.measured_profile_depth_cm != null ? `0–${data.measured_profile_depth_cm} cm` : '';
+  // Variación diaria: mm que se movió el agua del perfil en las
+  // últimas 24 h (última lectura vs. lectura más cercana a 24 h atrás).
+  const dailyChangeMm = (() => {
+    const h = data.history || [];
+    if (h.length < 2) return null;
+    const last = h[h.length - 1];
+    const target = last.t - 86400000;
+    let best = null, bestDiff = Infinity;
+    for (const p of h) {
+      const d = Math.abs(p.t - target);
+      if (d < bestDiff) { best = p; bestDiff = d; }
+    }
+    if (!best || bestDiff > 86400000 * 1.5 || best.profile == null) return null;
+    return Math.round((last.profile - best.profile) * 10) / 10;
+  })();
   return (
     <div className="mx-auto max-w-[1200px] space-y-5 p-4 md:p-6">
       <ModuleHeader />
@@ -62,6 +77,7 @@ export default function WaterEnergySoilPoint() {
               depthLabel={depthLabel}
               fcStorageMm={data.field_capacity_storage_mm}
               layerBreakdown={data.layer_breakdown}
+              dailyChangeMm={dailyChangeMm}
             />
           )}
           <ProfileChart readings={data.readings} channels={data.channels} events={data.events} />
