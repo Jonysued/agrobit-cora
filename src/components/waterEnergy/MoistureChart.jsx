@@ -143,7 +143,6 @@ export default function MoistureChart({ detail }) {
             {anchorTs && anchorTs < dayTs(today) && anchorTs >= winStart - DAY && anchorTs <= winEnd && (
               <ReferenceLine
                 x={anchorTs} stroke="#7c3aed" strokeDasharray="1 3"
-                label={{ value: `Inicialización · ${detail.anchor_storage_mm} mm`, fontSize: 9, fill: '#7c3aed', position: 'insideTop', offset: 19 }}
                 ifOverflow="extendDomain"
               />
             )}
