@@ -43,32 +43,23 @@ export function buildProfileSeries(detail, L, today) {
     }
     data.push({ t: dayTs(h.date), [L.H]: storage(h.mm), Lluvia: rainByDate.get(h.date) ?? null, Riego: executedByDate.get(h.date) ?? null });
   });
-  // ---- Bifurcaciones: primer día en que cada escenario se aparta ----
-  // Ninguna línea de escenario se dibuja SOBRE la negra: programada y
-  // recomendada tienen sus puntos recién desde SU salto (el día
-  // siguiente a su primer evento). Lo que sí llevan es un punto en
-  // HOY (mismo valor que la línea Actual): recharts los une en
-  // diagonal desde el final de la negra hasta su salto — el CONECTOR
-  // visual, sin superponer la trayectoria histórica.
-  // Primer día con riego programado del escenario (índice; -1 = no hay)
-  const firstSchedIdx = (scenarioWithoutIrrigation || []).findIndex(p => (p.irrigation_mm || 0) > 0);
-  // Primer día en que el escenario CON riego recomendado se aparta del
-  // Actual (su riego —o el programado— entra al perfil); -1 = nunca.
-  const firstRecIdx = hasRec
-    ? (scenarioWithIrrigation || []).findIndex((pr, i) => (pr?.available_water_mm ?? null) !== (scenarioNoIrrigation?.[i]?.available_water_mm ?? null))
-    : -1;
   // ---- HOY: punto de partida de los escenarios ----
+  // La línea de RIEGO PROGRAMADO NO arranca hoy: hasta el primer riego
+  // programado coincide exactamente con la línea Actual, así que no se
+  // dibuja (evita duplicar la curva negra). Nace el día del primer
+  // riego del cronograma — ahí se ve la bifurcación.
   // El histórico ya incluye HOY: NO se agrega un segundo punto de hoy
   // (dos puntos casi superpuestos — 12:00 y la hora actual — generan
-  // el pequeño doble trazo de la línea Actual en "Hoy").
+  // el pequeño doble trazo de la línea Actual en "Hoy"). La línea
+  // recomendada arranca del último punto del histórico.
   const lastHist = (history || [])[history.length - 1] || null;
-  const startS = firstSchedIdx >= 0 ? { [L.S]: storage(currentMm) } : {};
-  const startR = hasRec && firstRecIdx >= 0 ? { [L.R]: storage(currentMm) } : {};
   if (lastHist && lastHist.date === today) {
-    Object.assign(data[data.length - 1], startS, startR);
+    if (hasRec) data[data.length - 1][L.R] = storage(currentMm);
   } else {
-    data.push({ t: Date.now(), [L.H]: storage(currentMm), Lluvia: rainToday, Riego: riegoToday, ...startS, ...startR });
+    data.push({ t: Date.now(), [L.H]: storage(currentMm), Lluvia: rainToday, Riego: riegoToday, ...(hasRec ? { [L.R]: storage(currentMm) } : {}) });
   }
+  // Primer día con riego programado del escenario (índice; -1 = no hay)
+  const firstSchedIdx = (scenarioWithoutIrrigation || []).findIndex(p => (p.irrigation_mm || 0) > 0);
   // ---- Forecast (30 días): un punto por día + salto por escenario ----
   // El salto de la línea verde incluye además el riego recomendado.
   (scenarioWithoutIrrigation || []).forEach((p, i) => {
@@ -76,35 +67,24 @@ export function buildProfileSeries(detail, L, today) {
       const mid = { t: midTs(p.date) };
       const prevS = scenarioWithoutIrrigation[i - 1];
       const jumpS = (prevS.irrigation_mm || 0) + (prevS.rainfall_mm || 0);
-      // El punto intermedio de la programada existe SOLO desde su
-      // bifurcación (el día previo es el primer riego o posterior):
-      // antes su valor es IDÉNTICO al de la línea Actual y la taparía.
-      if (firstSchedIdx >= 0 && i - 1 >= firstSchedIdx && jumpS > 0) mid[L.S] = storage(capMm(prevS.available_water_mm + jumpS));
+      if (jumpS > 0) mid[L.S] = storage(capMm(prevS.available_water_mm + jumpS));
       const prevH = scenarioNoIrrigation?.[i - 1];
       if (prevH && (prevH.rainfall_mm || 0) > 0) mid[L.H] = storage(capMm(prevH.available_water_mm + prevH.rainfall_mm));
       const prevR = hasRec ? scenarioWithIrrigation?.[i - 1] : null;
       if (prevR) {
         const jumpR = (prevR.irrigation_mm || 0) + (prevR.rainfall_mm || 0);
-        // La recomendada recién desde su bifurcación: el salto de un día
-        // con riego propio (su primer evento) o de un día ya divergido
-        // del Actual. Antes de eso sus puntos son IDÉNTICOS a los de la
-        // línea negra y la taparían.
-        if (jumpR > 0 && ((prevR.irrigation_mm || 0) > 0 || (firstRecIdx >= 0 && i - 1 >= firstRecIdx))) mid[L.R] = storage(capMm(prevR.available_water_mm + jumpR));
+        if (jumpR > 0) mid[L.R] = storage(capMm(prevR.available_water_mm + jumpR));
       }
       if (mid[L.S] != null || mid[L.H] != null || mid[L.R] != null) data.push(mid);
     }
     data.push({
       t: dayTs(p.date),
       [L.H]: storage(scenarioNoIrrigation?.[i]?.available_water_mm ?? null),
-      // La programada recién desde su salto (i > firstSchedIdx); el
-      // punto de HOY la conecta en diagonal desde la línea negra.
-      ...(firstSchedIdx >= 0 && i > firstSchedIdx ? { [L.S]: storage(p.available_water_mm) } : {}),
+      // Solo desde el día del primer riego programado en adelante
+      ...(i >= firstSchedIdx ? { [L.S]: storage(p.available_water_mm) } : {}),
       Lluvia: (p.rainfall_mm || 0) > 0 ? Math.round(p.rainfall_mm * 10) / 10 : null,
       Programado: (p.irrigation_mm || 0) > 0 ? Math.round(p.irrigation_mm * 10) / 10 : null,
-      // La recomendada recién desde su bifurcación (primer día en que su
-      // valor deja de ser idéntico al del Actual); el punto de HOY la
-      // conecta en diagonal desde la línea negra.
-      ...(hasRec && firstRecIdx >= 0 && i >= firstRecIdx ? { [L.R]: storage(scenarioWithIrrigation?.[i]?.available_water_mm ?? p.available_water_mm) } : {}),
+      ...(hasRec ? { [L.R]: storage(scenarioWithIrrigation?.[i]?.available_water_mm ?? p.available_water_mm) } : {}),
     });
   });
   return data;
