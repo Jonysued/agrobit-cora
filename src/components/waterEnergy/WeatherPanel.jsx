@@ -59,7 +59,7 @@ export default function WeatherPanel({ farms: farmsProp, farmId: farmIdProp, onF
                 <Metric icon={Wind} label="Viento" value={combined.current.wind_speed_kmh != null ? `${Math.round(combined.current.wind_speed_kmh)} km/h` : '—'} />
                 <Metric icon={CloudRain} label="Lluvia" value={combined.current.rainfall_mm != null ? `${combined.current.rainfall_mm} mm` : '—'} />
                 <Metric icon={Sun} label="Radiación" value={combined.current.solar_radiation_w_m2 != null ? `${Math.round(combined.current.solar_radiation_w_m2)}` : '—'} />
-                <Metric icon={CloudSun} label="ET0" value={combined.current.eto_mm != null ? `${combined.current.eto_mm} mm` : '—'} />
+                <Metric icon={CloudSun} label="ET0" value={(combined.current.et_day_mm ?? combined.current.eto_mm) != null ? `${combined.current.et_day_mm ?? combined.current.eto_mm} mm` : '—'} />
               </div>
               <p className="mt-2 text-xs text-slate-500">
                 Fuente (dato observado): <b className="text-slate-700">{combined.station?.name || 'Estación'}</b> · Último dato: <b className="text-slate-700">{timeOf(combined.current.timestamp)}</b>
