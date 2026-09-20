@@ -44,7 +44,13 @@ export function buildProfileSeries(detail, L, today) {
     data.push({ t: dayTs(h.date), [L.H]: storage(h.mm), Lluvia: rainByDate.get(h.date) ?? null, Riego: executedByDate.get(h.date) ?? null });
   });
   // ---- HOY: punto de partida de los escenarios ----
-  data.push({ t: Date.now(), [L.H]: storage(currentMm), [L.S]: storage(currentMm), Lluvia: rainToday, Riego: riegoToday, ...(hasRec ? { [L.R]: storage(currentMm) } : {}) });
+  // La línea de RIEGO PROGRAMADO NO arranca hoy: hasta el primer riego
+  // programado coincide exactamente con la línea Actual, así que no se
+  // dibuja (evita duplicar la curva negra). Nace el día del primer
+  // riego del cronograma — ahí se ve la bifurcación.
+  data.push({ t: Date.now(), [L.H]: storage(currentMm), Lluvia: rainToday, Riego: riegoToday, ...(hasRec ? { [L.R]: storage(currentMm) } : {}) });
+  // Primer día con riego programado del escenario (índice; -1 = no hay)
+  const firstSchedIdx = (scenarioWithoutIrrigation || []).findIndex(p => (p.irrigation_mm || 0) > 0);
   // ---- Forecast (30 días): un punto por día + salto por escenario ----
   // El salto de la línea verde incluye además el riego recomendado.
   (scenarioWithoutIrrigation || []).forEach((p, i) => {
@@ -65,7 +71,8 @@ export function buildProfileSeries(detail, L, today) {
     data.push({
       t: dayTs(p.date),
       [L.H]: storage(scenarioNoIrrigation?.[i]?.available_water_mm ?? null),
-      [L.S]: storage(p.available_water_mm),
+      // Solo desde el día del primer riego programado en adelante
+      ...(i >= firstSchedIdx ? { [L.S]: storage(p.available_water_mm) } : {}),
       Lluvia: (p.rainfall_mm || 0) > 0 ? Math.round(p.rainfall_mm * 10) / 10 : null,
       Programado: (p.irrigation_mm || 0) > 0 ? Math.round(p.irrigation_mm * 10) / 10 : null,
       ...(hasRec ? { [L.R]: storage(scenarioWithIrrigation?.[i]?.available_water_mm ?? p.available_water_mm) } : {}),
