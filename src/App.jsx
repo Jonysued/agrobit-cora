@@ -24,6 +24,7 @@ import Settings from '@/pages/Settings';
 import WaterEnergy from '@/pages/WaterEnergy';
 import WaterEnergyLot from '@/pages/WaterEnergyLot';
 import WaterEnergyEnergy from '@/pages/WaterEnergyEnergy';
+import WaterEnergyIrrigation from '@/pages/WaterEnergyIrrigation';
 import WaterEnergyConfig from '@/pages/WaterEnergyConfig';
 import WaterEnergySoil from '@/pages/WaterEnergySoil';
 import WaterEnergySoilPoint from '@/pages/WaterEnergySoilPoint';
@@ -67,6 +68,7 @@ const AuthenticatedApp = () => {
           <Route path="/produccion" element={<Production />} />
           <Route path="/riego" element={<Irrigation />} />
           <Route path="/water-energy" element={<WaterEnergy />} />
+          <Route path="/water-energy/riegos" element={<WaterEnergyIrrigation />} />
           <Route path="/water-energy/energia" element={<WaterEnergyEnergy />} />
           <Route path="/water-energy/sensores" element={<WaterEnergySoil />} />
           <Route path="/water-energy/sensores/:probeId" element={<WaterEnergySoilPoint />} />

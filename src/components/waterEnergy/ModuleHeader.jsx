@@ -4,6 +4,7 @@ import { Droplets } from 'lucide-react';
 
 const TABS = [
   ['/water-energy', 'Dashboard'],
+  ['/water-energy/riegos', 'Riegos'],
   ['/water-energy/energia', 'Energía'],
   ['/water-energy/sensores', 'Sensores'],
   ['/water-energy/configuracion', 'Configuración'],
@@ -22,7 +23,7 @@ export default function ModuleHeader() {
         </div>
         <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-800">Modelo experimental · datos simulados</span>
       </div>
-      <nav className="flex gap-1 self-start rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+      <nav className="flex max-w-full gap-1 self-start overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
         {TABS.map(([to, label]) => (
           <NavLink key={to} to={to} end={to === '/water-energy'} className={({ isActive }) => `rounded-lg px-4 py-1.5 text-sm font-semibold transition ${isActive ? 'bg-emerald-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</NavLink>
         ))}

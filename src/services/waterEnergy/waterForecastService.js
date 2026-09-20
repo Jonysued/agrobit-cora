@@ -189,6 +189,26 @@ export const waterForecastService = {
     await base44.entities.IrrigationProgram.update(programId, { status: 'Finalizado' });
   },
 
+  // ---- Riegos a confirmar: TODOS los lotes en una lista ----
+  // Programas de HOY o de fechas PASADAS sin su IrrigationLog (la
+  // ejecución nunca se confirma por adelantado), con el efecto neto
+  // sobre el perfil (mm × eficiencia de recarga del suelo). Más
+  // atrasados primero.
+  async getPendingIrrigations() {
+    const lots = await this.getLots();
+    const curves = await lotWaterStateService.getLotStates(lots, { withHistory: false });
+    return lots.flatMap(lot => {
+      const curve = curves.get(lot.id);
+      return (curve?.events?.pendingPrograms || []).map(e => ({
+        ...e,
+        lot_id: lot.id,
+        lot_name: lot.name,
+        lot_farm: lot.farm,
+        efficiency: curve?.efficiency ?? null,
+      }));
+    }).sort((a, b) => a.date.localeCompare(b.date) || a.lot_name.localeCompare(b.lot_name));
+  },
+
   // ---- Dashboard: filas por lote + totales de 15 días ----
   async getFarmOverview() {
     const [lots, pumps, tariffs, designs] = await Promise.all([
