@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import ModuleHeader from '@/components/waterEnergy/ModuleHeader';
 import WeatherPanel from '@/components/waterEnergy/WeatherPanel';
 import LotForecastTable from '@/components/waterEnergy/LotForecastTable';
+import ProbeDailyChangeCard from '@/components/waterEnergy/ProbeDailyChangeCard';
 import MetricCard from '@/components/MetricCard';
 import LoadingState from '@/components/LoadingState';
 import { Button } from '@/components/ui/button';
-import { waterForecastService } from '@/services/waterEnergy';
+import { waterForecastService, soilWaterService } from '@/services/waterEnergy';
 import { weatherService } from '@/services/waterEnergy/weatherService';
 
 export default function WaterEnergy() {
@@ -15,8 +16,12 @@ export default function WaterEnergy() {
   const [error, setError] = useState(null);
   const [farms, setFarms] = useState([]);
   const [farmId, setFarmId] = useState(null);
+  const [probes, setProbes] = useState([]);
   useEffect(() => {
     weatherService.getFarms().then(fs => { setFarms(fs); const preferred = fs.find(f => f.name === 'Las 500'); if (fs.length) setFarmId((preferred || fs[0]).id); }).catch(() => setFarms([]));
+    // Variación de cada sonda (carga independiente: si falla, la
+    // tarjeta simplemente no aparece).
+    soilWaterService.getProbeSummaries().then(setProbes).catch(() => setProbes([]));
   }, []);
   // "Failed to fetch" = falla transitoria de red: la carga del panel
   // dispara ~25 consultas en paralelo y, en una conexión inestable,
@@ -60,6 +65,8 @@ export default function WaterEnergy() {
     cost: Math.round(withState.reduce((s, r) => s + (r.energy?.cost || 0), 0)),
   };
   const shown = farm ? farmTotals : totals;
+  // Sondas de la finca seleccionada (o todas, sin finca elegida)
+  const farmProbes = probes.filter(p => p.lot && (!farm || p.lot.farm === farm.name));
   return (
     <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
       <ModuleHeader />
@@ -75,6 +82,7 @@ export default function WaterEnergy() {
           {shown.unprofiled} lote(s) sin perfil de suelo configurado — configuralos en Water & Energy → Configuración.
         </p>
       )}
+      <ProbeDailyChangeCard probes={farmProbes} onOpen={id => navigate(`/water-energy/sensores/${id}`)} />
       <LotForecastTable rows={farmRows} onOpen={id => navigate(`/water-energy/lote/${id}`)} />
       <p className="text-center text-xs text-slate-400">Modelo de balance hídrico EXPERIMENTAL — los datos de clima pueden ser observados (estación propia) o simulados, según la configuración de cada finca. No constituye una predicción agronómica validada.</p>
     </div>

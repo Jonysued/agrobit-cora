@@ -306,11 +306,26 @@ async function stateForProbe(probe, lots, profiles, models) {
   const lotName = linkedLots.length > 1 ? `${lot.name} (+${linkedLots.length - 1} lotes)` : lot.name;
   const channels = await sensorService.getProbeChannels(probe.id);
   if (!channels.length) return { probe, probeId: probe.id, lot, lotName, missing: 'Sonda sin canales/profundidades configurados.' };
-  const readings = await base44.entities.SensorReading.filter({ probe_id: probe.id }, '-timestamp', 200);
+  // 600 lecturas ≈ 24 h de una sonda que reporta cada hora con ~12–24
+  // canales: alcanzan para calcular la variación de las últimas 24 h.
+  const readings = await base44.entities.SensorReading.filter({ probe_id: probe.id }, '-timestamp', 600);
   if (!readings.length) return { probe, probeId: probe.id, lot, lotName, missing: 'Sin lecturas — la sonda todavía no reporta datos.' };
   const profile = profiles.find(p => p.lot_id === lot.id) || null;
   const state = await buildState(profile, channels, readings);
-  return { probe, probeId: probe.id, lot, lotName, probeProvider: probe.provider, connectionStatus: probe.connection_status, ...state };
+  // Variación del agua del PERFIL COMPLETO de la sonda (escala Suma de
+  // perfil, mm) en las últimas 24 h: último punto completo vs el
+  // último punto 24 h antes. Sin un punto ≥ 24 h atrás no hay
+  // variación calculable (—).
+  let dailyChange = null;
+  if (state._model) {
+    const history = usefulWaterSeries(readings, channels, state._model);
+    if (history.length >= 2) {
+      const last = history[history.length - 1];
+      const prev = [...history].reverse().find(h => h.t <= last.t - DAY_MS);
+      if (prev) dailyChange = round1(last.profile - prev.profile);
+    }
+  }
+  return { probe, probeId: probe.id, lot, lotName, probeProvider: probe.provider, connectionStatus: probe.connection_status, daily_change_mm: dailyChange, ...state };
 }
 
 // Serie temporal de agua ÚTIL (mm) en la zona radicular medida
