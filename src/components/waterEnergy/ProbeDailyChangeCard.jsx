@@ -8,8 +8,8 @@ export default function ProbeDailyChangeCard({ probes, onOpen }) {
   if (!probes.length) return null;
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="text-lg font-bold text-charcoal">Variación de sondas · últimas 24 h</h3>
-      <p className="text-xs text-slate-400">Agua del perfil medido por cada sonda (mm de agua almacenada).</p>
+      <h3 className="text-lg font-bold text-charcoal">Variación de sensores · últimas 24 h</h3>
+      <p className="text-xs text-slate-400">Agua del perfil medido por cada sensor (mm de agua almacenada).</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {probes.map(p => {
           const mm = p.daily_change_mm;
