@@ -48,7 +48,16 @@ export function buildProfileSeries(detail, L, today) {
   // programado coincide exactamente con la línea Actual, así que no se
   // dibuja (evita duplicar la curva negra). Nace el día del primer
   // riego del cronograma — ahí se ve la bifurcación.
-  data.push({ t: Date.now(), [L.H]: storage(currentMm), Lluvia: rainToday, Riego: riegoToday, ...(hasRec ? { [L.R]: storage(currentMm) } : {}) });
+  // El histórico ya incluye HOY: NO se agrega un segundo punto de hoy
+  // (dos puntos casi superpuestos — 12:00 y la hora actual — generan
+  // el pequeño doble trazo de la línea Actual en "Hoy"). La línea
+  // recomendada arranca del último punto del histórico.
+  const lastHist = (history || [])[history.length - 1] || null;
+  if (lastHist && lastHist.date === today) {
+    if (hasRec) data[data.length - 1][L.R] = storage(currentMm);
+  } else {
+    data.push({ t: Date.now(), [L.H]: storage(currentMm), Lluvia: rainToday, Riego: riegoToday, ...(hasRec ? { [L.R]: storage(currentMm) } : {}) });
+  }
   // Primer día con riego programado del escenario (índice; -1 = no hay)
   const firstSchedIdx = (scenarioWithoutIrrigation || []).findIndex(p => (p.irrigation_mm || 0) > 0);
   // ---- Forecast (30 días): un punto por día + salto por escenario ----
