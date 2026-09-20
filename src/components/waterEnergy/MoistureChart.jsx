@@ -151,7 +151,7 @@ export default function MoistureChart({ detail }) {
             <Bar dataKey="Programado" name="Riego programado" yAxisId="rain" fill="#c4b5fd" stroke="#7c3aed" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#5b21b6' }} />
             <Line dataKey={H} stroke="#000000" strokeWidth={2} dot={{ r: 2, fill: '#000000', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
             {data.some(d => d[S] != null) && <Line dataKey={S} stroke="#0284c7" strokeWidth={2} dot={{ r: 2, fill: '#0284c7', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />}
-            {hasRec && <Line dataKey={R} stroke="#1a7350" strokeWidth={1.8} strokeDasharray="5 4" dot={{ r: 2, fill: '#1a7350', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />}
+            {hasRec && data.some(d => d[R] != null) && <Line dataKey={R} stroke="#1a7350" strokeWidth={1.8} strokeDasharray="5 4" dot={{ r: 2, fill: '#1a7350', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
