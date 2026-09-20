@@ -64,15 +64,14 @@ export default function MoistureChart({ detail }) {
   // en la fecha y los mm ingresados. Con inicialización reciente
   // queda en los 45 días estándar (15 atrás + 30 de forecast); el
   // usuario puede fijar otro rango desde el selector.
-  const anchorTs = detail.anchor_date ? dayTs(detail.anchor_date) : null;
-  const autoRange = (() => {
-    if (!anchorTs) return 45;
-    const need = Math.ceil((dataMaxTs - anchorTs) / DAY);
-    return RANGES.map(([v]) => v).find(v => v >= need) ?? 180;
-  })();
-  const effRange = rangeDays ?? autoRange;
+  // Ventana IGUAL para todos los lotes: por defecto 45 días (15 hacia
+  // atrás desde hoy + 30 de forecast). Un lote inicializado más tarde
+  // simplemente muestra su curva arrancando en la fecha de
+  // inicialización, sin que el gráfico re-encuadre la ventana.
+  const effRange = rangeDays ?? 45;
   const maxOffset = Math.max(0, Math.ceil((dataMaxTs - dataMinTs - effRange * DAY) / DAY));
   const effOffset = Math.min(offset, maxOffset);
+  const anchorTs = detail.anchor_date ? dayTs(detail.anchor_date) : null;
   const winEnd = dataMaxTs - effOffset * DAY;
   // La ventana nunca empieza antes del primer dato: si la curva es más
   // corta que el rango elegido, el gráfico se ajusta a los datos reales
