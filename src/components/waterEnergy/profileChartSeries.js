@@ -80,8 +80,12 @@ export function buildProfileSeries(detail, L, today) {
     data.push({
       t: dayTs(p.date),
       [L.H]: storage(scenarioNoIrrigation?.[i]?.available_water_mm ?? null),
-      // Solo desde el día del primer riego programado en adelante
-      ...(i >= firstSchedIdx ? { [L.S]: storage(p.available_water_mm) } : {}),
+      // Solo desde el día del primer riego programado en adelante.
+      // Si NO hay ningún riego programado (firstSchedIdx === -1), la
+      // línea azul NO se dibuja: sin riegos su escenario es IDÉNTICO
+      // al de la línea Actual y la taparía (se vería azul en vez de
+      // negra, solapada con la línea recomendada).
+      ...(firstSchedIdx >= 0 && i >= firstSchedIdx ? { [L.S]: storage(p.available_water_mm) } : {}),
       Lluvia: (p.rainfall_mm || 0) > 0 ? Math.round(p.rainfall_mm * 10) / 10 : null,
       Programado: (p.irrigation_mm || 0) > 0 ? Math.round(p.irrigation_mm * 10) / 10 : null,
       ...(hasRec ? { [L.R]: storage(scenarioWithIrrigation?.[i]?.available_water_mm ?? p.available_water_mm) } : {}),
