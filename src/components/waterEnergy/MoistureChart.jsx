@@ -47,6 +47,9 @@ export default function MoistureChart({ detail }) {
   // del día siguiente de cada riego o lluvia — el salto lee
   // EXACTAMENTE los mm aplicados y desde ahí baja con la ETc del día.
   const data = buildProfileSeries(detail, { H, S, R }, today);
+  // Sin riegos programados a futuro no hay línea azul: la leyenda y el
+  // gráfico solo muestran "Riego programado" cuando existe.
+  const hasScheduled = (detail.scheduled_irrigation || []).length > 0;
   // Escala propia de las barras de lluvia (eje derecho oculto): mm de
   // lluvia, no de perfil — lluvias chicas siguen siendo visibles.
   const rainMax = Math.max(10, ...data.map(d => Math.max(d.Lluvia || 0, d.Riego || 0, d.Programado || 0))) * 2.5;
@@ -150,7 +153,7 @@ export default function MoistureChart({ detail }) {
             <Bar dataKey="Riego" name="Riego ejecutado" yAxisId="rain" fill="#a7f3d0" stroke="#10b981" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#047857' }} />
             <Bar dataKey="Programado" name="Riego programado" yAxisId="rain" fill="#c4b5fd" stroke="#7c3aed" strokeWidth={1} radius={[3, 3, 0, 0]} maxBarSize={14} label={{ position: 'top', fontSize: 9, fill: '#5b21b6' }} />
             <Line dataKey={H} stroke="#000000" strokeWidth={2} dot={{ r: 2, fill: '#000000', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
-            <Line dataKey={S} stroke="#0284c7" strokeWidth={2} dot={{ r: 2, fill: '#0284c7', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />
+            {hasScheduled && <Line dataKey={S} stroke="#0284c7" strokeWidth={2} dot={{ r: 2, fill: '#0284c7', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />}
             {hasRec && <Line dataKey={R} stroke="#1a7350" strokeWidth={1.8} strokeDasharray="5 4" dot={{ r: 2, fill: '#1a7350', strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls />}
           </ComposedChart>
         </ResponsiveContainer>
