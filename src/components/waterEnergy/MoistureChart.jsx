@@ -28,8 +28,7 @@ export default function MoistureChart({ detail }) {
   const [rangeDays, setRangeDays] = useState(null);
   const [offset, setOffset] = useState(0); // días que la ventana retrocede respecto del dato más reciente
   const showGrid = true;
-  // Nueva inicialización del estado: el gráfico vuelve a encuadrar
-  // la ventana sobre el nuevo punto de partida.
+  // Nueva inicialización del estado: se resetea el selector de rango.
   useEffect(() => { setRangeDays(null); setOffset(0); }, [detail.anchor_date]);
   const hasRec = recommendation != null;
 
@@ -59,11 +58,6 @@ export default function MoistureChart({ detail }) {
   // ---- Ventana visible (RANGO DE FECHAS) ----
   const dataMinTs = Math.min(...data.map(d => d.t));
   const dataMaxTs = Math.max(...data.map(d => d.t));
-  // Rango AUTOMÁTICO por defecto: la ventana incluye siempre el punto
-  // de INICIALIZACIÓN del estado hídrico, así la curva se ve arrancar
-  // en la fecha y los mm ingresados. Con inicialización reciente
-  // queda en los 45 días estándar (15 atrás + 30 de forecast); el
-  // usuario puede fijar otro rango desde el selector.
   // Ventana IGUAL para todos los lotes: por defecto 45 días (15 hacia
   // atrás desde hoy + 30 de forecast). Un lote inicializado más tarde
   // simplemente muestra su curva arrancando en la fecha de
@@ -72,11 +66,13 @@ export default function MoistureChart({ detail }) {
   const maxOffset = Math.max(0, Math.ceil((dataMaxTs - dataMinTs - effRange * DAY) / DAY));
   const effOffset = Math.min(offset, maxOffset);
   const anchorTs = detail.anchor_date ? dayTs(detail.anchor_date) : null;
-  const winEnd = dataMaxTs - effOffset * DAY;
-  // La ventana nunca empieza antes del primer dato: si la curva es más
-  // corta que el rango elegido, el gráfico se ajusta a los datos reales
-  // (la curva arranca al inicio del gráfico, sin vacío a la izquierda).
-  const winStart = Math.max(dataMinTs, winEnd - effRange * DAY);
+  // Ventana FIJA anclada en HOY, igual para todos los lotes: 15 días
+  // hacia atrás + 30 de forecast (con el rango por defecto de 45 días).
+  // Un lote inicializado más tarde muestra su curva arrancando en la
+  // fecha de inicialización, con espacio vacío antes de ese punto.
+  const todayTs = dayTs(today);
+  const winEnd = todayTs + 30 * DAY - effOffset * DAY;
+  const winStart = winEnd - effRange * DAY;
   const filtered = data.filter(d => d.t >= winStart - DAY && d.t <= winEnd + DAY / 2);
   const step = Math.ceil(effRange / 2);
 
