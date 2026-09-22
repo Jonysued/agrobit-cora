@@ -6,7 +6,9 @@ import { sensorService } from '@/services/waterEnergy';
 import { linkedLotsFor } from '@/services/waterEnergy/soilWaterService';
 
 // Registro de sondas y su vínculo con la API del proveedor.
-// El lote de cada sonda se asigna en "Vinculación de perfiles".
+// El lote de cada sonda se asigna en la columna "Lote" de la tabla
+// (vínculo directo; el vínculo por modelo de suelo se mantiene en
+// "Vinculación de perfiles").
 const PROVIDERS = [['sentek', 'Sentek · IrriMAX Live'], ['wiseconn', 'WiseConn'], ['cropx', 'CropX'], ['demo', 'Demo / Manual']];
 const EMPTY_PROBE = { name: '', provider: '', external_device_id: '', active: true };
 const rel = ts => { if (!ts) return '—'; const h = Math.round((Date.now() - new Date(ts).getTime()) / 3600000); return h < 1 ? 'hace instantes' : h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`; };
@@ -30,6 +32,18 @@ export default function SensorSection({ lots, probes, profiles, models, onChange
     if (form.id) await sensorService.updateProbe(form.id, form);
     else await sensorService.createProbe(form);
     setBusy(false); setForm(null); onChange();
+  };
+
+  // Vínculo directo sonda → lote: asigna el lote y le asegura un punto
+  // de monitoreo en ese lote (gestión automática de puntos).
+  const [attachingId, setAttachingId] = useState(null);
+  const attach = async (s, lotId) => {
+    setAttachingId(s.id);
+    try {
+      if (lotId) await sensorService.attachProbeToLot(s.id, lotId);
+      else await sensorService.updateProbe(s.id, { lot_id: null });
+      onChange();
+    } finally { setAttachingId(null); }
   };
 
   const run = (map, key, fn) => async s => {
@@ -68,7 +82,7 @@ export default function SensorSection({ lots, probes, profiles, models, onChange
             <Field label="ID del dispositivo (API)"><input value={form.external_device_id ?? ''} onChange={e => set('external_device_id', e.target.value)} className={inputCls} placeholder={form.provider === 'sentek' ? 'Nombre del logger en IrriMAX (ej. BARNEA)' : 'ID en la API del proveedor'} /></Field>
           </div>
           <label className="mt-3 flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={form.active !== false} onChange={e => set('active', e.target.checked)} className="h-4 w-4 accent-emerald-700" />Activa</label>
-          <p className="mt-2 text-[11px] text-slate-400">Las credenciales de la API del proveedor se configuran de forma segura en el backend (Secrets). En Sentek, el ID del dispositivo es el nombre del logger tal como aparece en IrriMAX Live. El lote de cada sonda se vincula en "Vinculación de perfiles" — al vincularla, la sonda aparece en el módulo Sensores y alimenta los pronósticos.</p>
+          <p className="mt-2 text-[11px] text-slate-400">Las credenciales de la API del proveedor se configuran de forma segura en el backend (Secrets). En Sentek, el ID del dispositivo es el nombre del logger tal como aparece en IrriMAX Live. El lote se vincula en la columna "Lote" de la tabla — al vincularla, la sonda sincroniza lecturas y alimenta los pronósticos de ese lote.</p>
           <button disabled={busy} className="mt-4 w-full rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy ? 'Guardando…' : 'Guardar sonda'}</button>
         </form>
       )}
@@ -85,7 +99,12 @@ export default function SensorSection({ lots, probes, profiles, models, onChange
                   <React.Fragment key={s.id}>
                     <tr className="border-b border-slate-100">
                       <td className="py-2 pr-3"><b className="text-slate-700">{s.name}</b></td>
-                      <td className="pr-3 text-slate-600">{lotLabel(s, lots, profiles, models)}</td>
+                      <td className="pr-3">
+                        <select value={s.lot_id || ''} disabled={attachingId === s.id} onChange={e => attach(s, e.target.value)} className={`${inputCls} max-w-[170px] py-1 text-xs`} title="Lote vinculado a la sonda">
+                          <option value="">{s.lot_id ? 'Sin vincular' : lotLabel(s, lots, profiles, models)}</option>
+                          {lots.map(l => <option key={l.id} value={l.id}>{l.name} · {l.farm}</option>)}
+                        </select>
+                      </td>
                       <td className="pr-3 text-slate-600">{s.provider || '—'}</td>
                       <td className="pr-3 text-slate-600">{s.external_device_id || '—'}</td>
                       <td className="pr-3 text-slate-600">{rel(s.last_reading_at)}</td>
