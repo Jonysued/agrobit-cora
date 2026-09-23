@@ -101,6 +101,14 @@ function entityApi(entityName) {
       for (const [column, value] of Object.entries(criteria || {})) {
         if (value === null) query = query.is(column, null);
         else if (Array.isArray(value)) query = query.contains(column, value);
+        else if (typeof value === 'object') {
+          if (value.$gte !== undefined) query = query.gte(column, value.$gte);
+          if (value.$lte !== undefined) query = query.lte(column, value.$lte);
+          if (value.$gt !== undefined) query = query.gt(column, value.$gt);
+          if (value.$lt !== undefined) query = query.lt(column, value.$lt);
+          if (value.$neq !== undefined) query = query.neq(column, value.$neq);
+          if (value.$in !== undefined) query = query.in(column, value.$in);
+        }
         else query = query.eq(column, value);
       }
       query = applyOrder(query, sort);
@@ -322,4 +330,3 @@ export const backend = {
     },
   },
 };
-
