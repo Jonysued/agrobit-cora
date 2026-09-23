@@ -14,6 +14,7 @@ Deno.serve(withCors(async function (req) {
       // la sonda es referencia (mismo criterio que la app).
       const lotId = await resolveProbeLotId(client, probe);
       if (!lotId) {
+        await client.entities.SoilProbe.update(probe.id, { connection_status: 'misconfigured' });
         return { probe: probe.name, ok: false, skipped: 'Sin lote vinculado' };
       }
       try {
