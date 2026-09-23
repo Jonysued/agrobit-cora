@@ -1,0 +1,17 @@
+{
+  "name": "Lucient — Awareness for Agriculture",
+  "short_name": "Lucient",
+  "description": "Monitoreo, predicción y optimización agrícola.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F4F7F2",
+  "theme_color": "#0B2526",
+  "icons": [
+    {
+      "src": "/brand/lucient-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
