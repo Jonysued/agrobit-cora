@@ -46,11 +46,22 @@ function Summary({ data }) {
 
 function ChartContent({ id, data, range, compact }) {
   const height = compact ? 230 : 520;
+  const measurementChannels = data.measurement_channels || data.channels || [];
+  const typed = type => measurementChannels.filter(channel => channel.sensor_type === type);
   if (id === 'moisture') return <MoistureLines readings={data.readings} channels={data.channels} events={data.events} range={range} compact={compact} height={height} />;
   if (id === 'stacked') return <MoistureLines readings={data.readings} channels={data.channels} range={range} compact={compact} stacked height={height} />;
   if (id === 'profile') return <WaterSumChart history={data.history} range={range} compact={compact} height={height} recharge={data.recharge_storage_mm} target={data.target_storage_mm} capacity={data.field_capacity_storage_mm} />;
   if (id === 'root') return <WaterSumChart history={data.history} range={range} compact={compact} height={height} mode="root" recharge={data.recharge_threshold_mm} target={data.target_water_mm} capacity={data.total_available_water_capacity_mm} />;
-  return <EmptyChart message={id === 'temperature' ? 'Temperatura no disponible' : 'Conductividad no disponible'} />;
+  if (id === 'temperature') {
+    const channels = typed('soil_temperature');
+    return channels.length
+      ? <MoistureLines readings={data.readings} channels={channels} range={range} compact={compact} height={height} unit={channels[0]?.unit || '°C'} />
+      : <EmptyChart message="Temperatura no disponible" />;
+  }
+  const channels = typed('electrical_conductivity');
+  return channels.length
+    ? <MoistureLines readings={data.readings} channels={channels} range={range} compact={compact} height={height} unit={channels[0]?.unit || 'VIC'} />
+    : <EmptyChart message="Conductividad no disponible" />;
 }
 
 function ProbeDashboard({ data, openChart }) {
@@ -59,7 +70,12 @@ function ProbeDashboard({ data, openChart }) {
       <Summary data={data} />
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         {CHARTS.map(chart => {
-          const available = !['temperature', 'conductivity'].includes(chart.id);
+          const allChannels = data.measurement_channels || [];
+          const available = chart.id === 'temperature'
+            ? allChannels.some(channel => channel.sensor_type === 'soil_temperature')
+            : chart.id === 'conductivity'
+              ? allChannels.some(channel => channel.sensor_type === 'electrical_conductivity')
+              : true;
           return (
             <ProbeChartCard key={chart.id} {...chart} available={available} onOpen={() => openChart(chart.id)}>
               <ChartContent id={chart.id} data={data} range="30d" compact />
