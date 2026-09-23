@@ -515,10 +515,11 @@ export const soilWaterService = {
     const [lots, profiles, models] = await Promise.all([backend.entities.Lot.list(), backend.entities.SoilProfile.list(), backend.entities.SoilBehaviorModel.list()]);
     const lot = linkedLotsFor(probe, lots, profiles, models)[0] || null;
     if (!lot) return { probe, lot: null, missing: 'Sonda sin lote vinculado — vinculá el lote en Water & Energy → Configuración → Vinculación de perfiles.' };
-    const [channels, readings] = await Promise.all([
-      sensorService.getProbeChannels(probe.id),
+    const [allChannels, readings] = await Promise.all([
+      sensorService.getAllProbeChannels(probe.id),
       sensorService.getProbeReadings(probe.id, Date.now() - 95 * DAY_MS, Date.now()),
     ]);
+    const channels = allChannels.filter(channel => channel.sensor_type === 'soil_moisture');
     if (!channels.length) return { probe, lot, missing: 'La sonda no tiene canales configurados.' };
     const profile = profiles.find(p => p.lot_id === lot.id) || null;
     const state = await buildState(profile, channels, readings);
@@ -551,6 +552,7 @@ export const soilWaterService = {
       probe,
       lot,
       channels,
+      measurement_channels: allChannels,
       readings,
       profile,
       ...state,

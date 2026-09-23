@@ -43,6 +43,11 @@ export const sensorService = {
       .sort((a, b) => a.depth_cm - b.depth_cm);
   },
 
+  async getAllProbeChannels(probeId) {
+    const channels = await backend.entities.SoilProbeChannel.filter({ probe_id: probeId });
+    return channels.filter(c => c.active !== false).sort((a, b) => a.depth_cm - b.depth_cm);
+  },
+
   // ---- Lecturas de una sonda dentro de un rango (ascendentes) ----
   // El rango de fechas se filtra en el SERVIDOR ($gte/$lte) para no
   // traer todo el histórico cuando crece (sondas con miles de filas).
