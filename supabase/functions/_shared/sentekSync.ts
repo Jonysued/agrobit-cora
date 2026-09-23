@@ -74,41 +74,61 @@ export async function syncSentekProbe(client, probe, lotId) {
     return { ok: true, ingested: 0, connection_status: await markConnection(), message: staleDataMessage(), last_reading_at: probe.last_reading_at || null };
   }
 
-  // Canales reales de la sonda: uno por profundidad con sensor de humedad
-  const depths = [...new Set(result.rows.flatMap(r => Object.keys(r.values).map(Number)))].sort((a, b) => a - b);
+  // Canales reales de la sonda: humedad, temperatura y conductividad/
+  // salinidad, exactamente como los describe IrriMAX Live.
+  const measurements = result.rows.flatMap(row => row.measurements || []);
+  const definitions = [...new Map(measurements.map(item => [
+    `${item.sensor_type}|${item.depth_cm}|${item.external_channel_id}`,
+    item,
+  ])).values()];
   const existing = await client.entities.SoilProbeChannel.filter({ probe_id: probe.id });
   const channels = new Map();
   const newChannels = [];
-  for (const d of depths) {
-    const ch = existing.find(c => c.depth_cm === d && c.sensor_type === 'soil_moisture');
-    if (ch) channels.set(d, ch);
-    else newChannels.push({ probe_id: probe.id, external_channel_id: `A${d}`, sensor_type: 'soil_moisture', depth_cm: d, unit: '%', active: true });
+  for (const definition of definitions) {
+    const key = `${definition.sensor_type}|${definition.depth_cm}|${definition.external_channel_id}`;
+    const ch = existing.find(c => c.sensor_type === definition.sensor_type && c.depth_cm === definition.depth_cm);
+    if (ch) channels.set(key, ch);
+    else newChannels.push({
+      probe_id: probe.id,
+      external_channel_id: definition.external_channel_id,
+      sensor_type: definition.sensor_type,
+      depth_cm: definition.depth_cm,
+      unit: definition.unit,
+      active: true,
+      _key: key,
+    });
   }
   if (newChannels.length) {
-    const created = await client.entities.SoilProbeChannel.bulkCreate(newChannels);
-    created.forEach((c, i) => channels.set(newChannels[i].depth_cm, c));
+    const created = await client.entities.SoilProbeChannel.bulkCreate(newChannels.map(({ _key, ...channel }) => channel));
+    created.forEach((channel, i) => channels.set(newChannels[i]._key, channel));
   }
 
   // Persistencia incremental: solo lecturas posteriores a la última guardada
-  const recents = await client.entities.SensorReading.filter({ probe_id: probe.id }, '-timestamp', 50);
-  const lastTs = recents.length ? new Date(recents[0].timestamp).getTime() : 0;
+  const recents = await client.entities.SensorReading.filter({ probe_id: probe.id }, '-timestamp', 1000);
+  const lastByChannel = new Map();
+  for (const reading of recents) {
+    const timestamp = new Date(reading.timestamp).getTime();
+    if (timestamp > (lastByChannel.get(reading.probe_channel_id) || 0)) lastByChannel.set(reading.probe_channel_id, timestamp);
+  }
   const payload = [];
   let maxTs = 0;
   for (const row of result.rows) {
     const t = new Date(row.timestamp).getTime();
-    if (!Number.isFinite(t) || t <= lastTs) continue;
+    if (!Number.isFinite(t)) continue;
     if (t > maxTs) maxTs = t;
-    for (const [depth, value] of Object.entries(row.values)) {
-      const ch = channels.get(Number(depth));
+    for (const measurement of row.measurements || []) {
+      const key = `${measurement.sensor_type}|${measurement.depth_cm}|${measurement.external_channel_id}`;
+      const ch = channels.get(key);
       if (!ch) continue;
+      if (t <= (lastByChannel.get(ch.id) || 0)) continue;
       const rec = {
         probe_id: probe.id,
         probe_channel_id: ch.id,
         lot_id: effectiveLotId,
         timestamp: row.timestamp,
-        value,
-        depth_cm: Number(depth),
-        unit: '%',
+        value: measurement.value,
+        depth_cm: measurement.depth_cm,
+        unit: measurement.unit,
         source: 'LIVE',
         quality_status: 'ok',
       };
@@ -136,7 +156,7 @@ export async function syncSentekProbe(client, probe, lotId) {
       ok: true,
       ingested,
       timestamps: result.rows.length,
-      channels: depths.length,
+      channels: definitions.length,
       connection_status,
       last_reading_at,
     };
@@ -145,7 +165,7 @@ export async function syncSentekProbe(client, probe, lotId) {
     ok: true,
     ingested,
     timestamps: result.rows.length,
-    channels: depths.length,
+    channels: definitions.length,
     last_reading_at: maxTs ? new Date(maxTs).toISOString() : (probe.last_reading_at || null),
   };
 }

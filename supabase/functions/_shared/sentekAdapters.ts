@@ -27,7 +27,39 @@ function missingCredentials() {
   return { ok: false, status: "missing_credentials", message: "Falta configurar SENTEK_IRRIMAX_API_TOKEN en los secrets de la app (Settings de IrriMAX Live → API key)." };
 }
 
-// ---- getloggers: loggers de la cuenta y sus sensores de humedad ----
+function attributes(tag) {
+  const result = {};
+  for (const match of tag.matchAll(/([\w:-]+)="([^"]*)"/g)) result[match[1]] = match[2];
+  return result;
+}
+
+function classifySensor(attrs) {
+  const label = `${attrs.type || ''} ${attrs.measurement || ''} ${attrs.name || ''}`.toLowerCase();
+  if (/temperature|temperatura/.test(label)) return { sensor_type: 'soil_temperature', default_unit: '°C' };
+  if (/salinity|conductivity|conductividad|\bvic\b/.test(label)) return { sensor_type: 'electrical_conductivity', default_unit: 'VIC' };
+  if (/water content|moisture|humedad/.test(label)) return { sensor_type: 'soil_moisture', default_unit: '%' };
+  return null;
+}
+
+function parseSensors(block) {
+  const sensors = [];
+  for (const match of block.matchAll(/<Sensor\b[^>]*>/gi)) {
+    const attrs = attributes(match[0]);
+    const classification = classifySensor(attrs);
+    const depth = Number(attrs.depth_cm ?? attrs.depth ?? attrs.Depth);
+    if (!classification || !attrs.name || !Number.isFinite(depth)) continue;
+    sensors.push({
+      sensor: attrs.name,
+      depth_cm: depth,
+      sensor_type: classification.sensor_type,
+      unit: attrs.unit || attrs.units || classification.default_unit,
+      provider_type: attrs.type || attrs.measurement || null,
+    });
+  }
+  return sensors;
+}
+
+// ---- getloggers: loggers de la cuenta y todos sus sensores de suelo ----
 export async function getSentekLoggers() {
   const key = getKey();
   if (!key) return missingCredentials();
@@ -47,8 +79,7 @@ export async function getSentekLoggers() {
     const loggers = xml.split(/<Logger\s/).slice(1).map(block => ({
       name: (block.match(/name="([^"]+)"/) || [])[1] || null,
       logger_id: (block.match(/logger_id="([^"]+)"/) || [])[1] || null,
-      sensors: [...block.matchAll(/<Sensor\s+name="(A\d+)"\s+depth_cm="(\d+)"\s+type="Soil Water Content"/g)]
-        .map(m => ({ sensor: m[1], depth_cm: Number(m[2]) })),
+      sensors: parseSensors(block),
     })).filter(l => l.name);
     return { ok: true, status: "connected", loggers };
   } catch (e) {
@@ -70,27 +101,36 @@ export async function testSentekProbe(probe) {
     return { ok: false, status: "error", message: `No se encontró el logger "${probe.external_device_id}" en tu cuenta de IrriMAX Live. Loggers disponibles: ${names || "ninguno"}.` };
   }
   if (!logger.sensors.length) {
-    return { ok: false, status: "error", message: `El logger "${logger.name}" no tiene sensores de humedad de suelo configurados.` };
+    return { ok: false, status: "error", message: `El logger "${logger.name}" no tiene sensores de suelo compatibles configurados.` };
   }
+  const counts = logger.sensors.reduce((acc, sensor) => {
+    acc[sensor.sensor_type] = (acc[sensor.sensor_type] || 0) + 1;
+    return acc;
+  }, {});
+  const labels = [
+    counts.soil_moisture ? `${counts.soil_moisture} de humedad` : null,
+    counts.soil_temperature ? `${counts.soil_temperature} de temperatura` : null,
+    counts.electrical_conductivity ? `${counts.electrical_conductivity} de conductividad/salinidad` : null,
+  ].filter(Boolean).join(', ');
   return {
     ok: true,
     status: "connected",
-    message: `Conectada: ${logger.sensors.length} sensores de humedad a ${logger.sensors.map(s => s.depth_cm).join("/")} cm.`,
+    message: `Conectada: ${labels}. Profundidades: ${[...new Set(logger.sensors.map(s => s.depth_cm))].sort((a, b) => a - b).join("/")} cm.`,
     logger,
   };
 }
 
 // ---- Lecturas de una sonda desde una fecha (o 14 días por defecto).
-// Devuelve [{timestamp, values: {profundidad_cm → % VWC}}].
+// Devuelve [{timestamp, measurements: [{sensor_type, depth_cm, unit, value}]}].
 export async function fetchSentekReadings(probe, fromIso) {
   const test = await testSentekProbe(probe);
   if (!test.ok) return test;
   const key = getKey();
   const pad = n => String(n).padStart(2, "0");
   // Ventana incremental: desde la última lectura menos 2 h de margen.
-  // Primera importación acotada a 72 h: alcanza para inicializar el motor
+  // Primera importación acotada a 7 días: alcanza para inicializar los gráficos
   // sin exceder el tiempo máximo de la Edge Function con históricos masivos.
-  const fromMs = (fromIso ? new Date(fromIso).getTime() : Date.now() - 3 * 86400000) - 2 * 3600000;
+  const fromMs = (fromIso ? new Date(fromIso).getTime() : Date.now() - 7 * 86400000) - 2 * 3600000;
   // Hora local del sitio (UTC-3): componentes de pared locales de un instante UTC.
   const local = new Date(fromMs - 3 * 3600000);
   const from = `${local.getUTCFullYear()}${pad(local.getUTCMonth() + 1)}${pad(local.getUTCDate())}${pad(local.getUTCHours())}${pad(local.getUTCMinutes())}${pad(local.getUTCSeconds())}`;
@@ -106,11 +146,16 @@ export async function fetchSentekReadings(probe, fromIso) {
     if (lines.length < 2) {
       return { ok: true, status: "connected", message: "Sin lecturas nuevas en IrriMAX Live.", rows: [], logger: test.logger };
     }
-    // Columnas A#(profundidad) = contenido de agua del suelo
-    const aCols = [];
+    // IrriMAX usa una columna por sensor/profundidad. La letra no se
+    // interpreta: el tipo real viene del XML de getloggers.
+    const sensorByNameDepth = new Map(test.logger.sensors.map(sensor => [`${sensor.sensor}|${sensor.depth_cm}`, sensor]));
+    const measurementCols = [];
     lines[0].split(",").forEach((h, i) => {
-      const m = h.match(/^(A\d+)\((\d+)\)$/);
-      if (m) aCols.push({ col: i, depth_cm: Number(m[2]) });
+      const clean = h.trim().replace(/^"|"$/g, '');
+      const m = clean.match(/^([^()]+)\((\d+(?:\.\d+)?)\)(?:\[([^\]]+)\])?$/);
+      if (!m) return;
+      const sensor = sensorByNameDepth.get(`${m[1]}|${Number(m[2])}`);
+      if (sensor) measurementCols.push({ col: i, ...sensor, unit: m[3] || sensor.unit });
     });
     const rows = [];
     for (const line of lines.slice(1)) {
@@ -118,14 +163,20 @@ export async function fetchSentekReadings(probe, fromIso) {
       const dm = (cells[0] || "").match(/^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
       if (!dm) continue;
       const timestamp = `${dm[1]}-${dm[2]}-${dm[3]}T${dm[4]}:${dm[5]}:${dm[6]}${TZ}`;
-      const values = {};
-      for (const c of aCols) {
+      const measurements = [];
+      for (const c of measurementCols) {
         const raw = (cells[c.col] || "").trim();
         if (!raw || raw === "-1") continue; // valor inválido del sensor
         const v = Number(raw);
-        if (Number.isFinite(v) && v >= 0) values[c.depth_cm] = Math.round(v * 10000) / 10000;
+        if (Number.isFinite(v) && v >= 0) measurements.push({
+          external_channel_id: c.sensor,
+          sensor_type: c.sensor_type,
+          depth_cm: c.depth_cm,
+          unit: c.unit,
+          value: Math.round(v * 10000) / 10000,
+        });
       }
-      if (Object.keys(values).length) rows.push({ timestamp, values });
+      if (measurements.length) rows.push({ timestamp, measurements });
     }
     return { ok: true, status: "connected", rows, logger: test.logger };
   } catch (e) {
