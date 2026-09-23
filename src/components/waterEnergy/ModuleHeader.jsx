@@ -21,7 +21,6 @@ export default function ModuleHeader() {
             <p className="text-xs text-slate-500">Estado hídrico, forecast y consumo energético</p>
           </div>
         </div>
-        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-800">Modelo experimental · datos simulados</span>
       </div>
       <nav className="flex max-w-full gap-1 self-start overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
         {TABS.map(([to, label]) => (
