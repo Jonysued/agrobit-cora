@@ -1,6 +1,6 @@
 import React,{useState} from 'react';
 import { useFarm } from '@/lib/FarmContext';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import LoadingState from '@/components/LoadingState';
 import ProgramForm from '@/components/irrigation/ProgramForm';
 import ProgramList from '@/components/irrigation/ProgramList';
@@ -14,8 +14,8 @@ export default function Irrigation(){
   const programs=[...(d.IrrigationProgram||[])].sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
   const iso=dt=>{const x=new Date(dt);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`};
   const toggle=async(p,day,log)=>{
-    if(log) await base44.entities.IrrigationLog.delete(log.id);
-    else await base44.entities.IrrigationLog.create({program_id:p.id,date:iso(day)});
+    if(log) await backend.entities.IrrigationLog.delete(log.id);
+    else await backend.entities.IrrigationLog.create({program_id:p.id,date:iso(day)});
     await d.refetch();
   };
   return <div className="mx-auto max-w-[1500px] p-5 lg:p-8">

@@ -1,5 +1,5 @@
 import React,{useState} from 'react';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import { densityOf } from '@/lib/farmCalculations';
 import { Droplets, Plus, Save, Pencil } from 'lucide-react';
 
@@ -30,8 +30,8 @@ export default function IrrigationTab({lot,data}){
       design_pressure_bar:num('design_pressure_bar'),installation_year:num('installation_year'),
       notes:form.notes,
     };
-    if(existing) await base44.entities.IrrigationDesign.update(existing.id,payload);
-    else await base44.entities.IrrigationDesign.create(payload);
+    if(existing) await backend.entities.IrrigationDesign.update(existing.id,payload);
+    else await backend.entities.IrrigationDesign.create(payload);
     await data.refetch();setEditing(false);setBusy(false);
   };
 

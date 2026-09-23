@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, Download, LoaderCircle } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
+import * as XLSX from 'xlsx';
 
 const HEADERS = ['lote', 'campaña', 'total_kg', 'kg_ha', 'kg_planta', 'categoria_1_pct', 'categoria_2_pct', 'descarte_pct', 'calibre_promedio', 'brix', 'calidad_comercial', 'fecha_inicio_cosecha', 'fecha_fin_cosecha', 'estimada', 'notas'];
 
@@ -29,39 +30,10 @@ export default function ProductionImport({ lots, onImported }) {
     e.target.value = '';
     setBusy(true); setMsg(null);
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      const res = await base44.integrations.Core.ExtractDataFromUploadedFile({
-        file_url,
-        json_schema: {
-          type: 'object',
-          properties: {
-            records: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  lote: { type: 'string' },
-                  campaña: { type: 'string' },
-                  total_kg: { type: 'number' },
-                  kg_ha: { type: 'number' },
-                  kg_planta: { type: 'number' },
-                  categoria_1_pct: { type: 'number' },
-                  categoria_2_pct: { type: 'number' },
-                  descarte_pct: { type: 'number' },
-                  calibre_promedio: { type: 'number' },
-                  brix: { type: 'number' },
-                  calidad_comercial: { type: 'string' },
-                  fecha_inicio_cosecha: { type: 'string' },
-                  fecha_fin_cosecha: { type: 'string' },
-                  estimada: { type: 'boolean' },
-                  notas: { type: 'string' }
-                }
-              }
-            }
-          }
-        }
-      });
-      const records = (res.output?.records || res.output || []).filter(r => r.lote);
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const records = XLSX.utils.sheet_to_json(firstSheet, { defval: '', raw: false })
+        .filter(r => r.lote && !String(r.lote).startsWith('EJEMPLO'));
       const byName = name => lots.find(l => l.name.toLowerCase() === String(name).toLowerCase());
       const payload = records.map(r => {
         const lot = byName(r.lote);
@@ -85,7 +57,7 @@ export default function ProductionImport({ lots, onImported }) {
         };
       }).filter(Boolean);
       if (!payload.length) { setMsg('No se encontraron registros válidos. Verifique que la columna "lote" coincida con los nombres de lotes.'); setBusy(false); return; }
-      await base44.entities.ProductionRecord.bulkCreate(payload);
+      await backend.entities.ProductionRecord.bulkCreate(payload);
       await onImported();
       setMsg(`Se importaron ${payload.length} registros de producción.`);
     } catch (err) {

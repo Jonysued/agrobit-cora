@@ -1,4 +1,4 @@
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import { densityOf } from '@/lib/farmCalculations';
 import { kcService } from './kcService';
 import { soilWaterService, computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from './soilWaterService';
@@ -94,7 +94,7 @@ function executedIrrigationFrom(logs, programs, lots, designs) {
 
 // ---- Clima observado diario por finca: lluvia acumulada y ET0 ----
 async function dailyObservedWeather(farmId) {
-  const obs = await base44.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', 600);
+  const obs = await backend.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', 600);
   const raw = new Map();
   for (const o of obs) {
     // Día LOCAL del registro (la reconstrucción usa fechas locales):
@@ -135,22 +135,22 @@ async function referenceFullDepthCm(profile, models) {
   const model = soilBehaviorService.getModelForProfile(profile, models);
   const refProbeId = model?.reference_probe_id || profile.probe_id;
   if (!refProbeId) return DEFAULT_FULL_PROFILE_DEPTH_CM;
-  const channels = await base44.entities.SoilProbeChannel.filter({ probe_id: refProbeId });
+  const channels = await backend.entities.SoilProbeChannel.filter({ probe_id: refProbeId });
   return fullProfileDepthCm(channels.map(c => c.depth_cm)) ?? DEFAULT_FULL_PROFILE_DEPTH_CM;
 }
 
 // ---- Contexto compartido (una sola pasada para todos los lotes) ----
 async function loadContext(lots) {
   const [profiles, models, states, logs, programs, farms, allLayers, allChannels, designs] = await Promise.all([
-    base44.entities.SoilProfile.list(),
+    backend.entities.SoilProfile.list(),
     soilBehaviorService.getModels(),
-    base44.entities.LotWaterState.list('-timestamp', 2000),
-    base44.entities.IrrigationLog.list(),
-    base44.entities.IrrigationProgram.list(),
-    base44.entities.Farm.list(),
-    base44.entities.SoilLayer.list(),
-    base44.entities.SoilProbeChannel.list(),
-    base44.entities.IrrigationDesign.list(),
+    backend.entities.LotWaterState.list('-timestamp', 2000),
+    backend.entities.IrrigationLog.list(),
+    backend.entities.IrrigationProgram.list(),
+    backend.entities.Farm.list(),
+    backend.entities.SoilLayer.list(),
+    backend.entities.SoilProbeChannel.list(),
+    backend.entities.IrrigationDesign.list(),
   ]);
   // Configuración estática de cada perfil (SIN sonda) — capas cargadas
   // UNA sola vez para todos los perfiles: sin consultas por perfil.
@@ -388,7 +388,7 @@ export const lotWaterStateService = {
         throw new Error('La fecha del estado inicial debe ser hoy o una fecha anterior.');
       }
     }
-    const profiles = await base44.entities.SoilProfile.filter({ lot_id: lotId });
+    const profiles = await backend.entities.SoilProfile.filter({ lot_id: lotId });
     const profile = profiles[0];
     if (!profile) throw new Error('El lote no tiene perfil de suelo configurado.');
     const models = await soilBehaviorService.getModels();
@@ -399,17 +399,17 @@ export const lotWaterStateService = {
     if (taw != null && useful > taw) useful = taw;
     if (useful < 0) useful = 0;
     const stored = round1(wilting + useful);
-    await base44.entities.SoilProfile.update(profile.id, { manual_initial_water_mm: useful });
+    await backend.entities.SoilProfile.update(profile.id, { manual_initial_water_mm: useful });
     // Una nueva inicialización REINICIA la curva: se eliminan los
     // estados explícitos previos del lote. Sin esto, una
     // re-inicialización con fecha ANTERIOR perdería contra el registro
     // previo (el ancla se elige por el timestamp más reciente) y el
     // gráfico seguiría mostrando la inicialización vieja.
-    const priorStates = await base44.entities.LotWaterState.filter({ lot_id: lotId });
+    const priorStates = await backend.entities.LotWaterState.filter({ lot_id: lotId });
     await Promise.all(priorStates
       .filter(s => s.source === 'manual_adjustment' || s.source === 'initialized')
-      .map(s => base44.entities.LotWaterState.delete(s.id)));
-    return base44.entities.LotWaterState.create({
+      .map(s => backend.entities.LotWaterState.delete(s.id)));
+    return backend.entities.LotWaterState.create({
       lot_id: lotId,
       timestamp: date ? `${date}T12:00:00` : new Date().toISOString(),
       profile_water_mm: stored,

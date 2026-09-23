@@ -1,7 +1,7 @@
 // ============================================================
 // Water & Energy — fachada de servicios.
 // La interfaz importa ÚNICAMENTE desde aquí; nunca llama a
-// base44.entities directamente ni conoce el origen de los datos.
+// backend.entities directamente ni conoce el origen de los datos.
 // Cada servicio está aislado para poder reemplazarse por APIs
 // externas (IoT, meteorología, water-forecast, energy-optimizer)
 // sin tocar el frontend.

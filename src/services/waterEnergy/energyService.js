@@ -1,9 +1,9 @@
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import { densityOf } from '@/lib/farmCalculations';
 
 // ============================================================
 // energyService — bombas, tarifas y cálculo energético.
-// Fuente actual: entidades Base44 (Pump / EnergyTariff).
+// Fuente actual: tablas Supabase (Pump / EnergyTariff).
 // FUTURO: el optimizador energético puede provenir de una API
 // externa (https://api.[dominio]/energy-optimizer) — solo cambia
 // este archivo, la interfaz se mantiene.
@@ -12,17 +12,17 @@ import { densityOf } from '@/lib/farmCalculations';
 const DEFAULT_TARIFF = { name: 'Tarifa por defecto', price_per_kwh: 150 };
 
 export const energyService = {
-  async getPumps() { return base44.entities.Pump.list(); },
+  async getPumps() { return backend.entities.Pump.list(); },
   async savePump(data) {
-    return data.id ? base44.entities.Pump.update(data.id, data) : base44.entities.Pump.create(data);
+    return data.id ? backend.entities.Pump.update(data.id, data) : backend.entities.Pump.create(data);
   },
-  async deletePump(id) { return base44.entities.Pump.delete(id); },
+  async deletePump(id) { return backend.entities.Pump.delete(id); },
 
-  async getTariffs() { return base44.entities.EnergyTariff.list(); },
+  async getTariffs() { return backend.entities.EnergyTariff.list(); },
   async saveTariff(data) {
-    return data.id ? base44.entities.EnergyTariff.update(data.id, data) : base44.entities.EnergyTariff.create(data);
+    return data.id ? backend.entities.EnergyTariff.update(data.id, data) : backend.entities.EnergyTariff.create(data);
   },
-  async deleteTariff(id) { return base44.entities.EnergyTariff.delete(id); },
+  async deleteTariff(id) { return backend.entities.EnergyTariff.delete(id); },
 
   getActiveTariff(tariffs) { return tariffs[0] || DEFAULT_TARIFF; },
 

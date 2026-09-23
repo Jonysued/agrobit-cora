@@ -1,5 +1,5 @@
 import React,{useState} from 'react';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import { Plus, ShieldPlus, Trash2 } from 'lucide-react';
 
 export default function HealthTab({lot,data}){
@@ -12,7 +12,7 @@ export default function HealthTab({lot,data}){
 
   const submit=async e=>{
     e.preventDefault();setBusy(true);
-    await base44.entities.HealthRecord.create({
+    await backend.entities.HealthRecord.create({
       lot_id:lot.id,campaign:form.campaign,problem:form.problem,
       incidence:form.incidence,notes:form.notes||undefined,
     });
@@ -20,7 +20,7 @@ export default function HealthTab({lot,data}){
     setForm({campaign:form.campaign,problem:'',incidence:'Baja',notes:''});
   };
 
-  const del=async id=>{await base44.entities.HealthRecord.delete(id);await data.refetch();};
+  const del=async id=>{await backend.entities.HealthRecord.delete(id);await data.refetch();};
 
   const f=(k,label,type='text',opt=false)=>(
     <div className="grid gap-1.5">

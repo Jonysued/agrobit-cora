@@ -11,6 +11,7 @@ import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
+import AuthCallback from '@/pages/AuthCallback';
 import AppLayout from '@/components/AppLayout';
 import { FarmProvider } from '@/lib/FarmContext';
 import MapPage from '@/pages/MapPage';
@@ -43,7 +44,7 @@ const AuthenticatedApp = () => {
 
   // Keep the local authentication screens reachable while the app is protected.
   if (authError) {
-    const authPaths = ['/login', '/register', '/forgot-password', '/reset-password'];
+    const authPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/auth/callback'];
     const isAuthScreen = authPaths.includes(window.location.pathname);
     if (authError.type === 'user_not_registered' && !isAuthScreen) {
       return <UserNotRegisteredError />;
@@ -59,6 +60,7 @@ const AuthenticatedApp = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route element={<FarmProvider><AppLayout /></FarmProvider>}>
           <Route path="/" element={<MapPage />} />

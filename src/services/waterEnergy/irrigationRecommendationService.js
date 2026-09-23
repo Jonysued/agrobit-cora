@@ -1,4 +1,4 @@
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import { runUsefulWaterScenario } from './engine/waterBalanceEngine';
 
 // ============================================================
@@ -93,7 +93,7 @@ export const irrigationRecommendationService = {
   // forma parte del registro persistido.
   async save(recommendation) {
     const { profile_recharge_needed_mm, ...persist } = recommendation;
-    return base44.entities.IrrigationRecommendation.create({
+    return backend.entities.IrrigationRecommendation.create({
       ...persist,
       created_at: new Date().toISOString(),
     });

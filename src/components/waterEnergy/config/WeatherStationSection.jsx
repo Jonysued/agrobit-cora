@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import { Loader2, PlugZap, Plus, Trash2 } from 'lucide-react';
 import ConfigPanel, { Field, inputCls } from './ConfigPanel';
 
@@ -35,7 +35,7 @@ export default function WeatherStationSection({ farms, stations, onChange }) {
     e.preventDefault();
     setBusy(true);
     const farm = (farms || []).find(f => f.id === form.farm_id);
-    await base44.entities.WeatherStation.create({
+    await backend.entities.WeatherStation.create({
       farm_id: form.farm_id,
       farm_ids: [form.farm_id],
       name: form.name,
@@ -56,7 +56,7 @@ export default function WeatherStationSection({ farms, stations, onChange }) {
   const test = async station => {
     setTests(t => ({ ...t, [station.id]: { loading: true } }));
     try {
-      const res = await base44.functions.invoke('testWeatherStation', { station_id: station.id });
+      const res = await backend.functions.invoke('testWeatherStation', { station_id: station.id });
       setTests(t => ({ ...t, [station.id]: { loading: false, result: res.data } }));
       onChange();
     } catch (err) {
@@ -64,14 +64,14 @@ export default function WeatherStationSection({ farms, stations, onChange }) {
     }
   };
 
-  const remove = async station => { await base44.entities.WeatherStation.delete(station.id); onChange(); };
+  const remove = async station => { await backend.entities.WeatherStation.delete(station.id); onChange(); };
 
   // Vincular / desvincular la estación a una o más fincas (siempre al menos una)
   const toggleFarm = async (station, farmId) => {
     const linked = linkedFarms(station);
     if (linked.includes(farmId) && linked.length === 1) return;
     const farm_ids = linked.includes(farmId) ? linked.filter(id => id !== farmId) : [...linked, farmId];
-    await base44.entities.WeatherStation.update(station.id, { farm_ids, farm_id: farm_ids[0] });
+    await backend.entities.WeatherStation.update(station.id, { farm_ids, farm_id: farm_ids[0] });
     onChange();
   };
 

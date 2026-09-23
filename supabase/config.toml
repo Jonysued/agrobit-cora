@@ -1,0 +1,17 @@
+project_id = "lucient"
+
+[functions.fetch-weather-station-data]
+verify_jwt = false
+
+[functions.test-weather-station]
+verify_jwt = false
+
+[functions.fetch-sentek-probe-data]
+verify_jwt = false
+
+[functions.test-sentek-probe]
+verify_jwt = false
+
+[functions.sync-all-sentek-probes]
+verify_jwt = false
+

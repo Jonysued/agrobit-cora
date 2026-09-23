@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pencil, Trash2, Plus, X, Loader2, PlugZap, RefreshCw } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import ConfigPanel, { Field, inputCls } from './ConfigPanel';
 import { sensorService } from '@/services/waterEnergy';
 import { linkedLotsFor } from '@/services/waterEnergy/soilWaterService';
@@ -49,7 +49,7 @@ export default function SensorSection({ lots, probes, profiles, models, onChange
   const run = (map, key, fn) => async s => {
     map(t => ({ ...t, [s.id]: { loading: true } }));
     try {
-      const res = await base44.functions.invoke(key, { probe_id: s.id });
+      const res = await backend.functions.invoke(key, { probe_id: s.id });
       const data = res.data || {};
       map(t => ({ ...t, [s.id]: { loading: false, result: data.ok ? data : { ok: false, message: data.error || 'La operación no devolvió datos.' } } }));
       onChange();

@@ -1,6 +1,6 @@
 import React,{useState} from 'react';
 import { X } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 export default function LotEditModal({lot,onSaved,onClose}){
   const [form,setForm]=useState({...lot});
   const [busy,setBusy]=useState(false);
@@ -10,7 +10,7 @@ export default function LotEditModal({lot,onSaved,onClose}){
   const num=['area_ha','planting_year','row_spacing','plant_spacing','current_plants'];
   const save=async e=>{e.preventDefault();setBusy(true);
     const payload={};Object.keys(form).forEach(k=>{if(!['id','created_date','updated_date','created_by_id','polygon'].includes(k))payload[k]=num.includes(k)?Number(form[k]||0):form[k]});
-    await base44.entities.Lot.update(lot.id,payload);
+    await backend.entities.Lot.update(lot.id,payload);
     await onSaved();setBusy(false);onClose();
   };
   const f=(k,label,type='text')=> <label key={k} className="grid gap-1 text-xs font-bold uppercase text-slate-500">{label}<input type={type} value={form[k]??''} onChange={e=>set(k,e.target.value)} required={k==='name'||k==='farm'||k==='crop'||k==='variety'} className="rounded-lg border px-3 py-2 text-sm normal-case text-slate-800"/></label>;

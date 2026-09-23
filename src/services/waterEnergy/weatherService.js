@@ -1,4 +1,4 @@
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import { kcService } from './kcService';
 
 // ============================================================
@@ -97,21 +97,21 @@ async function fetchOpenMeteoForecast(latitude, longitude) {
 
 export const weatherService = {
   // ---- Fincas: ubicación y fuente meteorológica ----
-  async getFarms() { return base44.entities.Farm.list(); },
+  async getFarms() { return backend.entities.Farm.list(); },
   async ensureFarms(lotFarms) {
-    const farms = await base44.entities.Farm.list();
+    const farms = await backend.entities.Farm.list();
     const existing = new Set(farms.map(f => f.name));
     const missing = [...new Set((lotFarms || []).filter(n => n && !existing.has(n)))];
-    if (missing.length) await base44.entities.Farm.bulkCreate(missing.map(name => ({ name, weather_source: 'FORECAST_ONLY' })));
-    return base44.entities.Farm.list();
+    if (missing.length) await backend.entities.Farm.bulkCreate(missing.map(name => ({ name, weather_source: 'FORECAST_ONLY' })));
+    return backend.entities.Farm.list();
   },
-  async saveFarmLocation(id, latitude, longitude) { return base44.entities.Farm.update(id, { latitude, longitude }); },
-  async createFarmLocation(name, latitude, longitude) { return base44.entities.Farm.create({ name, latitude, longitude }); },
-  async saveFarmSource(id, weather_source) { return base44.entities.Farm.update(id, { weather_source }); },
-  async createFarmSource(name, weather_source) { return base44.entities.Farm.create({ name, weather_source }); },
+  async saveFarmLocation(id, latitude, longitude) { return backend.entities.Farm.update(id, { latitude, longitude }); },
+  async createFarmLocation(name, latitude, longitude) { return backend.entities.Farm.create({ name, latitude, longitude }); },
+  async saveFarmSource(id, weather_source) { return backend.entities.Farm.update(id, { weather_source }); },
+  async createFarmSource(name, weather_source) { return backend.entities.Farm.create({ name, weather_source }); },
   async getConfig(lotFarms) {
-    const farms = await this.ensureFarms(lotFarms).catch(() => base44.entities.Farm.list());
-    const stations = await base44.entities.WeatherStation.list();
+    const farms = await this.ensureFarms(lotFarms).catch(() => backend.entities.Farm.list());
+    const stations = await backend.entities.WeatherStation.list();
     return { farms, stations };
   },
 
@@ -121,19 +121,19 @@ export const weatherService = {
   // secrets) y lo persiste; si la estación no responde, se usa lo último
   // guardado — nunca se sustituye por el forecast en el período observado.
   async getStationForFarm(farmId) {
-    const stations = await base44.entities.WeatherStation.list();
+    const stations = await backend.entities.WeatherStation.list();
     const linked = stations.filter(s => (s.farm_ids || (s.farm_id ? [s.farm_id] : [])).includes(farmId));
     return linked.find(s => s.active !== false) || linked[0] || null;
   },
   async refreshStationData(stationId) {
-    const res = await base44.functions.invoke('fetchWeatherStationData', { station_id: stationId });
+    const res = await backend.functions.invoke('fetchWeatherStationData', { station_id: stationId });
     return res.data;
   },
   async refreshIfStale(farmId, station) {
     try {
       station = station || await this.getStationForFarm(farmId);
       if (!station || station.connection_type === 'webhook' || station.connection_type === 'manual') return null;
-      const [latest] = await base44.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', 1);
+      const [latest] = await backend.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', 1);
       const ageMin = latest ? (Date.now() - new Date(latest.timestamp).getTime()) / 60000 : Infinity;
       if (ageMin <= STALE_MINUTES) return null;
       // La estación no puede bloquear la carga: si no responde en 20 s
@@ -146,18 +146,18 @@ export const weatherService = {
     // SOLO LECTURA: el histórico nunca dispara la sincronización con la
     // estación (esa acción vive en getLatestObservation, con límite de
     // frescura de 30 min, y en los botones de Configuración).
-    return base44.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', limit);
+    return backend.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', limit);
   },
   async getLatestObservation(farmId) {
     await this.refreshIfStale(farmId);
-    const [latest] = await base44.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', 1);
+    const [latest] = await backend.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', 1);
     return latest || null;
   },
   async getWeatherHistory(farmId, from, to) {
     const obs = await this.getObservedWeather(farmId, 500);
     return obs.filter(o => (!from || o.timestamp >= from) && (!to || o.timestamp <= to));
   },
-  async saveObservation(data) { return base44.entities.WeatherObservation.create(data); },
+  async saveObservation(data) { return backend.entities.WeatherObservation.create(data); },
 
   // Diagnóstico de una estación real: último dato en vivo, variables
   // disponibles y no disponibles, ET0, proveedor, status y antigüedad.
@@ -193,7 +193,7 @@ export const weatherService = {
   // Con lat/lon de la finca: Open-Meteo real. Sin ubicación: simulado.
   async getForecast(farm) {
     if (typeof farm === 'string') {
-      const farms = await base44.entities.Farm.list();
+      const farms = await backend.entities.Farm.list();
       farm = farms.find(f => f.id === farm) || null;
     }
     const dates = Array.from({ length: 15 }, (_, i) => isoDate(addDays(i + 1)));
@@ -210,7 +210,7 @@ export const weatherService = {
   // FUTURO 7 DÍAS → proveedor de forecast. Nunca se mezclan.
   async getCombinedWeather(farm) {
     if (typeof farm === 'string') {
-      const farms = await base44.entities.Farm.list();
+      const farms = await backend.entities.Farm.list();
       farm = farms.find(f => f.id === farm) || null;
     }
     const mode = farm?.weather_source || 'FORECAST_ONLY';
@@ -244,7 +244,7 @@ export const weatherService = {
   // guardados o demo simulado. Sin ubicación: registros guardados o
   // demo simulado para los 30 días.
   async getFarmForecast(lots) {
-    const [stored, farms] = await Promise.all([base44.entities.WeatherForecast.list(), base44.entities.Farm.list()]);
+    const [stored, farms] = await Promise.all([backend.entities.WeatherForecast.list(), backend.entities.Farm.list()]);
     const daysByFarm = new Map();
     await Promise.all([...new Set(lots.map(l => l.farm))].map(async name => {
       const farm = farms.find(f => f.name === name);
@@ -270,5 +270,5 @@ export const weatherService = {
     return map;
   },
 
-  async saveForecast(data) { return base44.entities.WeatherForecast.create(data); },
+  async saveForecast(data) { return backend.entities.WeatherForecast.create(data); },
 };

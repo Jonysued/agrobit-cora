@@ -2,10 +2,10 @@ import React,{useMemo,useState} from 'react';
 import { MapContainer, TileLayer, Polygon, Tooltip } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, X, Check, FileText } from 'lucide-react';
+import { Plus, X, Check, FileText } from 'lucide-react';
 import { useFarm } from '@/lib/FarmContext';
 import { lotMetrics, polygonAreaHa } from '@/lib/farmCalculations';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import MapFilters from '@/components/MapFilters';
 import LoadingState from '@/components/LoadingState';
 import { DrawLayer, EditLayer } from '@/components/map/MapEditing';
@@ -44,8 +44,8 @@ export default function MapPage(){
   const startDraw=()=>{setMode('draw');setDraft([]);setSelected(null);};
   const startEdit=(l)=>{setEditLot(l);setDraft(l.polygon.map(p=>[...p]));setMode('edit');setSelected(null);};
   const finishDraw=()=>{if(draft.length>=3){setShowForm(true);}};
-  const saveEdit=async()=>{await base44.entities.Lot.update(editLot.id,{polygon:draft,area_ha:+polygonAreaHa(draft).toFixed(1)});await d.refetch();setMode('view');setEditLot(null);setDraft([]);};
-  const delLot=async()=>{const id=confirmDel.id;await Promise.all([base44.entities.Lot.delete(id),base44.entities.ProductionRecord.deleteMany({lot_id:id}),base44.entities.Objective.deleteMany({lot_id:id}),base44.entities.HealthRecord.deleteMany({lot_id:id}),base44.entities.IrrigationDesign.deleteMany({lot_id:id}),base44.entities.LotDocument.deleteMany({lot_id:id}),base44.entities.Observation.deleteMany({lot_id:id})]);await d.refetch();setConfirmDel(null);setSelected(null);};
+  const saveEdit=async()=>{await backend.entities.Lot.update(editLot.id,{polygon:draft,area_ha:+polygonAreaHa(draft).toFixed(1)});await d.refetch();setMode('view');setEditLot(null);setDraft([]);};
+  const delLot=async()=>{const id=confirmDel.id;await Promise.all([backend.entities.Lot.delete(id),backend.entities.ProductionRecord.deleteMany({lot_id:id}),backend.entities.Objective.deleteMany({lot_id:id}),backend.entities.HealthRecord.deleteMany({lot_id:id}),backend.entities.IrrigationDesign.deleteMany({lot_id:id}),backend.entities.LotDocument.deleteMany({lot_id:id}),backend.entities.Observation.deleteMany({lot_id:id})]);await d.refetch();setConfirmDel(null);setSelected(null);};
   return <div className="relative h-[calc(100vh-4rem)]">
     <MapContainer center={center} zoom={15} className="h-full w-full" zoomControl doubleClickZoom={false}>
       <TileLayer attribution="&copy; Esri" url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"/>

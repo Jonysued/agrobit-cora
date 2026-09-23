@@ -5,7 +5,7 @@ import ProfileLayersEditor, { validateLayers } from './ProfileLayersEditor';
 import { waterForecastService } from '@/services/waterEnergy';
 import { soilBehaviorService } from '@/services/waterEnergy/soilBehaviorService';
 import { computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from '@/services/waterEnergy/soilWaterService';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 
 const EMPTY = { lot_id: '', name: '', soil_type: 'Franco', root_zone_depth_cm: 60, field_capacity_vwc: 0.28, wilting_point_vwc: 0.12, target_min_vwc: 0.17, target_max_vwc: 0.24, initial_vwc: 0.21, current_kc: '', notes: '' };
 const num = v => (v === '' || v == null ? null : Number(v));
@@ -30,8 +30,8 @@ export default function ProfileSection({ lots, profiles, onChange }) {
   // referencia (misma escala que el dashboard)
   useEffect(() => {
     Promise.all([
-      base44.entities.SoilLayer.list(),
-      base44.entities.SoilProbeChannel.list(),
+      backend.entities.SoilLayer.list(),
+      backend.entities.SoilProbeChannel.list(),
       soilBehaviorService.getModels(),
     ]).then(([allLayers, channels, models]) => {
       const counts = {};
@@ -74,7 +74,7 @@ export default function ProfileSection({ lots, profiles, onChange }) {
   const openNew = () => { setForm({ ...EMPTY }); initMmInputs(EMPTY, DEFAULT_FULL_PROFILE_DEPTH_CM); setLayers([]); setDeletedLayerIds([]); setSaveError(null); };
   const openEdit = p => {
     setForm({ ...p }); initMmInputs(p, depthCfg[p.id]?.depth ?? DEFAULT_FULL_PROFILE_DEPTH_CM); setDeletedLayerIds([]); setSaveError(null);
-    base44.entities.SoilLayer.filter({ soil_profile_id: p.id })
+    backend.entities.SoilLayer.filter({ soil_profile_id: p.id })
       .then(ls => setLayers(ls.sort((a, b) => a.depth_top_cm - b.depth_top_cm)))
       .catch(() => setLayers([]));
   };
@@ -125,15 +125,15 @@ export default function ProfileSection({ lots, profiles, onChange }) {
         wilting_point_vwc: Number(l.wilting_point_vwc),
         saturation_vwc: num(l.saturation_vwc),
       };
-      if (l.id) await base44.entities.SoilLayer.update(l.id, payload);
-      else await base44.entities.SoilLayer.create(payload);
+      if (l.id) await backend.entities.SoilLayer.update(l.id, payload);
+      else await backend.entities.SoilLayer.create(payload);
     }
-    for (const id of deletedLayerIds) await base44.entities.SoilLayer.delete(id);
+    for (const id of deletedLayerIds) await backend.entities.SoilLayer.delete(id);
     setBusy(false); setForm(null); setLayers([]); setDeletedLayerIds([]); onChange();
   };
 
   const del = async p => {
-    await base44.entities.SoilLayer.deleteMany({ soil_profile_id: p.id });
+    await backend.entities.SoilLayer.deleteMany({ soil_profile_id: p.id });
     await waterForecastService.deleteProfile(p.id);
     onChange();
   };

@@ -1,6 +1,6 @@
 import React,{useState} from 'react';
 import { Pencil,Trash2,X } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 const blank=dataCampaign=>({campaign:dataCampaign,date:new Date().toISOString().slice(0,10),type:'',intensity:'Media',objective:'',notes:''});
 export default function PruningTab({lot,data}){
   const curCamp=data.Campaign.find(c=>c.is_current)?.name||'';
@@ -10,12 +10,12 @@ export default function PruningTab({lot,data}){
   const startEdit=r=>{setEditId(r.id);setForm({campaign:r.campaign,date:r.date,type:r.type,intensity:r.intensity,objective:r.objective||'',notes:r.notes||''});};
   const cancelEdit=()=>{setEditId(null);setForm(blank(curCamp));};
   const submit=async e=>{e.preventDefault();setBusy(true);
-    if(editId) await base44.entities.PruningRecord.update(editId,form);
-    else await base44.entities.PruningRecord.create({...form,lot_id:lot.id});
+    if(editId) await backend.entities.PruningRecord.update(editId,form);
+    else await backend.entities.PruningRecord.create({...form,lot_id:lot.id});
     await data.refetch();setBusy(false);
     if(editId)cancelEdit();else setForm({...blank(curCamp),campaign:form.campaign});
   };
-  const del=async r=>{await base44.entities.PruningRecord.delete(r.id);await data.refetch();if(editId===r.id)cancelEdit();};
+  const del=async r=>{await backend.entities.PruningRecord.delete(r.id);await data.refetch();if(editId===r.id)cancelEdit();};
   const set=(k,v)=>setForm({...form,[k]:v});
   return <div className="grid gap-5 lg:grid-cols-[1fr_2fr]">
     <form onSubmit={submit} className="h-fit rounded-2xl border bg-white p-5">

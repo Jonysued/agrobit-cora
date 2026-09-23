@@ -1,4 +1,4 @@
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 
 // ============================================================
 // sensorService — lectura de sondas y series temporales.
@@ -13,31 +13,31 @@ import { base44 } from '@/api/base44Client';
 const DAY_MS = 86400000;
 
 export const sensorService = {
-  async getSensors() { return base44.entities.Sensor.list(); },
+  async getSensors() { return backend.entities.Sensor.list(); },
 
-  async createSensor(data) { return base44.entities.Sensor.create(data); },
-  async updateSensor(id, data) { return base44.entities.Sensor.update(id, data); },
+  async createSensor(data) { return backend.entities.Sensor.create(data); },
+  async updateSensor(id, data) { return backend.entities.Sensor.update(id, data); },
   async deleteSensor(id) {
-    await base44.entities.SensorReading.deleteMany({ sensor_id: id });
-    return base44.entities.Sensor.delete(id);
+    await backend.entities.SensorReading.deleteMany({ sensor_id: id });
+    return backend.entities.Sensor.delete(id);
   },
 
   // ---- Puntos de monitoreo (ubicación física, sin profundidad fija) ----
   async getMonitoringPoints(lotId) {
-    const points = await base44.entities.SoilMonitoringPoint.list();
+    const points = await backend.entities.SoilMonitoringPoint.list();
     return lotId ? points.filter(p => p.lot_id === lotId) : points;
   },
 
   // ---- Sondas de un punto (cada modelo puede tener distinta
   //      cantidad de sensores y distintas profundidades) ----
   async getProbesForMonitoringPoint(monitoringPointId) {
-    const probes = await base44.entities.SoilProbe.filter({ monitoring_point_id: monitoringPointId });
+    const probes = await backend.entities.SoilProbe.filter({ monitoring_point_id: monitoringPointId });
     return probes.filter(p => p.active !== false);
   },
 
   // ---- Canales/profundidades reales de una sonda (ordenadas por profundidad) ----
   async getProbeChannels(probeId) {
-    const channels = await base44.entities.SoilProbeChannel.filter({ probe_id: probeId });
+    const channels = await backend.entities.SoilProbeChannel.filter({ probe_id: probeId });
     return channels
       .filter(c => c.active !== false && c.sensor_type === 'soil_moisture')
       .sort((a, b) => a.depth_cm - b.depth_cm);
@@ -53,7 +53,7 @@ export const sensorService = {
       if (from) query.timestamp.$gte = new Date(from).toISOString();
       if (to) query.timestamp.$lte = new Date(to).toISOString();
     }
-    const rows = await base44.entities.SensorReading.filter(query, '-timestamp', 5000);
+    const rows = await backend.entities.SensorReading.filter(query, '-timestamp', 5000);
     return rows.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   },
 
@@ -61,7 +61,7 @@ export const sensorService = {
   async getLatestProbeReadings(probeId) {
     const [channels, readings] = await Promise.all([
       this.getProbeChannels(probeId),
-      base44.entities.SensorReading.filter({ probe_id: probeId }, '-timestamp', 300),
+      backend.entities.SensorReading.filter({ probe_id: probeId }, '-timestamp', 300),
     ]);
     return channels.map(c => ({ channel: c, reading: readings.find(r => r.probe_channel_id === c.id) || null }));
   },
@@ -88,34 +88,34 @@ export const sensorService = {
   },
 
   // ---- Puntos de monitoreo y sondas: CRUD (Configuración → Sensores) ----
-  async getProbes() { return base44.entities.SoilProbe.list(); },
+  async getProbes() { return backend.entities.SoilProbe.list(); },
   // Vincula una sonda a un lote (Vinculación de perfiles): le asigna el
   // lote y le asegura un punto de monitoreo en ese lote. Los puntos se
   // gestionan automáticamente — la UI nunca los manipula.
   async attachProbeToLot(probeId, lotId) {
-    const probe = await base44.entities.SoilProbe.get(probeId);
+    const probe = await backend.entities.SoilProbe.get(probeId);
     if (!probe) return null;
     let pointId = probe.monitoring_point_id;
-    const lotPoints = await base44.entities.SoilMonitoringPoint.filter({ lot_id: lotId });
+    const lotPoints = await backend.entities.SoilMonitoringPoint.filter({ lot_id: lotId });
     if (!pointId || !lotPoints.some(p => p.id === pointId)) {
       pointId = lotPoints[0]?.id
-        || (await base44.entities.SoilMonitoringPoint.create({ lot_id: lotId, name: `Punto ${probe.name}`, active: true })).id;
+        || (await backend.entities.SoilMonitoringPoint.create({ lot_id: lotId, name: `Punto ${probe.name}`, active: true })).id;
     }
-    return base44.entities.SoilProbe.update(probeId, { lot_id: lotId, monitoring_point_id: pointId });
+    return backend.entities.SoilProbe.update(probeId, { lot_id: lotId, monitoring_point_id: pointId });
   },
-  async createMonitoringPoint(data) { return base44.entities.SoilMonitoringPoint.create(data); },
-  async updateMonitoringPoint(id, data) { return base44.entities.SoilMonitoringPoint.update(id, data); },
+  async createMonitoringPoint(data) { return backend.entities.SoilMonitoringPoint.create(data); },
+  async updateMonitoringPoint(id, data) { return backend.entities.SoilMonitoringPoint.update(id, data); },
   async deleteMonitoringPoint(id) {
-    const probes = await base44.entities.SoilProbe.filter({ monitoring_point_id: id });
+    const probes = await backend.entities.SoilProbe.filter({ monitoring_point_id: id });
     for (const probe of probes) await this.deleteProbe(probe.id);
-    return base44.entities.SoilMonitoringPoint.delete(id);
+    return backend.entities.SoilMonitoringPoint.delete(id);
   },
-  async createProbe(data) { return base44.entities.SoilProbe.create(data); },
-  async updateProbe(id, data) { return base44.entities.SoilProbe.update(id, data); },
+  async createProbe(data) { return backend.entities.SoilProbe.create(data); },
+  async updateProbe(id, data) { return backend.entities.SoilProbe.update(id, data); },
   async deleteProbe(id) {
-    await base44.entities.SoilProbeChannel.deleteMany({ probe_id: id });
-    await base44.entities.SensorReading.deleteMany({ probe_id: id });
-    return base44.entities.SoilProbe.delete(id);
+    await backend.entities.SoilProbeChannel.deleteMany({ probe_id: id });
+    await backend.entities.SensorReading.deleteMany({ probe_id: id });
+    return backend.entities.SoilProbe.delete(id);
   },
 
   // ---- Lecturas del esquema anterior (sensores simples por lote) ----
@@ -123,7 +123,7 @@ export const sensorService = {
   async getRecentSoilReadings(days = 8) {
     const [sensors, readings] = await Promise.all([
       this.getSensors(),
-      base44.entities.SensorReading.list('-timestamp', 1000),
+      backend.entities.SensorReading.list('-timestamp', 1000),
     ]);
     const moisture = new Set(sensors.filter(s => s.sensor_type === 'soil_moisture').map(s => s.id));
     const from = Date.now() - days * DAY_MS;

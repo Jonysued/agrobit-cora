@@ -1,4 +1,4 @@
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import { sensorService } from './sensorService';
 import { weatherService } from './weatherService';
 
@@ -59,7 +59,7 @@ function missingConfiguration(profile) {
 // ---- SoilLayers del perfil; sin capas → perfil uniforme temporal ----
 async function getLayersFor(profile) {
   if (!profile?.id) return { layers: [], uniform_profile: true };
-  const layers = await base44.entities.SoilLayer.filter({ soil_profile_id: profile.id });
+  const layers = await backend.entities.SoilLayer.filter({ soil_profile_id: profile.id });
   if (layers.length) {
     return { layers: layers.sort((a, b) => a.depth_top_cm - b.depth_top_cm), uniform_profile: false };
   }
@@ -308,7 +308,7 @@ async function stateForProbe(probe, lots, profiles, models) {
   if (!channels.length) return { probe, probeId: probe.id, lot, lotName, missing: 'Sonda sin canales/profundidades configurados.' };
   // 600 lecturas ≈ 24 h de una sonda que reporta cada hora con ~12–24
   // canales: alcanzan para calcular la variación de las últimas 24 h.
-  const readings = await base44.entities.SensorReading.filter({ probe_id: probe.id }, '-timestamp', 600);
+  const readings = await backend.entities.SensorReading.filter({ probe_id: probe.id }, '-timestamp', 600);
   if (!readings.length) return { probe, probeId: probe.id, lot, lotName, missing: 'Sin lecturas — la sonda todavía no reporta datos.' };
   const profile = profiles.find(p => p.lot_id === lot.id) || null;
   const state = await buildState(profile, channels, readings);
@@ -484,10 +484,10 @@ export const soilWaterService = {
   //      un lote: es la medición de esa sonda. ----
   async getProbeWaterState(probeId) {
     const [probes, lots, profiles, models] = await Promise.all([
-      base44.entities.SoilProbe.list(),
-      base44.entities.Lot.list(),
-      base44.entities.SoilProfile.list(),
-      base44.entities.SoilBehaviorModel.list(),
+      backend.entities.SoilProbe.list(),
+      backend.entities.Lot.list(),
+      backend.entities.SoilProfile.list(),
+      backend.entities.SoilBehaviorModel.list(),
     ]);
     const probe = probes.find(p => p.id === probeId);
     if (!probe) return null;
@@ -498,9 +498,9 @@ export const soilWaterService = {
   async getProbeSummaries() {
     const [probes, lots, profiles, models] = await Promise.all([
       sensorService.getProbes(),
-      base44.entities.Lot.list(),
-      base44.entities.SoilProfile.list(),
-      base44.entities.SoilBehaviorModel.list(),
+      backend.entities.Lot.list(),
+      backend.entities.SoilProfile.list(),
+      backend.entities.SoilBehaviorModel.list(),
     ]);
     // En paralelo: cada sonda pide canales + lecturas — sin esperas
     // secuenciales que multiplican la latencia de la pantalla.
@@ -512,7 +512,7 @@ export const soilWaterService = {
     const probes = await sensorService.getProbes();
     const probe = probes.find(p => p.id === probeId);
     if (!probe) return null;
-    const [lots, profiles, models] = await Promise.all([base44.entities.Lot.list(), base44.entities.SoilProfile.list(), base44.entities.SoilBehaviorModel.list()]);
+    const [lots, profiles, models] = await Promise.all([backend.entities.Lot.list(), backend.entities.SoilProfile.list(), backend.entities.SoilBehaviorModel.list()]);
     const lot = linkedLotsFor(probe, lots, profiles, models)[0] || null;
     if (!lot) return { probe, lot: null, missing: 'Sonda sin lote vinculado — vinculá el lote en Water & Energy → Configuración → Vinculación de perfiles.' };
     const [channels, readings] = await Promise.all([
@@ -528,14 +528,14 @@ export const soilWaterService = {
     // Solo riegos con log: un programa sin log no prueba que el riego
     // ocurrió (para aprender el suelo se usan riegos reales).
     const [logs, programs] = await Promise.all([
-      base44.entities.IrrigationLog.list(),
-      base44.entities.IrrigationProgram.list(),
+      backend.entities.IrrigationLog.list(),
+      backend.entities.IrrigationProgram.list(),
     ]);
     const programById = new Map(programs.map(p => [p.id, p]));
     const irrigationEvents = [...new Set(logs
       .filter(l => l.date && (programById.get(l.program_id)?.lot_ids || []).includes(lot.id))
       .map(l => l.date))].sort();
-    const farms = await base44.entities.Farm.list();
+    const farms = await backend.entities.Farm.list();
     const farm = farms.find(f => f.name === lot.farm);
     const obs = farm ? await weatherService.getObservedWeather(farm.id, 500) : [];
     const rainByDay = new Map();

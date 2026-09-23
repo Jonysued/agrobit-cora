@@ -1,6 +1,6 @@
 import React,{useState} from 'react';
 import { X } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import { polygonAreaHa } from '@/lib/farmCalculations';
 export default function LotFormModal({lot,polygon,onSaved,onClose}){
   const area=Math.max(0.1,+polygonAreaHa(polygon).toFixed(1));
@@ -10,8 +10,8 @@ export default function LotFormModal({lot,polygon,onSaved,onClose}){
   const VARS={Olivos:['Coratina','Barnea','Hojiblanca','Picual','Arbequina','Arbosana'],Granadas:['Wonderful']};
   const setCrop=c=>setForm({...form,crop:c,variety:(VARS[c]||[''])[0]});
   const save=async e=>{e.preventDefault();setBusy(true);
-    if(lot) await base44.entities.Lot.update(lot.id,{polygon,area_ha:Number(form.area_ha)});
-    else await base44.entities.Lot.create({...form,planting_year:Number(form.planting_year),row_spacing:Number(form.row_spacing),plant_spacing:Number(form.plant_spacing),area_ha:Number(form.area_ha),polygon});
+    if(lot) await backend.entities.Lot.update(lot.id,{polygon,area_ha:Number(form.area_ha)});
+    else await backend.entities.Lot.create({...form,planting_year:Number(form.planting_year),row_spacing:Number(form.row_spacing),plant_spacing:Number(form.plant_spacing),area_ha:Number(form.area_ha),polygon});
     await onSaved(); setBusy(false); onClose();
   };
   const f=(k,label,type='text')=> <label className="grid gap-1 text-xs font-bold uppercase text-slate-500">{label}<input type={type} value={form[k]??''} onChange={e=>set(k,e.target.value)} required className="rounded-lg border px-3 py-2 text-sm normal-case text-slate-800"/></label>;

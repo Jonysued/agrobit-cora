@@ -1,4 +1,4 @@
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import { soilWaterService } from './soilWaterService';
 
 // ============================================================
@@ -40,8 +40,8 @@ function lotIrrigationMm(program, lotId, baseMm) {
 async function referenceExecutedIrrigationByDate(lotId) {
   if (!lotId) return new Map();
   const [logs, programs] = await Promise.all([
-    base44.entities.IrrigationLog.list(),
-    base44.entities.IrrigationProgram.list(),
+    backend.entities.IrrigationLog.list(),
+    backend.entities.IrrigationProgram.list(),
   ]);
   const programById = new Map(programs.map(p => [p.id, p]));
   const byDate = new Map();
@@ -132,7 +132,7 @@ async function calibrateModel(model, probes) {
 }
 
 export const soilBehaviorService = {
-  async getModels() { return base44.entities.SoilBehaviorModel.list(); },
+  async getModels() { return backend.entities.SoilBehaviorModel.list(); },
 
   // Calibración EXPLÍCITA de un modelo de suelo (acción del usuario,
   // nunca automática al abrir una pantalla). Aprende el comportamiento
@@ -143,9 +143,9 @@ export const soilBehaviorService = {
     const models = await this.getModels();
     const model = models.find(m => m.id === modelId);
     if (!model) throw new Error('Modelo de suelo no encontrado.');
-    const probes = await base44.entities.SoilProbe.list();
+    const probes = await backend.entities.SoilProbe.list();
     const learned = await calibrateModel(model, probes);
-    return base44.entities.SoilBehaviorModel.update(modelId, {
+    return backend.entities.SoilBehaviorModel.update(modelId, {
       ...learned,
       last_calibration_at: new Date().toISOString(),
     });

@@ -1,5 +1,5 @@
 import React,{useState} from 'react';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import { Droplets, Plus, Pencil, X } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { WELL_TURNOS, PORTION_LABELS, factorOf } from '@/lib/irrigationTurnos';
@@ -48,8 +48,8 @@ export default function ProgramForm({lots,designs=[],programs=[],edit,onSaved,on
     const itemsOut=selectedTurno?items.map(({code,portion,lotRec})=>({lot_id:lotRec?.id||null,lot_name:code,portion:PORTION_LABELS[portion],factor:factorOf(portion)})):(edit?.items||[]);
     const lotIds=selectedTurno?[...new Set(itemsOut.map(i=>i.lot_id).filter(Boolean))]:[...(edit?.lot_ids||[])];
     const payload={lot_ids:lotIds,items:itemsOut,date:isoDate(form.date),start_time:form.start_time,duration_min:mins,well:form.well,turno:form.turno||undefined,status:form.status,notes:form.notes};
-    if(edit) await base44.entities.IrrigationProgram.update(edit.id,payload);
-    else await base44.entities.IrrigationProgram.create(payload);
+    if(edit) await backend.entities.IrrigationProgram.update(edit.id,payload);
+    else await backend.entities.IrrigationProgram.create(payload);
     setBusy(false);onSaved();
   };
   const field=(k,label,type='text')=>(

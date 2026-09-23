@@ -1,4 +1,4 @@
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import { weatherService } from './weatherService';
 import { kcService } from './kcService';
 import { energyService } from './energyService';
@@ -158,12 +158,12 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
 
 export const waterForecastService = {
   // ---- Datos base (lotes y perfiles) ----
-  async getLots() { return base44.entities.Lot.list(); },
-  async getProfiles() { return base44.entities.SoilProfile.list(); },
+  async getLots() { return backend.entities.Lot.list(); },
+  async getProfiles() { return backend.entities.SoilProfile.list(); },
   async saveProfile(data) {
-    return data.id ? base44.entities.SoilProfile.update(data.id, data) : base44.entities.SoilProfile.create(data);
+    return data.id ? backend.entities.SoilProfile.update(data.id, data) : backend.entities.SoilProfile.create(data);
   },
-  async deleteProfile(id) { return base44.entities.SoilProfile.delete(id); },
+  async deleteProfile(id) { return backend.entities.SoilProfile.delete(id); },
 
   // ---- Inicialización del estado de un lote (SOLO valor manual) ----
   initializeManual(lotId, mm, date) { return lotWaterStateService.initializeManual(lotId, mm, date); },
@@ -174,7 +174,7 @@ export const waterForecastService = {
   // futuro) a "ejecutado" (histórico). La próxima consulta reconstruye
   // la curva con los mm reales y recalcula forecast y recomendación.
   async confirmScheduledIrrigation(programId, appliedMm) {
-    const programs = await base44.entities.IrrigationProgram.list();
+    const programs = await backend.entities.IrrigationProgram.list();
     const program = programs.find(p => p.id === programId);
     if (!program) throw new Error('Programa de riego no encontrado.');
     // La ejecución SOLO se confirma el día del riego o después: un
@@ -185,8 +185,8 @@ export const waterForecastService = {
     if (program.date > today) throw new Error('No se puede confirmar la ejecución de un riego futuro — confirmalo el día del riego o después.');
     const mm = Math.round((Number(appliedMm) || 0) * 10) / 10;
     if (!(mm > 0)) throw new Error('Los mm aplicados deben ser mayores que cero.');
-    await base44.entities.IrrigationLog.create({ program_id: programId, date: program.date, applied_mm: mm });
-    await base44.entities.IrrigationProgram.update(programId, { status: 'Finalizado' });
+    await backend.entities.IrrigationLog.create({ program_id: programId, date: program.date, applied_mm: mm });
+    await backend.entities.IrrigationProgram.update(programId, { status: 'Finalizado' });
   },
 
   // ---- Riegos a confirmar: TODOS los lotes en una lista ----
@@ -215,7 +215,7 @@ export const waterForecastService = {
       this.getLots(),
       energyService.getPumps(),
       energyService.getTariffs(),
-      base44.entities.IrrigationDesign.list(),
+      backend.entities.IrrigationDesign.list(),
     ]);
     const curves = await lotWaterStateService.getLotStates(lots, { withHistory: false });
     const weather = await weatherService.getFarmForecast(lots);
@@ -249,7 +249,7 @@ export const waterForecastService = {
       energyService.getPumps(),
       energyService.getTariffs(),
       lotWaterStateService.getLotStates([lot], { withHistory: true }),
-      base44.entities.IrrigationDesign.filter({ lot_id: lotId }),
+      backend.entities.IrrigationDesign.filter({ lot_id: lotId }),
     ]);
     const curve = curves.get(lotId);
     if (!curve?.profile) return { lot, profile: null, forecast_status: 'no_disponible' };

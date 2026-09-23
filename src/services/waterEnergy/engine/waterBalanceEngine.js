@@ -2,7 +2,7 @@
 // WATER BALANCE ENGINE V1 — EXPERIMENTAL (AGUA ÚTIL EN MM)
 // Modelo de balance hídrico de la zona radicular expresado en
 // milímetros de AGUA ÚTIL (por encima del punto de marchitez).
-// Puro: sin Base44, sin UI — solo matemática.
+// Puro: sin backend, sin UI — solo matemática.
 //
 // Balance diario:
 //   available_water_next_mm =

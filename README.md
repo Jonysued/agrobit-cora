@@ -1,62 +1,76 @@
-# Base44 Project
+# Lucient
 
-Use this repository to run and edit the app locally, then publish changes back through Base44.
+Plataforma de monitoreo y decisión para riego y energía agrícola.
 
-Any change pushed to the repo will also be reflected in the Base44 Builder.
+## Arquitectura
 
-## Prerequisites
+- React + Vite para la aplicación web.
+- Supabase Auth para usuarios y sesiones.
+- Supabase Postgres con RLS para datos.
+- Supabase Storage para documentos.
+- Supabase Edge Functions para Davis WeatherLink y Sentek IrriMAX Live.
+- Vercel para publicar el frontend.
 
-1. Clone the repository using the project's Git URL.
-2. Navigate to the project directory.
-3. Install dependencies: `npm install`.
-4. Install the Base44 CLI: `npm install -g base44@latest`.
-5. Install [Deno](https://docs.deno.com/runtime/getting_started/installation/) — the local Base44 backend runs on it.
+## Configuración local
 
-Run `base44 --help` (or see the [CLI reference](https://docs.base44.com/developers/references/cli/commands/introduction)) for the full command surface.
+1. Instalá dependencias:
 
-## Run Locally
+   ```bash
+   npm install
+   ```
 
-Three commands, from the project root:
+2. Copiá `.env.example` como `.env.local` y completá:
 
-```bash
-base44 login   # one-time per machine
-base44 link    # one-time per clone
-base44 dev     # local backend + frontend together
-```
+   ```text
+   VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+   VITE_SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_OR_ANON_KEY
+   ```
 
-Open the frontend URL that `base44 dev` prints (typically `http://localhost:5173`).
+3. Ejecutá:
 
-Notes:
+   ```bash
+   npm run dev
+   ```
 
-- **Every fresh clone needs `base44 link`.** It writes `base44/.app.jsonc` (the app-id pointer), which is deliberately gitignored. Your app id is in the Builder URL (`app.base44.com/apps/<id>/...`); `base44 link --help` shows the non-interactive flags.
-- **`base44 dev` runs the frontend for you** (via `site.serveCommand` in this repo's `base44/config.jsonc`) — never run `npm run dev` yourself: alone it serves a UI with no backend behind it (`[base44] Proxy not enabled`, every `/api` call fails), and alongside `base44 dev` the second Vite silently takes the next port and you end up looking at the wrong one.
-- **The app must be published at least once for the UI to load under `base44 dev`.** The frontend boots by fetching app settings from the hosted app; before the first publish that fails and every page redirects to login. The local API works regardless.
-- Entities, functions, and auth run locally — entity data is **in-memory only**, wiped when `base44 dev` restarts. Everything else (Core integrations, OAuth login) is forwarded to your deployed app. Full breakdown: [Local development overview](https://docs.base44.com/developers/backend/overview/local-dev/local-development-overview).
+## Preparar Supabase
 
-## Frontend Only, Hosted Backend
-
-To work on just the frontend against your app's live hosted backend:
-
-```bash
-base44 dev --remote
-```
-
-⚠️ In this mode writes go to your app's **production data** — plain `base44 dev` keeps everything local.
-
-## Publish Your Changes
-
-After pushing your changes to git, open the Base44 dashboard and publish the app:
+Aplicá la migración:
 
 ```bash
-base44 dashboard open
+supabase db push
 ```
 
-This repo syncs to Base44 through git, so publish from the dashboard rather than `base44 deploy` — a CLI deploy ships your local tree directly, bypassing the sync, and the deployed state silently diverges from the repo.
+Desplegá las funciones:
 
-## Docs & Support
+```bash
+supabase functions deploy fetch-weather-station-data
+supabase functions deploy test-weather-station
+supabase functions deploy fetch-sentek-probe-data
+supabase functions deploy test-sentek-probe
+supabase functions deploy sync-all-sentek-probes
+```
 
-GitHub integration: [https://docs.base44.com/developers/app-code/local-development/github](https://docs.base44.com/developers/app-code/local-development/github)
+Secrets de las integraciones:
 
-Local development: [https://docs.base44.com/developers/backend/overview/local-dev/local-development-overview](https://docs.base44.com/developers/backend/overview/local-dev/local-development-overview)
+```bash
+supabase secrets set WEATHER_DAVIS_API_KEY=...
+supabase secrets set WEATHER_DAVIS_API_SECRET=...
+supabase secrets set SENTEK_IRRIMAX_API_TOKEN=...
+```
 
-Support: [https://app.base44.com/support](https://app.base44.com/support)
+La primera cuenta creada después de aplicar la migración recibe rol `admin`.
+Las siguientes reciben rol `user`.
+
+## Verificación
+
+```bash
+npm run typecheck
+npm run lint
+npm run build
+```
+
+## Vercel
+
+Configurá `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` para Production,
+Preview y Development. Los cambios enviados a `main` generan un deployment
+automático.

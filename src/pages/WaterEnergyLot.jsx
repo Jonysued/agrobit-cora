@@ -9,7 +9,7 @@ import RecommendationCard from '@/components/waterEnergy/RecommendationCard';
 import ScheduledIrrigationPanel from '@/components/waterEnergy/ScheduledIrrigationPanel';
 import InitialStateConfig from '@/components/waterEnergy/InitialStateConfig';
 import { waterForecastService, CONFIG_LABELS } from '@/services/waterEnergy';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 
 const round1 = n => Math.round(n * 10) / 10;
 const SOURCE_LABEL = {
@@ -45,7 +45,7 @@ export default function WaterEnergyLot() {
   // Si el productor modifica el cronograma (IrrigationProgram), la
   // curva futura de Suma de perfil se recalcula inmediatamente.
   useEffect(() => {
-    const unsubscribe = base44.entities.IrrigationProgram.subscribe(() => setReloadKey(k => k + 1));
+    const unsubscribe = backend.entities.IrrigationProgram.subscribe(() => setReloadKey(k => k + 1));
     return unsubscribe;
   }, []);
   if (!detail) return error ? <div className="p-6 text-sm text-slate-500">Lote no encontrado.</div> : <LoadingState />;

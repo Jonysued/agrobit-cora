@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ModuleHeader from '@/components/waterEnergy/ModuleHeader';
 import PendingIrrigationList from '@/components/waterEnergy/PendingIrrigationList';
 import LoadingState from '@/components/LoadingState';
-import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
 import { waterForecastService } from '@/services/waterEnergy';
 
 // Pestaña "Riegos" de Water & Energy: TODOS los riegos a confirmar
@@ -22,7 +22,7 @@ export default function WaterEnergyIrrigation() {
   // Si el productor modifica el cronograma (IrrigationProgram), la
   // lista de riegos a confirmar se actualiza inmediatamente.
   useEffect(() => {
-    const unsubscribe = base44.entities.IrrigationProgram.subscribe(() => setReloadKey(k => k + 1));
+    const unsubscribe = backend.entities.IrrigationProgram.subscribe(() => setReloadKey(k => k + 1));
     return unsubscribe;
   }, []);
   if (!items) return error ? <div className="p-6 text-sm text-slate-500">{error}</div> : <LoadingState />;
