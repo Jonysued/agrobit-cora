@@ -14,7 +14,7 @@ import { backend } from '@/api/backendClient';
 const round1 = n => Math.round(n * 10) / 10;
 const SOURCE_LABEL = {
   calculated: 'calculado con los eventos del lote',
-  initialized: 'inicializado desde la sonda de referencia',
+  initialized: 'estado inicial guardado',
   manual_adjustment: 'inicialización manual',
 };
 
@@ -91,13 +91,18 @@ export default function WaterEnergyLot() {
                 <MetricCard label="Objetivo de recarga" value={state.target_storage_mm != null ? `${state.target_storage_mm} mm` : '—'} tone="light" />
                 <MetricCard label="ETc · 15 días" value={detail.kc_missing ? 'Falta Kc' : `${round1(detail.scenarioWithoutIrrigation.slice(0, 15).reduce((s, p) => s + (p.etc_mm || 0), 0))} mm`} tone="light" />
                 <MetricCard label="Lluvia prevista · 15 días" value={`${round1(detail.scenarioWithoutIrrigation.slice(0, 15).reduce((s, p) => s + (p.rainfall_mm || 0), 0))} mm`} tone="light" />
-                <MetricCard label="Riego recomendado" value={detail.recommendation ? `${detail.recommendation.recommended_irrigation_mm} mm` : detail.kc_missing ? 'Falta Kc' : 'No requerido'} tone={detail.recommendation ? 'amber' : 'light'} />
+                <MetricCard label="Riego recomendado" value={detail.recommendation ? `${detail.recommendation.recommended_irrigation_mm} mm` : detail.forecast_quality?.level === 'blocked' ? 'Pausado' : detail.kc_missing ? 'Falta Kc' : 'No requerido'} tone={detail.recommendation ? 'amber' : 'light'} />
               </div>
               <MoistureChart detail={detail} />
               <ScheduledIrrigationPanel detail={detail} />
               <div id="recomendacion"><RecommendationCard detail={detail} /></div>
               {detail.forecast_confidence === 'partial' && (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">Confianza del forecast: parcial — el modelo de suelo de referencia todavía no está calibrado con suficientes eventos (se usa la eficiencia de recarga por defecto).</p>
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                  <p className="font-bold">Confianza del forecast: parcial</p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                    {(detail.forecast_quality?.warnings || []).map(warning => <li key={warning}>{warning}</li>)}
+                  </ul>
+                </div>
               )}
               {detail.below_wilting && <p className="text-xs font-semibold text-red-600">Advertencia: la proyección del lote alcanza el punto de marchitez (agua útil agotada) sin riego adicional.</p>}
             </>

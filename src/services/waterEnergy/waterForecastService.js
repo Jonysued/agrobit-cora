@@ -24,7 +24,8 @@ import { runUsefulWaterScenario } from './engine/waterBalanceEngine';
 // explícita. Dos lotes con el mismo modelo de suelo tienen curvas
 // completamente distintas.
 //
-// MODELO EXPERIMENTAL — no es una predicción agronómica validada.
+// MODEL_VERSION V2: cada resultado expone calidad y procedencia de
+// datos para que una estimación incompleta nunca parezca una certeza.
 // ============================================================
 
 const round1 = n => Math.round(n * 10) / 10;
@@ -34,7 +35,7 @@ const round1 = n => Math.round(n * 10) / 10;
 // forecast); 2) tabla MENSUAL del cultivo (granadas/olivos): un Kc
 // distinto según el mes de cada día. Sin Kc manual ni tabla no hay
 // demanda (ETc = 0) y la UI lo informa. Lluvia efectiva = lluvia tal cual.
-function forecastInputs(weatherDays, manualKc, crop) {
+function forecastInputs(weatherDays, manualKc, crop, etcCorrectionFactor = 1) {
   return (weatherDays || []).map(w => {
     const kc = manualKc ?? kcService.kcForCropDate(crop, w.date);
     return {
@@ -43,9 +44,38 @@ function forecastInputs(weatherDays, manualKc, crop) {
       kc: kc != null ? kc : null,
       etc_mm: kc != null ? round1((w.eto_mm ?? 0) * kc) : 0,
       rainfall_mm: w.rainfall_mm ?? 0,
-      effective_rainfall_mm: w.rainfall_mm ?? 0,
+      effective_rainfall_mm: w.effective_rainfall_mm ?? round1((w.rainfall_mm ?? 0) * 0.7),
+      etc_correction_factor: etcCorrectionFactor,
     };
   });
+}
+
+const daysBetween = (a, b = new Date()) => {
+  if (!a) return null;
+  return Math.max(0, Math.floor((b.getTime() - new Date(`${a}T12:00:00`).getTime()) / 86400000));
+};
+
+function forecastQuality(curve, weatherDays, kcMissing) {
+  const warnings = [];
+  const anchorAgeDays = daysBetween(curve.anchor_date);
+  const observedAt = curve.data_quality?.observed_weather_last_at;
+  const observedAgeHours = observedAt ? Math.max(0, (Date.now() - new Date(observedAt).getTime()) / 3600000) : null;
+  const simulatedInDecisionWindow = (weatherDays || []).slice(0, 15).some(d => d.simulated);
+  if (!curve.model) warnings.push('sin modelo de suelo vinculado');
+  else if (curve.model.calibration_status !== 'calibrated') warnings.push('modelo de suelo sin calibración completa');
+  if (!curve.data_quality?.recharge_efficiency_learned) warnings.push('eficiencia de recarga no aprendida');
+  if (!curve.data_quality?.etc_correction_learned) warnings.push('respuesta de extracción no calibrada contra ETc');
+  if (anchorAgeDays != null && anchorAgeDays > 30) warnings.push(`estado inicial con ${anchorAgeDays} días de antigüedad`);
+  if (anchorAgeDays > 0 && observedAgeHours == null) warnings.push('sin meteorología observada para reconstruir el estado');
+  else if (anchorAgeDays > 0 && observedAgeHours > 24) warnings.push('meteorología observada desactualizada');
+  if (simulatedInDecisionWindow) warnings.push('el horizonte de decisión contiene clima simulado');
+  if (kcMissing) warnings.push('Kc sin configurar');
+  const blockedReasons = [];
+  if (kcMissing) blockedReasons.push('Falta configurar Kc.');
+  if (simulatedInDecisionWindow) blockedReasons.push('No hay pronóstico meteorológico real para toda la ventana de decisión.');
+  if (anchorAgeDays > 0 && (observedAgeHours == null || observedAgeHours > 24)) blockedReasons.push('La meteorología observada está ausente o tiene más de 24 horas.');
+  const level = blockedReasons.length ? 'blocked' : warnings.length ? 'partial' : 'complete';
+  return { level, warnings, blocked_reasons: blockedReasons, anchor_age_days: anchorAgeDays, observed_weather_age_hours: observedAgeHours == null ? null : round1(observedAgeHours), simulated_in_decision_window: simulatedInDecisionWindow };
 }
 
 // Estado sintético para la UI (escala de agua útil + almacenamiento)
@@ -116,7 +146,8 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const kc_source = explicitKc != null ? 'manual' : hasMonthlyKc ? 'tabla_mensual' : null;
   const kc_missing = kc == null;
   const scheduledByDate = new Map((curve.events?.scheduled || []).map(e => [e.date, e.mm]));
-  const baseDays = forecastInputs(weatherDays, explicitKc, lot.crop);
+  const baseDays = forecastInputs(weatherDays, explicitKc, lot.crop, curve.etc_correction_factor ?? 1);
+  const forecast_quality = forecastQuality(curve, weatherDays, kc_missing);
   const config = {
     total_available_water_capacity_mm: curve.config.total_available_water_capacity_mm,
     recharge_threshold_mm: curve.config.recharge_threshold_mm,
@@ -132,7 +163,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const scenarioScheduled = runUsefulWaterScenario(curve.currentUsefulMm, config, days);
   // La recomendación sigue mirando la ventana de 15 días del modelo,
   // aunque los escenarios (y el gráfico) proyecten 30 días.
-  const canRecommend = !kc_missing;
+  const canRecommend = !kc_missing && forecast_quality.level !== 'blocked';
   const { recommendation, scenarioWithIrrigation } = canRecommend
     ? irrigationRecommendationService.withRecommendation(config, lot, curve.currentUsefulMm, days, scenarioScheduled.slice(0, 15), efficiency)
     : { recommendation: null, scenarioWithIrrigation: scenarioScheduled };
@@ -144,7 +175,8 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
     kc_missing,
     efficiency,
     scheduled_irrigation: curve.events?.scheduled || [],
-    forecast_confidence: model?.calibration_status === 'calibrated' ? 'complete' : 'partial',
+    forecast_confidence: forecast_quality.level,
+    forecast_quality,
     scenarioNoIrrigation,
     scenarioWithoutIrrigation: scenarioScheduled,
     scenarioWithIrrigation,

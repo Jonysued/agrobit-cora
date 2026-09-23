@@ -18,6 +18,7 @@ export function buildProfileSeries(detail, L, today) {
   const hasRec = recommendation != null;
   // Lluvia y riego ejecutado observados por día (mm)
   const rainByDate = new Map((detail.events?.rain || []).map(e => [e.date, e.mm]));
+  const effectiveRainByDate = new Map((detail.events?.rain || []).map(e => [e.date, e.effective_mm ?? e.mm]));
   const executedByDate = new Map((detail.events?.irrigation || []).map(e => [e.date, e.mm]));
   // Escala de almacenamiento: agua útil del balance + agua del punto
   // de marchitez (constante del perfil).
@@ -38,7 +39,7 @@ export function buildProfileSeries(detail, L, today) {
   (history || []).forEach((h, i) => {
     if (i > 0) {
       const prev = history[i - 1];
-      const jump = (executedByDate.get(prev.date) || 0) + (rainByDate.get(prev.date) || 0);
+      const jump = (executedByDate.get(prev.date) || 0) + (effectiveRainByDate.get(prev.date) || 0);
       if (jump > 0) data.push({ t: midTs(h.date), [L.H]: storage(capMm(prev.mm + jump)) });
     }
     data.push({ t: dayTs(h.date), [L.H]: storage(h.mm), Lluvia: rainByDate.get(h.date) ?? null, Riego: executedByDate.get(h.date) ?? null });
@@ -70,13 +71,14 @@ export function buildProfileSeries(detail, L, today) {
     if (i > 0) {
       const mid = { t: midTs(p.date) };
       const prevS = scenarioWithoutIrrigation[i - 1];
-      const jumpS = (prevS.irrigation_mm || 0) + (prevS.rainfall_mm || 0);
+      const jumpS = (prevS.irrigation_mm || 0) + (prevS.effective_rainfall_mm ?? prevS.rainfall_mm ?? 0);
       if (jumpS > 0) mid[L.S] = storage(capMm(prevS.available_water_mm + jumpS));
       const prevH = scenarioNoIrrigation?.[i - 1];
-      if (prevH && (prevH.rainfall_mm || 0) > 0) mid[L.H] = storage(capMm(prevH.available_water_mm + prevH.rainfall_mm));
+      const prevHEffectiveRain = prevH ? (prevH.effective_rainfall_mm ?? prevH.rainfall_mm ?? 0) : 0;
+      if (prevH && prevHEffectiveRain > 0) mid[L.H] = storage(capMm(prevH.available_water_mm + prevHEffectiveRain));
       const prevR = hasRec ? scenarioWithIrrigation?.[i - 1] : null;
       if (prevR) {
-        const jumpR = (prevR.irrigation_mm || 0) + (prevR.rainfall_mm || 0);
+        const jumpR = (prevR.irrigation_mm || 0) + (prevR.effective_rainfall_mm ?? prevR.rainfall_mm ?? 0);
         if (jumpR > 0) mid[L.R] = storage(capMm(prevR.available_water_mm + jumpR));
       }
       if (mid[L.S] != null || mid[L.H] != null || mid[L.R] != null) data.push(mid);

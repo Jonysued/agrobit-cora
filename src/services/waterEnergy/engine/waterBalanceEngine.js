@@ -1,5 +1,5 @@
 // ============================================================
-// WATER BALANCE ENGINE V1 — EXPERIMENTAL (AGUA ÚTIL EN MM)
+// WATER BALANCE ENGINE V2 (AGUA ÚTIL EN MM)
 // Modelo de balance hídrico de la zona radicular expresado en
 // milímetros de AGUA ÚTIL (por encima del punto de marchitez).
 // Puro: sin backend, sin UI — solo matemática.
@@ -29,10 +29,15 @@ const round1 = n => Math.round(n * 10) / 10;
 // Un día de balance sobre la zona radicular
 export function stepUsefulWaterDay(availableMm, config, day) {
   const kc = day.kc != null ? day.kc : 0;
-  const etcMm = round1((day.eto_mm || 0) * kc);
-  // La lluvia del día se suma COMPLETA a la curva (mismo mm que el
-  // marcador del gráfico); la "efectiva" queda solo como reporte.
-  const rainMm = day.rainfall_mm ?? day.effective_rainfall_mm ?? 0;
+  const rawEtcMm = day.etc_mm ?? ((day.eto_mm || 0) * kc);
+  // La corrección aprendida se aplica SOBRE ETc, nunca además de ETc:
+  // así la sonda ajusta la magnitud observada sin descontar dos veces
+  // la demanda del cultivo.
+  const etcFactor = day.etc_correction_factor ?? 1;
+  const etcMm = round1(rawEtcMm * etcFactor);
+  // Solo la fracción efectiva de la lluvia entra al perfil. El total
+  // pronosticado se conserva aparte para mostrarlo en la interfaz.
+  const rainMm = day.effective_rainfall_mm ?? day.rainfall_mm ?? 0;
   const irrMm = day.irrigation_mm || 0;
   let next = availableMm + rainMm + irrMm - etcMm;
   let drainageMm = 0;
@@ -61,11 +66,15 @@ export function runUsefulWaterScenario(startMm, config, days) {
   // anterior). El riego y la lluvia de HOY ya están incluidos en
   // startMm: el primer día del escenario no arrastra pendiente.
   let pendingIrr = 0;
-  let pendingRain = 0;
+  let pendingEffectiveRain = 0;
   return (days || []).map((d, idx) => {
-    const r = stepUsefulWaterDay(available, config, { ...d, irrigation_mm: pendingIrr, rainfall_mm: pendingRain, effective_rainfall_mm: pendingRain });
+    const r = stepUsefulWaterDay(available, config, {
+      ...d,
+      irrigation_mm: pendingIrr,
+      effective_rainfall_mm: pendingEffectiveRain,
+    });
     pendingIrr = round1(d.irrigation_mm || 0);
-    pendingRain = round1(d.rainfall_mm ?? 0);
+    pendingEffectiveRain = round1(d.effective_rainfall_mm ?? d.rainfall_mm ?? 0);
     available = r.availableMm;
     return {
       day: idx + 1,

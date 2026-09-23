@@ -1,5 +1,6 @@
 import { backend } from '@/api/backendClient';
 import { soilWaterService } from './soilWaterService';
+import { kcService } from './kcService';
 
 // ============================================================
 // soilBehaviorService — MODELO DE COMPORTAMIENTO DEL SUELO.
@@ -27,6 +28,30 @@ const round2 = n => Math.round(n * 100) / 100;
 const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const dayAfter = (iso, n) => { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + n); return isoDay(d); };
+const median = values => {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+
+async function observedEtoByDate(lot) {
+  if (!lot) return new Map();
+  const farms = await backend.entities.Farm.list();
+  const farm = farms.find(f => f.name === lot.farm);
+  if (!farm) return new Map();
+  const observations = await backend.entities.WeatherObservation.filter({ farm_id: farm.id }, '-timestamp', 2000);
+  const daily = new Map();
+  for (const observation of observations) {
+    if (!observation.timestamp) continue;
+    const date = isoDay(new Date(observation.timestamp));
+    const current = daily.get(date) || { accumulated: null, increments: 0 };
+    if (observation.et_day_mm != null) current.accumulated = Math.max(current.accumulated ?? 0, observation.et_day_mm);
+    else if (observation.eto_mm > 0) current.increments += observation.eto_mm;
+    daily.set(date, current);
+  }
+  return new Map([...daily].map(([date, value]) => [date, round1(value.accumulated ?? value.increments)]));
+}
 
 // Lámina de un programa que corresponde a un lote (mm × factor del lote)
 function lotIrrigationMm(program, lotId, baseMm) {
@@ -91,7 +116,12 @@ async function calibrateModel(model, probes) {
 
   // Eventos de entrada de agua con lámina conocida: solo riegos
   // EJECUTADOS (IrrigationLog) del lote de la sonda + lluvia observada.
-  const irrByDate = await referenceExecutedIrrigationByDate(probe.lot_id);
+  const lots = await backend.entities.Lot.list();
+  const referenceLot = lots.find(l => l.id === probe.lot_id) || null;
+  const [irrByDate, etoByDate] = await Promise.all([
+    referenceExecutedIrrigationByDate(probe.lot_id),
+    observedEtoByDate(referenceLot),
+  ]);
   const events = [
     ...(analysis.events?.irrigation || []).map(d => ({ date: d, mm: irrByDate.get(d) || 0 })),
     ...(analysis.events?.rain || []),
@@ -115,10 +145,18 @@ async function calibrateModel(model, probes) {
   // relacionarse después con ET0, ETc, clima y época del año.
   const eventDays = new Set(events.map(e => e.date));
   const depletionSamples = [];
+  const etcFactorSamples = [];
   for (let i = 1; i < days.length; i++) {
     if (eventDays.has(days[i]) || eventDays.has(days[i - 1])) continue;
     const delta = profileAt(days[i]) - profileAt(days[i - 1]);
-    if (delta < 0 && delta > -10) depletionSamples.push(-delta);
+    if (delta < 0 && delta > -10) {
+      const depletion = -delta;
+      depletionSamples.push(depletion);
+      const eto = etoByDate.get(days[i]);
+      const kc = referenceLot ? kcService.kcForCropDate(referenceLot.crop, days[i]) : null;
+      const etc = eto != null && kc != null ? eto * kc : null;
+      if (etc != null && etc >= 0.5) etcFactorSamples.push(depletion / etc);
+    }
   }
   const recharge_efficiency = effSamples.length
     ? round2(effSamples.reduce((s, v) => s + v, 0) / effSamples.length)
@@ -126,9 +164,26 @@ async function calibrateModel(model, probes) {
   const depletion_rate_mm_day = depletionSamples.length
     ? round1(depletionSamples.reduce((s, v) => s + v, 0) / depletionSamples.length)
     : null;
+  // La bajada observada se normaliza contra ETc del mismo día. Se usa
+  // la mediana y un rango conservador para impedir que un sensor o un
+  // evento no registrado multiplique de forma extrema la demanda.
+  const rawEtcFactor = median(etcFactorSamples);
+  const etc_correction_factor = etcFactorSamples.length >= 3
+    ? round2(Math.max(0.5, Math.min(1.5, rawEtcFactor)))
+    : null;
   const sample_count = effSamples.length + depletionSamples.length;
-  const calibration_status = effSamples.length >= 3 ? 'calibrated' : effSamples.length ? 'partial' : 'uncalibrated';
-  return { recharge_efficiency, depletion_rate_mm_day, sample_count, calibration_status };
+  const calibration_status = effSamples.length >= 3 && etcFactorSamples.length >= 3
+    ? 'calibrated'
+    : (effSamples.length || etcFactorSamples.length) ? 'partial' : 'uncalibrated';
+  return {
+    recharge_efficiency,
+    depletion_rate_mm_day,
+    etc_correction_factor,
+    recharge_sample_count: effSamples.length,
+    depletion_sample_count: etcFactorSamples.length,
+    sample_count,
+    calibration_status,
+  };
 }
 
 export const soilBehaviorService = {

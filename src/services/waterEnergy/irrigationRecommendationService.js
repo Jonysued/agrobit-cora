@@ -1,5 +1,6 @@
 import { backend } from '@/api/backendClient';
 import { runUsefulWaterScenario } from './engine/waterBalanceEngine';
+import { netIrrigationNeeded } from './engine/recommendationMath';
 
 // ============================================================
 // irrigationRecommendationService — recomendación de riego V1
@@ -39,36 +40,33 @@ export const irrigationRecommendationService = {
     for (const p of scenarioWithoutIrrigation || []) {
       if (p.available_water_mm > threshold) continue;
       const hitIdx = (days || []).findIndex(d => d.date === p.date);
-      // REGLA X+1: el riego recomendado del día del cruce sube el punto
-      // del día SIGUIENTE junto con el riego y la lluvia de ese mismo
-      // día; el punto posterior suma además el riego programado y la
-      // lluvia del día siguiente. Se descuentan TODOS para que la
-      // curva NUNCA supere el Target máx — un programa del día
-      // siguiente ya hace la recarga y no genera recomendación.
+      // REGLA X+1: el riego recomendado del día del cruce entra en el
+      // punto del día siguiente. Para llegar al objetivo en ese punto
+      // se consideran únicamente las entradas del DÍA DEL CRUCE y la
+      // ETc del día siguiente. Las entradas del día siguiente recién
+      // impactan un día después y no pueden descontarse acá.
       const irrHit = round1((days || [])[hitIdx]?.irrigation_mm || 0);
-      const irrNext = round1((days || [])[hitIdx + 1]?.irrigation_mm || 0);
-      const rainHit = round1((days || [])[hitIdx]?.rainfall_mm ?? 0);
-      const rainNext = round1((days || [])[hitIdx + 1]?.rainfall_mm ?? 0);
-      const needed = round1(Math.max(0, target - p.available_water_mm - irrHit - irrNext - rainHit - rainNext));
+      const rainHit = round1((days || [])[hitIdx]?.effective_rainfall_mm ?? (days || [])[hitIdx]?.rainfall_mm ?? 0);
+      const nextDay = (days || [])[hitIdx + 1];
+      const needed = netIrrigationNeeded(target, p.available_water_mm, (days || [])[hitIdx], nextDay);
       // Un faltante menor a medio mm es ruido de redondeo: el riego ya
       // programado cubre la recarga y ese cruce no genera recomendación.
       if (needed > 0.5) {
         hit = p;
         neededMm = needed;
-        if (irrNext > 0) discountNotes.push(`${irrNext} mm de riego ya programados para el día siguiente`);
-        if (rainHit > 0) discountNotes.push(`${rainHit} mm de lluvia prevista para el día del riego`);
-        if (rainNext > 0) discountNotes.push(`${rainNext} mm de lluvia prevista para el día siguiente`);
+        if (irrHit > 0) discountNotes.push(`${irrHit} mm netos de riego ya programados para ese día`);
+        if (rainHit > 0) discountNotes.push(`${rainHit} mm de lluvia efectiva prevista para ese día`);
         break;
       }
     }
     if (!hit) return { recommendation: null, scenarioWithIrrigation: scenarioWithoutIrrigation };
 
     // Riego a APLICAR = necesidad / eficiencia de recarga del suelo.
-    // Redondeo hacia ABAJO: la recarga se detiene al llegar al
-    // Target máx y NUNCA lo supera (el techo del balance es el
-    // Target máx; el exceso drena).
+    // Redondeo hacia ARRIBA al décimo: evita recomendar una lámina que,
+    // por redondeo, no alcance el objetivo neto calculado.
     const eff = efficiency != null && efficiency > 0 ? efficiency : 1;
-    const grossMm = Math.floor(neededMm / eff * 10) / 10;
+    const grossMm = Math.ceil(neededMm / eff * 10) / 10;
+    const deliveredNetMm = round1(grossMm * eff);
     const volumeM3 = Math.round(grossMm * (lot.area_ha || 0) * 10); // 1 mm × 1 ha = 10 m³
     const recommendation = {
       lot_id: lot.id,
@@ -83,7 +81,7 @@ export const irrigationRecommendationService = {
     // Escenario CON riego: los mm NETOS de la recomendación se suman
     // a lo ya programado ese día (grossMm × eff = neededMm).
     const scenarioWithIrrigation = runUsefulWaterScenario(startMm, config, days.map(d => (
-      d.date === hit.date ? { ...d, irrigation_mm: round1((d.irrigation_mm || 0) + neededMm) } : d
+      d.date === hit.date ? { ...d, irrigation_mm: round1((d.irrigation_mm || 0) + deliveredNetMm) } : d
     )));
     return { recommendation, scenarioWithIrrigation };
   },

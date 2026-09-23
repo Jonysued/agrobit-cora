@@ -6,12 +6,23 @@ const fmtDate = s => new Date(`${s}T00:00:00`).toLocaleDateString('es-AR', { wee
 // calculada del lote). Sin Kc configurado no se genera recomendación
 // automática — se informa el motivo.
 export default function RecommendationCard({ detail }) {
-  const { lot, recommendation, energy, kc_missing, forecast_confidence } = detail;
+  const { lot, recommendation, energy, kc_missing, forecast_confidence, forecast_quality } = detail;
   if (kc_missing) {
     return (
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
         <h3 className="font-bold text-amber-900">Recomendación</h3>
         <p className="mt-1 text-sm text-amber-800">Falta configurar Kc — las granadas y los olivos ya usan su tabla de Kc mensual automática; para otros cultivos definí el Kc en Water & Energy → Configuración → Perfiles de suelo.</p>
+      </section>
+    );
+  }
+  if (forecast_quality?.level === 'blocked') {
+    return (
+      <section className="rounded-2xl border border-red-200 bg-red-50 p-5">
+        <h3 className="font-bold text-red-900">Recomendación pausada</h3>
+        <p className="mt-1 text-sm text-red-800">No se genera una lámina automática hasta recuperar insumos confiables.</p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs font-semibold text-red-700">
+          {(forecast_quality.blocked_reasons || []).map(reason => <li key={reason}>{reason}</li>)}
+        </ul>
       </section>
     );
   }
@@ -37,7 +48,7 @@ export default function RecommendationCard({ detail }) {
     <section className="rounded-2xl bg-emerald-950 p-6 text-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-lg font-bold">Recomendación · Regar {lot.name}</h3>
-        <span className="rounded-full bg-amber-400/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-300">Estimación · modelo experimental{forecast_confidence === 'partial' ? ' · confianza parcial' : ''}</span>
+        <span className="rounded-full bg-amber-400/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-300">Recomendación calculada{forecast_confidence === 'partial' ? ' · confianza parcial' : ''}</span>
       </div>
       <div className="mt-4 grid items-center gap-5 md:grid-cols-[auto_1fr]">
         <div className="text-center">

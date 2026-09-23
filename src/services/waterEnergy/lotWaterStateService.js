@@ -28,7 +28,8 @@ import { soilBehaviorService } from './soilBehaviorService';
 // MODEL_VERSION: versión del modelo de balance (se registra en cada
 // estado persistido para trazabilidad).
 // ============================================================
-const MODEL_VERSION = 'v1';
+const MODEL_VERSION = 'v2';
+const EFFECTIVE_RAIN_FACTOR = 0.7;
 // Fondo del perfil de cálculo (cm): el estado hídrico CALCULADO de un
 // lote se integra SIEMPRE sobre el perfil completo 0–120 cm. La sonda
 // de referencia define el fondo con sus profundidades (10–115 → 120);
@@ -96,7 +97,9 @@ function executedIrrigationFrom(logs, programs, lots, designs) {
 async function dailyObservedWeather(farmId) {
   const obs = await backend.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', 600);
   const raw = new Map();
+  let lastObservationAt = null;
   for (const o of obs) {
+    if (o.timestamp && (!lastObservationAt || new Date(o.timestamp) > new Date(lastObservationAt))) lastObservationAt = o.timestamp;
     // Día LOCAL del registro (la reconstrucción usa fechas locales):
     // sin esto, la lluvia caída cerca de la medianoche UTC se atribuye
     // al día siguiente y la subida se dibuja desplazada.
@@ -124,7 +127,7 @@ async function dailyObservedWeather(farmId) {
   // DIARIAS (sumas del día), no de los incrementos individuales.
   const dailyEtos = [...byDay.values()].map(v => v.eto).filter(v => v != null);
   const meanEto = dailyEtos.length ? round1(dailyEtos.reduce((s, v) => s + v, 0) / dailyEtos.length) : null;
-  return { byDay, meanEto };
+  return { byDay, meanEto, lastObservationAt };
 }
 
 // ---- Fondo del perfil completo (0–N cm) de un lote ----
@@ -183,6 +186,7 @@ async function computeLot(lot, ctx, withHistory) {
   const config = ctx.configs.get(profile.id);
   const model = soilBehaviorService.getModelForProfile(profile, ctx.models);
   const efficiency = model?.recharge_efficiency != null ? model.recharge_efficiency : 1;
+  const etcCorrectionFactor = model?.etc_correction_factor != null ? model.etc_correction_factor : 1;
   const taw = config?.total_available_water_capacity_mm ?? null;
   const wilting = config?.wilting_storage_mm ?? 0;
   const configComplete = config?.configuration_status === 'complete';
@@ -226,20 +230,8 @@ async function computeLot(lot, ctx, withHistory) {
   // forecast recorte la curva y el gráfico no refleje el valor inicial.
   if (taw != null && anchor.useful > taw) anchor = { ...anchor, useful: taw };
   if (anchor.useful < 0) anchor = { ...anchor, useful: 0 };
-  // REGLA DE CONFIRMACIONES: el punto de partida se ubica siempre
-  // ANTES del primer riego EJECUTADO registrado del lote (aunque ese
-  // riego sea de una fecha anterior a la inicialización). Así toda
-  // confirmación queda dentro de la reconstrucción y la curva Actual
-  // refleja sus mm en el estado actual del lote — sin esto, un ancla
-  // fechada "hoy" dejaría a los riegos de días previos fuera de la
-  // curva y la confirmación no se vería nunca.
-  const firstExecuted = ctx.executed.get(lot.id) ? [...ctx.executed.get(lot.id).keys()].sort()[0] : null;
-  if (firstExecuted) {
-    const beforeFirst = dayAfter(firstExecuted, -1);
-    if (beforeFirst < anchor.date && beforeFirst <= todayStr()) {
-      anchor = { ...anchor, date: beforeFirst };
-    }
-  }
+  // El ancla es AUTORITATIVA. Un riego anterior a su fecha ya está
+  // implícito en la medición/valor inicial y jamás se vuelve a sumar.
 
   // ---- Reconstrucción diaria: ancla → hoy ----
   // eventos propios del lote + clima observado + demanda del cultivo,
@@ -263,19 +255,20 @@ async function computeLot(lot, ctx, withHistory) {
   let d = dayAfter(startDay, 1);
   while (d <= end) {
     const irrPrev = round1((executed.get(prev) || 0) * efficiency);
-    const rain = obs?.byDay.get(prev)?.rain ?? 0;
+    const grossRain = obs?.byDay.get(prev)?.rain ?? 0;
+    const rain = round1(grossRain * EFFECTIVE_RAIN_FACTOR);
     const eto = obs?.byDay.get(d)?.eto ?? obs?.meanEto ?? DEFAULT_ETO_MM;
     // Kc de cada día: el EXPLÍCITO del perfil (current_kc) o, si no
     // hay, la tabla MENSUAL del cultivo (granadas/olivos): un Kc
     // distinto según el mes. Sin ninguno no se descuenta demanda.
     const kc = profile.current_kc != null ? profile.current_kc : kcService.kcForCropDate(lot.crop, d);
-    const etc = kc != null ? round1(eto * kc) : 0;
+    const etc = kc != null ? round1(eto * kc * etcCorrectionFactor) : 0;
     let next = water + irrPrev + rain - etc;
     if (taw != null && next > taw) next = taw; // excedente = drenaje
     if (next < 0) next = 0; // nunca baja del punto de marchitez
     water = round1(next);
     if (irrPrev > 0) irrigationEvents.push({ date: prev, mm: irrPrev });
-    if (rain > 0) rainEvents.push({ date: prev, mm: rain });
+    if (grossRain > 0) rainEvents.push({ date: prev, mm: grossRain, effective_mm: rain });
     history.push({ date: d, mm: water });
     prev = d;
     d = dayAfter(d, 1);
@@ -287,12 +280,13 @@ async function computeLot(lot, ctx, withHistory) {
   // estado al inicializarse y un riego o lluvia más tarde en el día
   // no estaba incluido.
   const irrToday = round1((executed.get(end) || 0) * efficiency);
-  const rainToday = round1(obs?.byDay.get(end)?.rain ?? 0);
+  const grossRainToday = round1(obs?.byDay.get(end)?.rain ?? 0);
+  const rainToday = round1(grossRainToday * EFFECTIVE_RAIN_FACTOR);
   if (irrToday > 0 || rainToday > 0) {
     water = round1(Math.min(taw ?? Infinity, water + irrToday + rainToday));
     history[history.length - 1] = { date: end, mm: water };
     if (irrToday > 0) irrigationEvents.push({ date: end, mm: irrToday });
-    if (rainToday > 0) rainEvents.push({ date: end, mm: rainToday });
+    if (grossRainToday > 0) rainEvents.push({ date: end, mm: grossRainToday, effective_mm: rainToday });
   }
 
   // ---- Sin retro-proyección ----
@@ -345,12 +339,20 @@ async function computeLot(lot, ctx, withHistory) {
   return {
     lot, profile, config, model,
     efficiency,
+    etc_correction_factor: etcCorrectionFactor,
     daily_change_mm,
     currentUsefulMm: water,
     currentStoredMm: round1(wilting + water),
     state_source: anchor.source,
     origin: anchor.source,
-    anchored_at: end,
+    anchored_at: anchor.date,
+    data_quality: {
+      anchor_date: anchor.date,
+      observed_weather_last_at: obs?.lastObservationAt || null,
+      model_status: model?.calibration_status || 'sin_modelo',
+      recharge_efficiency_learned: model?.recharge_efficiency != null,
+      etc_correction_learned: model?.etc_correction_factor != null,
+    },
     // Punto de partida de la curva (fecha + valor en escala de Suma de
     // perfil): el gráfico encuadra su ventana y marca este punto para
     // que la inicialización se vea reflejada.
