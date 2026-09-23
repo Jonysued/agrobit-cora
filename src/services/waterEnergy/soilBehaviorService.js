@@ -200,8 +200,17 @@ export const soilBehaviorService = {
     if (!model) throw new Error('Modelo de suelo no encontrado.');
     const probes = await backend.entities.SoilProbe.list();
     const learned = await calibrateModel(model, probes);
-    return backend.entities.SoilBehaviorModel.update(modelId, {
+    // Una recalibración con datos insuficientes nunca borra parámetros
+    // aprendidos previamente. Solo reemplaza un parámetro cuando la
+    // corrida nueva pudo estimarlo con muestras válidas.
+    const preserved = {
       ...learned,
+      recharge_efficiency: learned.recharge_efficiency ?? model.recharge_efficiency ?? null,
+      depletion_rate_mm_day: learned.depletion_rate_mm_day ?? model.depletion_rate_mm_day ?? null,
+      etc_correction_factor: learned.etc_correction_factor ?? model.etc_correction_factor ?? null,
+    };
+    return backend.entities.SoilBehaviorModel.update(modelId, {
+      ...preserved,
       last_calibration_at: new Date().toISOString(),
     });
   },
