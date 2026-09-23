@@ -53,12 +53,15 @@ const entityTables = {
 };
 
 const functionNames = {
-  fetchSentekProbeData: 'fetch-sentek-probe-data',
-  fetchWeatherStationData: 'fetch-weather-station-data',
-  syncAllSentekProbes: 'sync-all-sentek-probes',
-  testSentekProbe: 'test-sentek-probe',
-  testWeatherStation: 'test-weather-station',
+  fetchSentekProbeData: 'agro-sync',
+  fetchWeatherStationData: 'agro-sync',
+  syncAllSentekProbes: 'agro-sync',
+  syncAllIntegrations: 'agro-sync',
+  testSentekProbe: 'agro-sync',
+  testWeatherStation: 'agro-sync',
 };
+
+const agroSyncActions = new Set(Object.keys(functionNames));
 
 function fail(error) {
   if (!error) return;
@@ -319,7 +322,9 @@ export const backend = {
   auth,
   functions: {
     async invoke(name, body = {}) {
-      const { data, error } = await supabase.functions.invoke(functionNames[name] || name, { body });
+      const functionName = functionNames[name] || name;
+      const requestBody = agroSyncActions.has(name) ? { action: name, payload: body } : body;
+      const { data, error } = await supabase.functions.invoke(functionName, { body: requestBody });
       fail(error);
       return { data };
     },

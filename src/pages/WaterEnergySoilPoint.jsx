@@ -54,6 +54,7 @@ export default function WaterEnergySoilPoint() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {data.probe?.connection_status === 'delayed' && <span className="rounded-full bg-orange-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-orange-700">Datos demorados</span>}
             {data.probe?.connection_status === 'disconnected' && <span className="rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-red-700">Desconectada</span>}
             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-800">{SOURCE_LABEL[data.source] || data.source}</span>
           </div>

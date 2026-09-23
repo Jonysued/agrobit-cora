@@ -1,5 +1,8 @@
 project_id = "lucient"
 
+[functions.agro-sync]
+verify_jwt = false
+
 [functions.fetch-weather-station-data]
 verify_jwt = false
 
@@ -15,3 +18,5 @@ verify_jwt = false
 [functions.sync-all-sentek-probes]
 verify_jwt = false
 
+[functions.sync-all-integrations]
+verify_jwt = false

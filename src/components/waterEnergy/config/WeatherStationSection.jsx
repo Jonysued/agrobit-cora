@@ -12,6 +12,8 @@ const CONNECTION_TYPES = [['api', 'API'], ['webhook', 'Webhook'], ['manual', 'Ma
 const fmtDateTime = ts => ts ? new Date(ts).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
 const STATUS_BADGES = {
   connected: '🟢 Conectada',
+  delayed: '🟠 Datos demorados',
+  disconnected: '🔴 Sin datos recientes',
   error: '🔴 Error de conexión',
   not_implemented: '🟡 Adapter pendiente',
   missing_credentials: '🟡 Falta credencial',

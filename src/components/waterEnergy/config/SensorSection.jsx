@@ -18,7 +18,7 @@ const lotLabel = (s, lots, profiles, models) => {
   const linked = linkedLotsFor(s, lots, profiles, models);
   return linked.length ? (linked.length > 1 ? `${linked[0].name} (+${linked.length - 1})` : linked[0].name) : 'Sin vincular';
 };
-const STATUS = { connected: '🟢 Conectada', disconnected: '🔴 Desconectada', error: '🔴 Error de conexión', missing_credentials: '🟡 Falta credencial', misconfigured: '🟡 Config. incompleta' };
+const STATUS = { connected: '🟢 Conectada', delayed: '🟠 Datos demorados', disconnected: '🔴 Desconectada', error: '🔴 Error de conexión', missing_credentials: '🟡 Falta credencial', misconfigured: '🟡 Config. incompleta' };
 
 export default function SensorSection({ lots, probes, profiles, models, onChange }) {
   const [form, setForm] = useState(null);

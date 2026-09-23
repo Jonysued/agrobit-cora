@@ -94,6 +94,7 @@ export const DavisWeatherAdapter = {
       // el API Secret como header X-Api-Secret (nunca viaja en la URL).
       const res = await fetch(`https://api.weatherlink.com/v2/current/${station.external_station_id}?api-key=${encodeURIComponent(apiKey)}`, {
         headers: { "X-Api-Secret": apiSecret },
+        signal: AbortSignal.timeout(15000),
       });
       if (res.ok) return { ok: true, status: "connected", message: "WeatherLink respondió correctamente." };
       if (res.status === 404) {
@@ -122,6 +123,7 @@ export const DavisWeatherAdapter = {
     try {
       const res = await fetch(`https://api.weatherlink.com/v2/current/${station.external_station_id}?api-key=${encodeURIComponent(apiKey)}`, {
         headers: { "X-Api-Secret": apiSecret },
+        signal: AbortSignal.timeout(15000),
       });
       if (res.status === 401 || res.status === 403) {
         return { ok: false, status: "error", message: "WeatherLink rechazó la credencial — verificá el API key/secret." };

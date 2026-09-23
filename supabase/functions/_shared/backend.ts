@@ -102,9 +102,22 @@ export async function requireAdmin(req: Request) {
   return { backend: serviceBackend, user: { ...data.user, ...profile } };
 }
 
+// Las tareas programadas no tienen una sesión de usuario. Se autentican
+// con un secreto independiente (nunca con la anon key ni desde el browser).
+// Los administradores conservan la posibilidad de ejecutar el mismo endpoint
+// manualmente desde la app para diagnóstico.
+export async function requireAdminOrCron(req: Request) {
+  const cronSecret = Deno.env.get('SYNC_CRON_SECRET') || '';
+  const supplied = req.headers.get('x-cron-secret') || '';
+  if (cronSecret && supplied && supplied === cronSecret) {
+    return { backend: serviceBackend, user: { role: 'service', cron: true } };
+  }
+  return requireAdmin(req);
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
 };
 
 export function withCors(handler: (req: Request) => Promise<Response>) {

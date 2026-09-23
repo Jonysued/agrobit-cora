@@ -5,10 +5,20 @@
 // ============================================================
 import { fetchSentekReadings } from './sentekAdapters.ts';
 
-// Umbral de obsolesciedad: si el último dato disponible en IrriMAX
-// es más viejo que esto, la sonda aparece DESCONECTADA — el logger
-// dejó de transmitir por un problema externo, no de la app.
-export const STALE_MS = 12 * 3600000;
+// Una sonda que demora más de 3 h queda visible como DEMORADA; recién
+// después de 12 h pasa a DESCONECTADA. Así una lectura de 10 h nunca
+// vuelve a mostrarse engañosamente como "conectada".
+export const DELAYED_MS = 3 * 3600000;
+export const DISCONNECTED_MS = 12 * 3600000;
+
+export function probeConnectionStatus(timestamp) {
+  const time = timestamp ? new Date(timestamp).getTime() : 0;
+  if (!time || !Number.isFinite(time)) return 'disconnected';
+  const age = Math.max(0, Date.now() - time);
+  if (age > DISCONNECTED_MS) return 'disconnected';
+  if (age > DELAYED_MS) return 'delayed';
+  return 'connected';
+}
 
 // Lote EFECTIVO de una sonda: el vínculo DIRECTO (probe.lot_id) o, si
 // no hay, el derivado de los perfiles que la referencian — directo
@@ -56,8 +66,7 @@ export async function syncSentekProbe(client, probe, lotId) {
   // del último dato disponible — obsoleto (o inexistente) ⇒
   // DESCONECTADA, dato fresco ⇒ conectada.
   const markConnection = async () => {
-    const stale = !refMs || Date.now() - refMs > STALE_MS;
-    const connection_status = stale ? 'disconnected' : 'connected';
+    const connection_status = probeConnectionStatus(refMs ? new Date(refMs).toISOString() : null);
     await client.entities.SoilProbe.update(probe.id, { connection_status });
     return connection_status;
   };
@@ -117,7 +126,20 @@ export async function syncSentekProbe(client, probe, lotId) {
     ingested += batch.length;
   }
   if (maxTs) {
-    await client.entities.SoilProbe.update(probe.id, { connection_status: 'connected', last_reading_at: new Date(maxTs).toISOString() });
+    const last_reading_at = new Date(maxTs).toISOString();
+    const connection_status = probeConnectionStatus(last_reading_at);
+    await client.entities.SoilProbe.update(probe.id, {
+      connection_status,
+      last_reading_at,
+    });
+    return {
+      ok: true,
+      ingested,
+      timestamps: result.rows.length,
+      channels: depths.length,
+      connection_status,
+      last_reading_at,
+    };
   }
   return {
     ok: true,

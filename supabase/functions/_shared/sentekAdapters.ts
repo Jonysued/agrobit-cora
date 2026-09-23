@@ -32,7 +32,9 @@ export async function getSentekLoggers() {
   const key = getKey();
   if (!key) return missingCredentials();
   try {
-    const res = await fetch(`${API}?cmd=getloggers&key=${encodeURIComponent(key)}`);
+    const res = await fetch(`${API}?cmd=getloggers&key=${encodeURIComponent(key)}`, {
+      signal: AbortSignal.timeout(15000),
+    });
     if (res.status === 401 || res.status === 403) {
       return { ok: false, status: "error", message: "IrriMAX Live rechazó la API key — verificá el token generado en tu página de Settings." };
     }
@@ -86,12 +88,16 @@ export async function fetchSentekReadings(probe, fromIso) {
   const key = getKey();
   const pad = n => String(n).padStart(2, "0");
   // Ventana incremental: desde la última lectura menos 2 h de margen.
-  const fromMs = (fromIso ? new Date(fromIso).getTime() : Date.now() - 14 * 86400000) - 2 * 3600000;
+  // Primera importación acotada a 72 h: alcanza para inicializar el motor
+  // sin exceder el tiempo máximo de la Edge Function con históricos masivos.
+  const fromMs = (fromIso ? new Date(fromIso).getTime() : Date.now() - 3 * 86400000) - 2 * 3600000;
   // Hora local del sitio (UTC-3): componentes de pared locales de un instante UTC.
   const local = new Date(fromMs - 3 * 3600000);
   const from = `${local.getUTCFullYear()}${pad(local.getUTCMonth() + 1)}${pad(local.getUTCDate())}${pad(local.getUTCHours())}${pad(local.getUTCMinutes())}${pad(local.getUTCSeconds())}`;
   try {
-    const res = await fetch(`${API}?cmd=getreadings&key=${encodeURIComponent(key)}&name=${encodeURIComponent(probe.external_device_id)}&from=${from}`);
+    const res = await fetch(`${API}?cmd=getreadings&key=${encodeURIComponent(key)}&name=${encodeURIComponent(probe.external_device_id)}&from=${from}`, {
+      signal: AbortSignal.timeout(25000),
+    });
     if (!res.ok) {
       return { ok: false, status: "error", message: `IrriMAX Live respondió con código ${res.status} al pedir las lecturas.` };
     }
