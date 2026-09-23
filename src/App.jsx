@@ -18,7 +18,6 @@ import MapPage from '@/pages/MapPage';
 import Dashboard from '@/pages/Dashboard';
 import Lots from '@/pages/Lots';
 import LotDetail from '@/pages/LotDetail';
-import Production from '@/pages/Production';
 import Irrigation from '@/pages/Irrigation';
 import Documents from '@/pages/Documents';
 import Settings from '@/pages/Settings';
@@ -67,7 +66,7 @@ const AuthenticatedApp = () => {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/lotes" element={<Lots />} />
           <Route path="/lotes/:id" element={<LotDetail />} />
-          <Route path="/produccion" element={<Production />} />
+          <Route path="/produccion" element={<Navigate to="/configuracion?tab=produccion" replace />} />
           <Route path="/riego" element={<Irrigation />} />
           <Route path="/water-energy" element={<WaterEnergy />} />
           <Route path="/water-energy/riegos" element={<WaterEnergyIrrigation />} />
