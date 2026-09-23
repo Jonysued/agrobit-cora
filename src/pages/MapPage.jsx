@@ -46,7 +46,7 @@ export default function MapPage(){
   const finishDraw=()=>{if(draft.length>=3){setShowForm(true);}};
   const saveEdit=async()=>{await backend.entities.Lot.update(editLot.id,{polygon:draft,area_ha:+polygonAreaHa(draft).toFixed(1)});await d.refetch();setMode('view');setEditLot(null);setDraft([]);};
   const delLot=async()=>{const id=confirmDel.id;await Promise.all([backend.entities.Lot.delete(id),backend.entities.ProductionRecord.deleteMany({lot_id:id}),backend.entities.Objective.deleteMany({lot_id:id}),backend.entities.HealthRecord.deleteMany({lot_id:id}),backend.entities.IrrigationDesign.deleteMany({lot_id:id}),backend.entities.LotDocument.deleteMany({lot_id:id}),backend.entities.Observation.deleteMany({lot_id:id})]);await d.refetch();setConfirmDel(null);setSelected(null);};
-  return <div className="relative h-[calc(100vh-4rem)]">
+  return <div className="relative h-[calc(100vh-4.5rem)]">
     <MapContainer center={center} zoom={15} className="h-full w-full" zoomControl doubleClickZoom={false}>
       <TileLayer attribution="&copy; Esri" url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"/>
       {lots.map(l=><Polygon key={l.id} positions={mode==='edit'&&editLot?.id===l.id?draft:l.polygon} pathOptions={{color:'#fff',weight:2,fillColor:color(l),fillOpacity:.62}} interactive={mode==='view'} eventHandlers={{click:()=>setSelected(l)}}><Tooltip permanent direction="center" className="lot-label">{l.name}</Tooltip></Polygon>)}
