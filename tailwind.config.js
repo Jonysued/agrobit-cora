@@ -10,14 +10,14 @@ module.exports = {
   			md: 'calc(var(--radius) - 2px)',
   			sm: 'calc(var(--radius) - 4px)'
   		},
-  		colors: {
-  			emerald: {
-  				'50': '#E8F1E9','100': '#C9DECC','200': '#A8CBAE','300': '#84B38C','400': '#6A9F73','500': '#5E9962','600': '#4F8454','700': '#4A7D4E','800': '#3E6B42','900': '#4A7D4E','950': '#3B3B3B'
-  			},
-  			sand: {
-  				DEFAULT: '#CDBFA4','light': '#EDE8DA'
-  			},
-  			charcoal: '#3B3B3B',
+		colors: {
+			emerald: {
+				'50': '#F2F7F1','100': '#E3EFE0','200': '#C9DEC2','300': '#A9CA9F','400': '#84B675','500': '#679F59','600': '#56894E','700': '#3F7047','800': '#2B5541','900': '#193733','950': '#0B2526'
+			},
+			sand: {
+				DEFAULT: '#D7E0D2','light': '#F4F7F2'
+			},
+			charcoal: '#0B2526',
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {
