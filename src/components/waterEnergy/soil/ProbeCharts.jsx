@@ -48,7 +48,7 @@ const chartMargins = compact => compact
   ? { top: 10, right: 4, bottom: 0, left: -24 }
   : { top: 16, right: 20, bottom: 8, left: 0 };
 
-export function MoistureLines({ readings, channels, events, range = '30d', height = 270, compact = false, stacked = false }) {
+export function MoistureLines({ readings, channels, events, range = '30d', height = 270, compact = false, stacked = false, unit = '%' }) {
   const { rows, channels: sorted } = useMoistureData(readings, channels, range, stacked);
   const from = fromFor(range);
   const irrigation = [...new Set(events?.irrigation || [])]
@@ -62,9 +62,9 @@ export function MoistureLines({ readings, channels, events, range = '30d', heigh
       <LineChart data={rows} margin={chartMargins(compact)}>
         <CartesianGrid stroke="#e5e9e5" vertical={!compact} />
         <XAxis dataKey="t" type="number" domain={['dataMin', 'dataMax']} tickFormatter={fmtX} tick={{ fontSize: compact ? 9 : 11 }} stroke="#8a938d" minTickGap={26} />
-        <YAxis hide={stacked} width={compact ? 34 : 52} unit={stacked ? '' : '%'} tick={{ fontSize: compact ? 9 : 11 }} stroke="#8a938d" domain={['auto', 'auto']} />
+        <YAxis hide={stacked} width={compact ? 34 : 52} unit={stacked ? '' : unit} tick={{ fontSize: compact ? 9 : 11 }} stroke="#8a938d" domain={['auto', 'auto']} />
         {!compact && <Tooltip labelFormatter={fmtTip} formatter={(value, name, item) => {
-          if (!stacked) return [`${Number(value).toFixed(1)} %`, name];
+          if (!stacked) return [`${Number(value).toFixed(1)} ${unit}`, name];
           const depth = item.dataKey.replace('stack_', '');
           return [`${Number(item.payload[depth]).toFixed(1)} %`, `${depth} cm`];
         }} />}
