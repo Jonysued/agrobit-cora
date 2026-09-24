@@ -44,7 +44,7 @@ export default function LinkSection({ lots, profiles, probes, models, pumps, onC
     || (models || []).find(m => m.reference_probe_id === p.probe_id)?.id
     || '';
   return (
-    <ConfigPanel title="Vinculación de perfiles" description="Linkeá cada lote (a través de su perfil de suelo) a su MODELO DE SUELO y a su bomba. El modelo de suelo aprende el comportamiento del terreno a partir de una sonda de referencia — la sonda no mide la humedad del lote: la curva de cada lote se calcula con sus propios riegos, lluvia, clima y cultivo.">
+    <ConfigPanel title="Vinculación de perfiles" description="Linkeá cada lote (a través de su perfil de suelo) a su MODELO DE SUELO y a su pozo o bomba. El modelo de suelo aprende el comportamiento del terreno a partir de una sonda de referencia — la sonda no mide la humedad del lote: la curva de cada lote se calcula con sus propios riegos, lluvia, clima y cultivo.">
       {!profiles.length ? (
         <p className="text-sm text-slate-400">Configurá primero un perfil de suelo para poder vincularlo.</p>
       ) : (
@@ -54,7 +54,7 @@ export default function LinkSection({ lots, profiles, probes, models, pumps, onC
               <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400">
                 <th className="py-2 pr-3">Lote</th>
                 <th className="pr-3">Modelo de suelo</th>
-                <th className="pr-3">Bomba</th>
+                <th className="pr-3">Pozo / bomba</th>
               </tr>
             </thead>
             <tbody>
@@ -80,7 +80,7 @@ export default function LinkSection({ lots, profiles, probes, models, pumps, onC
                   <td className="py-2 pr-3">
                     <select value={p.pump_id || ''} onChange={e => save(p, 'pump_id', e.target.value)} className={inputCls}>
                       <option value="">Automático · por lote / sector</option>
-                      {pumps.map(b => <option key={b.id} value={b.id}>{b.name}{b.irrigation_sector ? ` · ${b.irrigation_sector}` : ''}</option>)}
+                      {pumps.map(b => <option key={b.id} value={b.id}>{b.name}{b.farm ? ` · ${b.farm}` : ''}{b.irrigation_sector ? ` · ${b.irrigation_sector}` : ''}</option>)}
                     </select>
                   </td>
                 </tr>
