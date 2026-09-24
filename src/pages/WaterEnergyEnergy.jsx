@@ -30,7 +30,7 @@ export default function WaterEnergyEnergy() {
         <table className="w-full min-w-[820px] text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
-              {['Bomba', 'Lote / Sector', 'Potencia', 'Caudal', 'Horas proyectadas', 'kWh proyectados', 'Costo proyectado', 'kWh/m³'].map(h => <th key={h} className="px-4 py-3">{h}</th>)}
+              {['Pozo / bomba', 'Finca', 'Suministro eléctrico', 'Lote / Sector', 'Potencia', 'Caudal', 'Horas proyectadas', 'kWh proyectados', 'Costo proyectado', 'kWh/m³'].map(h => <th key={h} className="px-4 py-3">{h}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -39,6 +39,8 @@ export default function WaterEnergyEnergy() {
               return (
                 <tr key={p.id} className="border-b border-slate-100">
                   <td className="px-4 py-3"><b className="text-charcoal">{p.name}</b></td>
+                  <td className="px-4 py-3 text-slate-600">{p.farm || '—'}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-600">{p.energy_supply_number || '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{p.irrigation_sector || p.lot_id || '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{p.power_kw} kW</td>
                   <td className="px-4 py-3 text-slate-600">{p.flow_m3_h} m³/h</td>
@@ -49,7 +51,7 @@ export default function WaterEnergyEnergy() {
                 </tr>
               );
             })}
-            {!pumps.length && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-400">Sin bombas configuradas. Cargalas en Water & Energy → Configuración.</td></tr>}
+            {!pumps.length && <tr><td colSpan={10} className="px-4 py-8 text-center text-sm text-slate-400">Sin pozos ni bombas configurados. Cargalos en Water & Energy → Configuración.</td></tr>}
           </tbody>
         </table>
       </section>
