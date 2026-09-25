@@ -106,6 +106,11 @@ function ProbeChartDetail({ data, chartId, setChartId }) {
             <div className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
               {PROBE_RANGES.map(([id, , label]) => <button key={id} type="button" onClick={() => setRange(id)} className={`rounded-lg px-3 py-2 text-xs font-bold transition ${range === id ? 'bg-white text-emerald-900 shadow-sm' : 'text-slate-500 hover:text-charcoal'}`}>{label}</button>)}
             </div>
+            {data.readings?.length > 0 && (
+              <p className="mt-1.5 text-[11px] text-slate-500">
+                Lecturas guardadas desde {new Date(data.readings[0].timestamp).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}.
+              </p>
+            )}
           </div>
         </div>
       </div>
