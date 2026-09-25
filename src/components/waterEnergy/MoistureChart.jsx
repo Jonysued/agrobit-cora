@@ -56,15 +56,23 @@ export default function MoistureChart({ detail }) {
   // ---- Ventana visible (RANGO DE FECHAS) ----
   const anchorTs = detail.anchor_date ? dayTs(detail.anchor_date) : null;
   const todayTs = dayTs(today);
-  // Centrar una ventana de siete o treinta y un días en el día elegido.
+  // Mantener la ventana dentro de los días con datos. Cerca del comienzo
+  // o el final se desplaza, sin desperdiciar medio gráfico en fechas vacías.
   const dailyPoints = data.filter(d => d.t === dayTs(isoDay(new Date(d.t))));
   const firstDay = dailyPoints.length ? isoDay(new Date(dailyPoints[0].t)) : today;
   const lastDay = dailyPoints.length ? isoDay(new Date(dailyPoints[dailyPoints.length - 1].t)) : today;
   const activeDay = selectedDay < firstDay ? firstDay : selectedDay > lastDay ? lastDay : selectedDay;
   const activeTs = dayTs(activeDay);
-  const radius = viewMode === 'week' ? 3 : 15;
-  const winStart = activeTs - radius * DAY;
-  const winEnd = activeTs + radius * DAY;
+  const windowDays = viewMode === 'week' ? 7 : 31;
+  const firstTs = dayTs(firstDay);
+  const lastTs = dayTs(lastDay);
+  const maxStart = Math.max(firstTs, lastTs - (windowDays - 1) * DAY);
+  const winStart = Math.max(firstTs, Math.min(activeTs - Math.floor(windowDays / 2) * DAY, maxStart));
+  const winEnd = Math.min(lastTs, winStart + (windowDays - 1) * DAY);
+  const tickStep = (viewMode === 'week' ? 1 : 5) * DAY;
+  const axisTicks = [];
+  for (let t = winStart; t <= winEnd; t += tickStep) axisTicks.push(t);
+  if (axisTicks[axisTicks.length - 1] !== winEnd) axisTicks.push(winEnd);
   const filtered = data
     .filter(d => d.t >= winStart - DAY / 2 && d.t <= winEnd + DAY / 2)
     .map(d => ({
@@ -84,7 +92,7 @@ export default function MoistureChart({ detail }) {
   const selectedIndex = dailyPoints.indexOf(selectedPoint);
   const previousPoint = dailyPoints[selectedIndex - 1];
   const isFuture = activeDay > today;
-  const selectedValue = isFuture ? (selectedPoint?.[S] ?? selectedPoint?.[H]) : selectedPoint?.[H];
+  const selectedValue = isFuture ? (selectedPoint?.[S] ?? selectedPoint?.[H]) : activeDay === today ? (selectedPoint?.[H] ?? state.total_profile_water_mm) : selectedPoint?.[H];
   const previousValue = previousPoint && (isFuture && previousPoint.t > todayTs ? (previousPoint[S] ?? previousPoint[H]) : previousPoint[H]);
   const delta = selectedValue != null && previousValue != null ? Math.round((selectedValue - previousValue) * 10) / 10 : null;
   const forecastDay = (detail.scenarioWithoutIrrigation || []).find(p => p.date === activeDay);
@@ -115,23 +123,41 @@ export default function MoistureChart({ detail }) {
           {activeDay !== today && <button type="button" onClick={() => setSelectedDay(today)} className="rounded-lg px-2 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Ir a hoy</button>}
         </div>
       </div>
-      <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm">
-        {fcMm != null && <span><i className="mr-2 inline-block h-2.5 w-2.5 rounded-full bg-sky-500" /><b className="text-sky-600">Lleno:</b> {fcMm} mm</span>}
-        {rechargeMm != null && <span><i className="mr-2 inline-block h-2.5 w-2.5 rounded-full bg-pink-500" /><b className="text-pink-600">Recargar:</b> {rechargeMm} mm</span>}
-        <span><i className="mr-2 inline-block h-2.5 w-2.5 rounded-full bg-black" /><b>Suma:</b> {state.total_profile_water_mm} mm</span>
+      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4" aria-live="polite">
+        <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{fmtTip(activeTs)} · {isFuture ? 'Proyección' : activeDay === today ? 'Hoy' : 'Histórico'}</p>
+            <p className="mt-1 text-3xl font-bold tracking-tight text-charcoal">{selectedValue != null ? mm(selectedValue) : 'Sin dato'}</p>
+          </div>
+          {delta != null && <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${delta > 0 ? 'bg-emerald-100 text-emerald-800' : delta < 0 ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'}`}>{delta > 0 ? '+' : ''}{mm(delta)} vs. día anterior</span>}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-600">
+          {isFuture && selectedPoint?.[H] != null && <span>Sin riego: <b>{mm(selectedPoint[H])}</b></span>}
+          {isFuture && selectedPoint?.[S] != null && <span>Programado: <b>{mm(selectedPoint[S])}</b></span>}
+          {isFuture && selectedPoint?.[R] != null && <span>Recomendado: <b>{mm(selectedPoint[R])}</b></span>}
+          {(forecastDay?.rainfall_mm || historicRain) > 0 && <span>Lluvia: <b>{mm(forecastDay?.rainfall_mm ?? historicRain)}</b></span>}
+          {(forecastDay?.irrigation_mm || historicIrrigation) > 0 && <span>Riego: <b>{mm(forecastDay?.irrigation_mm ?? historicIrrigation)}</b></span>}
+          {isFuture && recommendedIrrigation > (forecastDay?.irrigation_mm || 0) && <span>Riego recomendado: <b>{mm(recommendedIrrigation - (forecastDay?.irrigation_mm || 0))}</b></span>}
+          {forecastDay?.etc_mm != null && <span>ETc: <b>{mm(forecastDay.etc_mm)}</b></span>}
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500">En la proyección, la lluvia y el riego de este día se reflejan en el valor del día siguiente.</p>
       </div>
-      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600" aria-label="Referencias de la curva">
+      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+        {rechargeMm != null && <span><i className="mr-1.5 inline-block w-4 align-middle" style={{ borderTop: '2px dashed #ec407a' }} />Recarga {mm(rechargeMm)}</span>}
+        {fcMm != null && <span><i className="mr-1.5 inline-block w-4 align-middle" style={{ borderTop: '2px dashed #38a8df' }} />Capacidad de campo {mm(fcMm)}</span>}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600" aria-label="Referencias de la curva">
         <span><i className="mr-1.5 inline-block w-5 align-middle" style={{ borderTop: '3px solid #111827' }} />Histórico</span>
         <span><i className="mr-1.5 inline-block w-5 align-middle" style={{ borderTop: '3px solid #9ca3af' }} />Sin riego futuro</span>
         {hasScheduled && <span><i className="mr-1.5 inline-block w-5 align-middle" style={{ borderTop: '3px solid #2563eb' }} />Programado</span>}
         {hasRec && <span><i className="mr-1.5 inline-block w-5 align-middle" style={{ borderTop: '3px dashed #16a34a' }} />Recomendado</span>}
       </div>
-      <div className="relative mt-3 h-[330px]">
+      <div className="relative mt-3 h-[280px] sm:h-[350px]">
         <span className="absolute left-0 top-0 z-10 text-xs font-bold text-slate-500">mm</span>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={filtered} margin={{ top: 14, right: 18, bottom: 4, left: -4 }}>
             <CartesianGrid vertical={false} stroke="#e2e8f0" strokeDasharray="3 4" />
-            <XAxis dataKey="t" type="number" domain={[winStart, winEnd]} tickFormatter={fmtX} stroke="#94a3b8" tick={{ fontSize: 11, fill: '#475569' }} tickMargin={8} tickCount={viewMode === 'week' ? 7 : 7} />
+            <XAxis dataKey="t" type="number" domain={[winStart, winEnd]} ticks={axisTicks} tickFormatter={fmtX} stroke="#94a3b8" tick={{ fontSize: 11, fill: '#475569' }} tickMargin={8} minTickGap={12} />
             <YAxis domain={[yMin, yMax]} stroke="#94a3b8" tick={{ fontSize: 11, fill: '#475569' }} tickMargin={6} />
             <Tooltip
               labelFormatter={fmtTip}
@@ -147,8 +173,8 @@ export default function MoistureChart({ detail }) {
               </>
             )}
             {/* Línea de HOY: separa el histórico (izquierda) del forecast (derecha) */}
-            <ReferenceLine x={todayTs} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: 'Hoy', fontSize: 11, fill: '#475569', position: 'top' }} ifOverflow="extendDomain" />
-            {activeDay !== today && <ReferenceLine x={activeTs} stroke="#0f766e" strokeWidth={2} ifOverflow="extendDomain" />}
+            {todayTs >= winStart && todayTs <= winEnd && <ReferenceLine x={todayTs} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: 'Hoy', fontSize: 11, fill: '#475569', position: 'top' }} />}
+            {activeDay !== today && <ReferenceLine x={activeTs} stroke="#0f766e" strokeWidth={2} />}
             {/* INICIALIZACIÓN del estado hídrico: fecha y mm desde donde
                 arranca la curva calculada (si quedó dentro de la ventana) */}
             {anchorTs && anchorTs < dayTs(today) && anchorTs >= winStart - DAY && anchorTs <= winEnd && (
@@ -163,22 +189,6 @@ export default function MoistureChart({ detail }) {
             {hasRec && <Line dataKey={R} stroke="#16a34a" strokeWidth={2.5} strokeDasharray="6 4" dot={false} activeDot={{ r: 4 }} connectNulls />}
           </ComposedChart>
         </ResponsiveContainer>
-      </div>
-      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4" aria-live="polite">
-        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{fmtTip(activeTs)} · {isFuture ? 'Pronóstico' : activeDay === today ? 'Hoy' : 'Histórico'}</p><p className="mt-1 text-2xl font-bold text-charcoal">{selectedValue != null ? mm(selectedValue) : 'Sin dato'}</p></div>
-          {delta != null && <span className={`text-sm font-semibold ${delta > 0 ? 'text-emerald-700' : delta < 0 ? 'text-amber-700' : 'text-slate-500'}`}>{delta > 0 ? '+' : ''}{mm(delta)} frente al día anterior</span>}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-600">
-          {isFuture && selectedPoint?.[H] != null && <span>Sin riego: <b>{mm(selectedPoint[H])}</b></span>}
-          {isFuture && selectedPoint?.[S] != null && <span>Programado: <b>{mm(selectedPoint[S])}</b></span>}
-          {isFuture && selectedPoint?.[R] != null && <span>Recomendado: <b>{mm(selectedPoint[R])}</b></span>}
-          {(forecastDay?.rainfall_mm || historicRain) > 0 && <span>Lluvia: <b>{mm(forecastDay?.rainfall_mm ?? historicRain)}</b></span>}
-          {(forecastDay?.irrigation_mm || historicIrrigation) > 0 && <span>Riego: <b>{mm(forecastDay?.irrigation_mm ?? historicIrrigation)}</b></span>}
-          {isFuture && recommendedIrrigation > (forecastDay?.irrigation_mm || 0) && <span>Riego recomendado: <b>{mm(recommendedIrrigation - (forecastDay?.irrigation_mm || 0))}</b></span>}
-          {forecastDay?.etc_mm != null && <span>ETc: <b>{mm(forecastDay.etc_mm)}</b></span>}
-        </div>
-        <p className="mt-2 text-[11px] text-slate-500">En la proyección, la lluvia y el riego de cada día se reflejan en la curva del día siguiente.</p>
       </div>
     </section>
   );
