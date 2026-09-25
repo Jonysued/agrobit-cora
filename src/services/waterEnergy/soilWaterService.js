@@ -34,6 +34,21 @@ import { measuredProbeProfile } from './engine/measuredProbeProfile';
 // ESTIMACIÓN EXPERIMENTAL — no reemplaza criterio agronómico.
 // ============================================================
 const DAY_MS = 86400000;
+const DAILY_LOOKBACK_MS = 2 * 3600000;
+
+// Consultar ayer por fecha: el límite de filas de la API puede cubrir
+// apenas unas horas cuando cada lectura trae muchos canales.
+async function previousDayReadings(probeId, lastCompleteTs) {
+  if (!Number.isFinite(lastCompleteTs)) return [];
+  const target = lastCompleteTs - DAY_MS;
+  return backend.entities.SensorReading.filter({
+    probe_id: probeId,
+    timestamp: {
+      $gte: new Date(target - DAILY_LOOKBACK_MS).toISOString(),
+      $lte: new Date(target).toISOString(),
+    },
+  }, '-timestamp', 1000);
+}
 const round1 = n => Math.round(n * 10) / 10;
 
 // Etiquetas de la configuración faltante (para la UI)
@@ -311,7 +326,7 @@ function unlinkedProbeState(probe, channels, readings) {
     last_signal_ts: latest?.t ?? null,
     source: readings.find(reading => new Date(reading.timestamp).getTime() === latest?.t)?.source || null,
     history,
-    daily_change_mm: latest ? (() => {
+    daily_change_mm: latest && Date.now() - latest.t <= 26 * 3600000 ? (() => {
       const previous = [...history].reverse().find(h => h.t <= latest.t - DAY_MS);
       return previous ? round1(latest.profile - previous.profile) : null;
     })() : null,
@@ -329,13 +344,15 @@ async function stateForProbe(probe, lots, profiles, models) {
     ]);
     if (!channels.some(channel => channel.sensor_type === 'soil_moisture')) return { probe, probeId: probe.id, lotName: 'Sin lote vinculado', missing: 'Sonda sin canales de humedad — sincronizá sus lecturas en Configuración → Sensores.' };
     if (!readings.length) return { probe, probeId: probe.id, lotName: 'Sin lote vinculado', missing: 'Sin lecturas — sincronizá la sonda en Configuración → Sensores.' };
-    return unlinkedProbeState(probe, channels, readings);
+    const current = unlinkedProbeState(probe, channels, readings);
+    const yesterday = await previousDayReadings(probe.id, current.last_signal_ts);
+    return unlinkedProbeState(probe, channels, [...readings, ...yesterday]);
   }
   const lotName = linkedLots.length > 1 ? `${lot.name} (+${linkedLots.length - 1} lotes)` : lot.name;
   const channels = await sensorService.getProbeChannels(probe.id);
   if (!channels.length) return { probe, probeId: probe.id, lot, lotName, missing: 'Sonda sin canales/profundidades configurados.' };
-  // 600 lecturas ≈ 24 h de una sonda que reporta cada hora con ~12–24
-  // canales: alcanzan para calcular la variación de las últimas 24 h.
+  // El estado actual usa lecturas recientes; ayer se consulta por fecha
+  // para no depender de cuántos canales entran en el límite de filas.
   const readings = await backend.entities.SensorReading.filter({ probe_id: probe.id }, '-timestamp', 600);
   if (!readings.length) return { probe, probeId: probe.id, lot, lotName, missing: 'Sin lecturas — la sonda todavía no reporta datos.' };
   const profile = profiles.find(p => p.lot_id === lot.id) || null;
@@ -347,18 +364,15 @@ async function stateForProbe(probe, lots, profiles, models) {
   let dailyChange = null;
   let lastSignalTs = null;
   if (state._model) {
-    const history = usefulWaterSeries(readings, channels, state._model);
-    if (history.length >= 2) {
-      const last = history[history.length - 1];
-      lastSignalTs = last.t;
-      // Variación SOLO con señal reciente (≤26 h): una sonda caída
-      // (ej. BARNEA desconectada hace días) no puede mostrar variación
-      // calculada con lecturas viejas — se informa la última señal.
-      const fresh = (Date.now() - last.t) <= 26 * 3600000;
-      if (fresh) {
-        const prev = [...history].reverse().find(h => h.t <= last.t - DAY_MS);
-        if (prev) dailyChange = round1(last.profile - prev.profile);
-      }
+    const recentHistory = usefulWaterSeries(readings, channels, state._model);
+    const last = recentHistory.at(-1);
+    lastSignalTs = last?.t ?? null;
+    // No calcular una variación diaria con una señal antigua.
+    if (last && Date.now() - last.t <= 26 * 3600000) {
+      const yesterday = await previousDayReadings(probe.id, last.t);
+      const history = usefulWaterSeries([...readings, ...yesterday], channels, state._model);
+      const prev = [...history].reverse().find(h => h.t <= last.t - DAY_MS);
+      if (prev) dailyChange = round1(last.profile - prev.profile);
     }
   }
   return { probe, probeId: probe.id, lot, lotName, probeProvider: probe.provider, connectionStatus: probe.connection_status, last_signal_ts: lastSignalTs, daily_change_mm: dailyChange, ...state };
