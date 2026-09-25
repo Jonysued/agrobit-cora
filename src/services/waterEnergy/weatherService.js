@@ -238,11 +238,9 @@ export const weatherService = {
     };
   },
 
-  // Map<lot_id, [pronóstico × 30 días a partir de mañana]>
-  // Con ubicación de finca: Open-Meteo real hasta donde alcanza el
-  // pronóstico (ETc calculado por cultivo); el resto son registros
-  // guardados o demo simulado. Sin ubicación: registros guardados o
-  // demo simulado para los 30 días.
+  // Map<lot_id, [pronóstico × 15 días a partir de mañana]>
+  // La curva hídrica termina con el horizonte del pronóstico. Si falta
+  // el proveedor, se conserva el origen de los datos guardados o simulados.
   async getFarmForecast(lots) {
     const [stored, farms] = await Promise.all([backend.entities.WeatherForecast.list(), backend.entities.Farm.list()]);
     const daysByFarm = new Map();
@@ -254,7 +252,7 @@ export const weatherService = {
     for (const lot of lots) {
       const farmDays = daysByFarm.get(lot.farm);
       const days = [];
-      for (let i = 1; i <= 30; i++) {
+      for (let i = 1; i <= 15; i++) {
         const dateStr = isoDate(addDays(i));
         const fd = farmDays?.find(d => d.date === dateStr);
         if (fd) {
@@ -263,7 +261,7 @@ export const weatherService = {
           continue;
         }
         const rec = stored.find(r => r.lot_id === lot.id && r.date === dateStr);
-        days.push(rec ? { ...rec, simulated: false } : simulateForLot(lot, dateStr));
+        days.push(rec ? { ...rec, simulated: rec.simulated === true, source: rec.source || 'guardado' } : simulateForLot(lot, dateStr));
       }
       map.set(lot.id, days);
     }
