@@ -258,10 +258,8 @@ async function computeLot(lot, ctx, withHistory) {
     const grossRain = obs?.byDay.get(prev)?.rain ?? 0;
     const rain = round1(grossRain * EFFECTIVE_RAIN_FACTOR);
     const eto = obs?.byDay.get(d)?.eto ?? obs?.meanEto ?? DEFAULT_ETO_MM;
-    // Kc de cada día: el EXPLÍCITO del perfil (current_kc) o, si no
-    // hay, la tabla MENSUAL del cultivo (granadas/olivos): un Kc
-    // distinto según el mes. Sin ninguno no se descuenta demanda.
-    const kc = profile.current_kc != null ? profile.current_kc : kcService.kcForCropDate(lot.crop, d);
+    // Kc propio del lote para ese día: cultivo + edad + fenología.
+    const kc = kcService.kcForLotDate(lot, d, profile);
     const etc = kc != null ? round1(eto * kc * etcCorrectionFactor) : 0;
     let next = water + irrPrev + rain - etc;
     if (taw != null && next > taw) next = taw; // excedente = drenaje

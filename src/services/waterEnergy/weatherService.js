@@ -29,9 +29,9 @@ const seeded01 = key => {
   return ((h % 997) / 997 + (h % 89) / 89) / 2;
 };
 
-// Kc por MES del cultivo (tablas de Granadas/Olivos); valores por
-// defecto solo para cultivos sin tabla mensual.
-const kcFor = (lot, dateStr) => kcService.kcForCropDate(lot.crop, dateStr)
+// Kc diario por cultivo y edad. El orquestador agrega luego el perfil
+// para contemplar desfases fenológicos u overrides temporales.
+const kcFor = (lot, dateStr) => kcService.kcForLotDate(lot, dateStr)
   ?? (() => { const c = (lot.crop || '').toLowerCase(); if (c.includes('oli')) return 0.6; if (c.includes('gran')) return 0.7; return 0.65; })();
 
 function simulateForLot(lot, dateStr) {

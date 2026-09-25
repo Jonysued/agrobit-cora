@@ -153,7 +153,7 @@ async function calibrateModel(model, probes) {
       const depletion = -delta;
       depletionSamples.push(depletion);
       const eto = etoByDate.get(days[i]);
-      const kc = referenceLot ? kcService.kcForCropDate(referenceLot.crop, days[i]) : null;
+      const kc = referenceLot ? kcService.kcForLotDate(referenceLot, days[i]) : null;
       const etc = eto != null && kc != null ? eto * kc : null;
       if (etc != null && etc >= 0.5) etcFactorSamples.push(depletion / etc);
     }
