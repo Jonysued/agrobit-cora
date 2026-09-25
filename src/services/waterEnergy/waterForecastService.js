@@ -65,6 +65,8 @@ function forecastQuality(curve, weatherDays, kcMissing) {
   if (anchorAgeDays != null && anchorAgeDays > 30) warnings.push(`estado inicial con ${anchorAgeDays} días de antigüedad`);
   if (anchorAgeDays > 0 && observedAgeHours == null) warnings.push('sin meteorología observada para reconstruir el estado');
   else if (anchorAgeDays > 0 && observedAgeHours > 24) warnings.push('meteorología observada desactualizada');
+  if (curve.data_quality?.estimated_eto_days > 0) warnings.push(`ET0 estimada con promedio de Garita en ${curve.data_quality.estimated_eto_days} días sin lectura`);
+  if (curve.data_quality?.missing_rain_days > 0) warnings.push(`sin lectura de lluvia de Garita en ${curve.data_quality.missing_rain_days} días`);
   if (simulatedInDecisionWindow) warnings.push('el horizonte de decisión contiene clima simulado');
   if (kcMissing) warnings.push('Kc sin configurar');
   const blockedReasons = [];

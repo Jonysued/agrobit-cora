@@ -1,6 +1,7 @@
 import { backend } from '@/api/backendClient';
 import { soilWaterService } from './soilWaterService';
 import { kcService } from './kcService';
+import { selectGaritaStation, aggregateGaritaObservations } from './garitaWeather';
 
 // ============================================================
 // soilBehaviorService — MODELO DE COMPORTAMIENTO DEL SUELO.
@@ -35,22 +36,14 @@ const median = values => {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 };
 
-async function observedEtoByDate(lot) {
-  if (!lot) return new Map();
-  const farms = await backend.entities.Farm.list();
-  const farm = farms.find(f => f.name === lot.farm);
-  if (!farm) return new Map();
-  const observations = await backend.entities.WeatherObservation.filter({ farm_id: farm.id }, '-timestamp', 2000);
-  const daily = new Map();
-  for (const observation of observations) {
-    if (!observation.timestamp) continue;
-    const date = isoDay(new Date(observation.timestamp));
-    const current = daily.get(date) || { accumulated: null, increments: 0 };
-    if (observation.et_day_mm != null) current.accumulated = Math.max(current.accumulated ?? 0, observation.et_day_mm);
-    else if (observation.eto_mm > 0) current.increments += observation.eto_mm;
-    daily.set(date, current);
-  }
-  return new Map([...daily].map(([date, value]) => [date, round1(value.accumulated ?? value.increments)]));
+async function observedEtoByDate() {
+  const station = selectGaritaStation(await backend.entities.WeatherStation.list());
+  if (!station) return new Map();
+  const observations = await backend.entities.WeatherObservation.filter(
+    { weather_station_id: station.id }, '-timestamp', 2000,
+  );
+  const { byDay } = aggregateGaritaObservations(observations);
+  return new Map([...byDay].filter(([, value]) => value.eto != null).map(([date, value]) => [date, value.eto]));
 }
 
 // Lámina de un programa que corresponde a un lote (mm × factor del lote)
@@ -120,7 +113,7 @@ async function calibrateModel(model, probes) {
   const referenceLot = lots.find(l => l.id === probe.lot_id) || null;
   const [irrByDate, etoByDate] = await Promise.all([
     referenceExecutedIrrigationByDate(probe.lot_id),
-    observedEtoByDate(referenceLot),
+    observedEtoByDate(),
   ]);
   const events = [
     ...(analysis.events?.irrigation || []).map(d => ({ date: d, mm: irrByDate.get(d) || 0 })),

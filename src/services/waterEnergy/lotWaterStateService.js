@@ -3,6 +3,7 @@ import { densityOf } from '@/lib/farmCalculations';
 import { kcService } from './kcService';
 import { soilWaterService, computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from './soilWaterService';
 import { soilBehaviorService } from './soilBehaviorService';
+import { selectGaritaStation, aggregateGaritaObservations } from './garitaWeather';
 
 // ============================================================
 // lotWaterStateService — ESTADO HÍDRICO CALCULADO DE CADA LOTE.
@@ -40,9 +41,6 @@ const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const todayStr = () => isoDay(new Date());
 const dayAfter = (iso, n) => { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + n); return isoDay(d); };
-// ET0 por defecto cuando la finca no tiene observaciones de estación —
-// se documenta como estimación, nunca se presenta como dato medido.
-const DEFAULT_ETO_MM = 4.0;
 // Límite de reconstrucción hacia atrás (días) desde el ancla
 const MAX_HISTORY_DAYS = 180;
 
@@ -93,43 +91,6 @@ function executedIrrigationFrom(logs, programs, lots, designs) {
   return executed;
 }
 
-// ---- Clima observado diario por finca: lluvia acumulada y ET0 ----
-async function dailyObservedWeather(farmId) {
-  const obs = await backend.entities.WeatherObservation.filter({ farm_id: farmId }, '-timestamp', 600);
-  const raw = new Map();
-  let lastObservationAt = null;
-  for (const o of obs) {
-    if (o.timestamp && (!lastObservationAt || new Date(o.timestamp) > new Date(lastObservationAt))) lastObservationAt = o.timestamp;
-    // Día LOCAL del registro (la reconstrucción usa fechas locales):
-    // sin esto, la lluvia caída cerca de la medianoche UTC se atribuye
-    // al día siguiente y la subida se dibuja desplazada.
-    const day = isoDay(new Date(o.timestamp));
-    const cur = raw.get(day) || { rain: 0, etoSum: 0, etoN: 0, etDayMax: null };
-    cur.rain += o.rainfall_mm || 0;
-    // ET0 diaria: el ACUMULADO del día (et_day, día a la fecha que
-    // reporta la estación) es la fuente AUTORITATIVA — se toma el
-    // MAYOR acumulado del día. La suma de los eto individuales NO se
-    // combina con el acumulado: la API "current conditions" repite el
-    // mismo valor en cada consulta y sumarlo infla la ET0 diaria (p.
-    // ej. 4 mm reales sumaban 11,9). Solo se usa la suma como respaldo
-    // de registros legados sin et_day (eto_mm > 0; el 0 se trata como
-    // "sin dato" del intervalo).
-    if (o.et_day_mm != null && o.et_day_mm > (cur.etDayMax ?? -Infinity)) cur.etDayMax = o.et_day_mm;
-    if (o.eto_mm > 0) { cur.etoSum += o.eto_mm; cur.etoN++; }
-    raw.set(day, cur);
-  }
-  const byDay = new Map();
-  raw.forEach((v, day) => byDay.set(day, {
-    rain: round1(v.rain),
-    eto: v.etDayMax != null ? round1(v.etDayMax) : (v.etoN ? round1(v.etoSum) : null),
-  }));
-  // ET0 de respaldo para días sin observaciones: promedio de las ET0
-  // DIARIAS (sumas del día), no de los incrementos individuales.
-  const dailyEtos = [...byDay.values()].map(v => v.eto).filter(v => v != null);
-  const meanEto = dailyEtos.length ? round1(dailyEtos.reduce((s, v) => s + v, 0) / dailyEtos.length) : null;
-  return { byDay, meanEto, lastObservationAt };
-}
-
 // ---- Fondo del perfil completo (0–N cm) de un lote ----
 // Definido por la sonda de referencia de su modelo de suelo (ej.
 // sonda 10–115 cm → 0–120 cm). Sin sonda de referencia → null: la
@@ -144,16 +105,16 @@ async function referenceFullDepthCm(profile, models) {
 
 // ---- Contexto compartido (una sola pasada para todos los lotes) ----
 async function loadContext(lots) {
-  const [profiles, models, states, logs, programs, farms, allLayers, allChannels, designs] = await Promise.all([
+  const [profiles, models, states, logs, programs, allLayers, allChannels, designs, stations] = await Promise.all([
     backend.entities.SoilProfile.list(),
     soilBehaviorService.getModels(),
     backend.entities.LotWaterState.list('-timestamp', 2000),
     backend.entities.IrrigationLog.list(),
     backend.entities.IrrigationProgram.list(),
-    backend.entities.Farm.list(),
     backend.entities.SoilLayer.list(),
     backend.entities.SoilProbeChannel.list(),
     backend.entities.IrrigationDesign.list(),
+    backend.entities.WeatherStation.list(),
   ]);
   // Configuración estática de cada perfil (SIN sonda) — capas cargadas
   // UNA sola vez para todos los perfiles: sin consultas por perfil.
@@ -171,12 +132,15 @@ async function loadContext(lots) {
     const depths = refProbeId ? allChannels.filter(c => c.probe_id === refProbeId).map(c => c.depth_cm) : [];
     configs.set(p.id, computeProfileConfig(p, layersByProfile.get(p.id) || [], fullProfileDepthCm(depths) ?? DEFAULT_FULL_PROFILE_DEPTH_CM));
   }
-  // Clima observado por finca (id)
-  const farmByLot = new Map(lots.map(l => [l.id, farms.find(f => f.name === l.farm) || null]));
-  const farmIds = [...new Set([...farmByLot.values()].map(f => f?.id).filter(Boolean))];
-  const observed = new Map(await Promise.all(farmIds.map(async id => [id, await dailyObservedWeather(id)])));
+  // Una sola serie observada de Garita para TODOS los lotes, aunque
+  // Garita esté vinculada únicamente a una finca en la configuración.
+  const garita = selectGaritaStation(stations);
+  const observations = garita
+    ? await backend.entities.WeatherObservation.filter({ weather_station_id: garita.id }, '-timestamp', 2000)
+    : [];
+  const observed = aggregateGaritaObservations(observations);
   const executed = executedIrrigationFrom(logs, programs, lots, designs);
-  return { profiles, models, states, configs, farmByLot, observed, executed, programs, designs, loggedProgramIds: new Set(logs.map(l => l.program_id)) };
+  return { profiles, models, states, configs, garita, observed, executed, programs, designs, loggedProgramIds: new Set(logs.map(l => l.program_id)) };
 }
 
 // ---- Estado de UN lote: ancla + reconstrucción diaria hasta hoy ----
@@ -224,6 +188,13 @@ async function computeLot(lot, ctx, withHistory) {
       reason: configComplete ? 'sin_estado_inicial' : 'config_incompleta',
     };
   }
+  if (!ctx.garita || !ctx.observed.lastObservationAt) {
+    return {
+      lot, profile, config, model,
+      forecast_status: 'no_disponible',
+      reason: ctx.garita ? 'sin_datos_garita' : 'sin_estacion_garita',
+    };
+  }
   // Rango físico del origen: nunca por encima de la capacidad útil
   // (el excedente drena) ni por debajo del punto de marchitez. Sin
   // esto, un origen fuera de rango hace que el primer día del
@@ -240,10 +211,11 @@ async function computeLot(lot, ctx, withHistory) {
   let startDay = anchor.date;
   if (startDay < dayAfter(end, -(MAX_HISTORY_DAYS - 1))) startDay = dayAfter(end, -(MAX_HISTORY_DAYS - 1));
   const executed = ctx.executed.get(lot.id) || new Map();
-  const farm = ctx.farmByLot.get(lot.id);
-  const obs = farm ? ctx.observed.get(farm.id) : null;
+  const obs = ctx.observed;
   const irrigationEvents = [];
   const rainEvents = [];
+  let estimatedEtoDays = 0;
+  let missingRainDays = 0;
   let water = anchor.useful;
   // REGLA DEL GRÁFICO: la curva sube DESPUÉS del riego o la lluvia,
   // nunca antes. El punto de cada día refleja la demanda (ETc) de ESE
@@ -256,11 +228,15 @@ async function computeLot(lot, ctx, withHistory) {
   while (d <= end) {
     const irrPrev = round1((executed.get(prev) || 0) * efficiency);
     const grossRain = obs?.byDay.get(prev)?.rain ?? 0;
+    if (!obs.byDay.has(prev)) missingRainDays++;
     const rain = round1(grossRain * EFFECTIVE_RAIN_FACTOR);
-    const eto = obs?.byDay.get(d)?.eto ?? obs?.meanEto ?? DEFAULT_ETO_MM;
+    // Días sin lectura: promedio de Garita (estimado). Sin dato de
+    // Garita no se introduce una ET0 inventada ni de otra estación.
+    const eto = obs.byDay.get(d)?.eto ?? obs.meanEto;
+    if (obs.byDay.get(d)?.eto == null) estimatedEtoDays++;
     // Kc propio del lote para ese día: cultivo + edad + fenología.
     const kc = kcService.kcForLotDate(lot, d, profile);
-    const etc = kc != null ? round1(eto * kc * etcCorrectionFactor) : 0;
+    const etc = kc != null && eto != null ? round1(eto * kc * etcCorrectionFactor) : 0;
     let next = water + irrPrev + rain - etc;
     if (taw != null && next > taw) next = taw; // excedente = drenaje
     if (next < 0) next = 0; // nunca baja del punto de marchitez
@@ -347,6 +323,10 @@ async function computeLot(lot, ctx, withHistory) {
     data_quality: {
       anchor_date: anchor.date,
       observed_weather_last_at: obs?.lastObservationAt || null,
+      observed_weather_station: ctx.garita?.name || null,
+      observed_weather_source: ctx.garita ? 'Garita' : 'sin_estacion_garita',
+      estimated_eto_days: estimatedEtoDays,
+      missing_rain_days: missingRainDays,
       model_status: model?.calibration_status || 'sin_modelo',
       recharge_efficiency_learned: model?.recharge_efficiency != null,
       etc_correction_learned: model?.etc_correction_factor != null,
