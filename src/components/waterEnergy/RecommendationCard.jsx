@@ -11,7 +11,7 @@ export default function RecommendationCard({ detail }) {
     return (
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
         <h3 className="font-bold text-amber-900">Recomendación</h3>
-        <p className="mt-1 text-sm text-amber-800">Falta configurar Kc — las granadas y los olivos ya usan su tabla de Kc mensual automática; para otros cultivos definí el Kc en Water & Energy → Configuración → Perfiles de suelo.</p>
+        <p className="mt-1 text-sm text-amber-800">Falta configurar Kc — granadas y olivos lo calculan automáticamente por cultivo, edad y etapa fenológica; para otros cultivos definí un override temporal en Water & Energy → Configuración → Perfiles de suelo.</p>
       </section>
     );
   }
