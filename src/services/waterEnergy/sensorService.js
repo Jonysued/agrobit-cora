@@ -58,8 +58,18 @@ export const sensorService = {
       if (from) query.timestamp.$gte = new Date(from).toISOString();
       if (to) query.timestamp.$lte = new Date(to).toISOString();
     }
-    const rows = await backend.entities.SensorReading.filter(query, '-timestamp', 5000);
-    return rows.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    // La API entrega como máximo 1.000 filas por petición, mientras
+    // cada instante de la sonda contiene muchos canales. Recorrer todas
+    // las páginas con orden estable para que 30/60/90 días no se reduzcan
+    // silenciosamente a las últimas horas.
+    const pageSize = 1000;
+    const rows = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const page = await backend.entities.SensorReading.filter(query, '-timestamp,-id', pageSize, offset);
+      rows.push(...page);
+      if (page.length < pageSize) break;
+    }
+    return rows.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp) || a.id.localeCompare(b.id));
   },
 
   // ---- Última lectura de cada canal de la sonda ----
