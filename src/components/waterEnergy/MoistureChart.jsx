@@ -88,6 +88,7 @@ export default function MoistureChart({ detail }) {
   const previousValue = previousPoint && (isFuture && previousPoint.t > todayTs ? (previousPoint[S] ?? previousPoint[H]) : previousPoint[H]);
   const delta = selectedValue != null && previousValue != null ? Math.round((selectedValue - previousValue) * 10) / 10 : null;
   const forecastDay = (detail.scenarioWithoutIrrigation || []).find(p => p.date === activeDay);
+  const recommendedIrrigation = (detail.scenarioWithIrrigation || []).find(p => p.date === activeDay)?.irrigation_mm;
   const historicRain = (detail.events?.rain || []).find(e => e.date === activeDay)?.mm;
   const historicIrrigation = (detail.events?.irrigation || []).find(e => e.date === activeDay)?.mm;
   const shiftDay = offset => setSelectedDay(isoDay(new Date(activeTs + offset * DAY)));
@@ -174,6 +175,7 @@ export default function MoistureChart({ detail }) {
           {isFuture && selectedPoint?.[R] != null && <span>Recomendado: <b>{mm(selectedPoint[R])}</b></span>}
           {(forecastDay?.rainfall_mm || historicRain) > 0 && <span>Lluvia: <b>{mm(forecastDay?.rainfall_mm ?? historicRain)}</b></span>}
           {(forecastDay?.irrigation_mm || historicIrrigation) > 0 && <span>Riego: <b>{mm(forecastDay?.irrigation_mm ?? historicIrrigation)}</b></span>}
+          {isFuture && recommendedIrrigation > (forecastDay?.irrigation_mm || 0) && <span>Riego recomendado: <b>{mm(recommendedIrrigation - (forecastDay?.irrigation_mm || 0))}</b></span>}
           {forecastDay?.etc_mm != null && <span>ETc: <b>{mm(forecastDay.etc_mm)}</b></span>}
         </div>
         <p className="mt-2 text-[11px] text-slate-500">En la proyección, la lluvia y el riego de cada día se reflejan en la curva del día siguiente.</p>
