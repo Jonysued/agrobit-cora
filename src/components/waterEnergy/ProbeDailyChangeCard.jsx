@@ -4,13 +4,14 @@ import React from 'react';
 // cada SONDA de la finca en las últimas 24 h (escala Suma de perfil,
 // mm). Un cuadrado por sonda: verde ▲ subió, ámbar ▲ bajó, gris — sin
 // dato calculable.
-// Motivo cuando no hay variación calculable: prioridad al mensaje de
-// la sonda (sin lote vinculado / sin lecturas); si tiene señal vieja,
-// se informa desde cuándo no emite.
+// Una variación no calculable no significa que la sonda perdió señal.
 const noDataReason = p => {
   if (p.missing) return p.missing;
-  if (p.last_signal_ts) return `Sin señal desde ${new Date(p.last_signal_ts).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}`;
-  return 'Sin lecturas suficientes';
+  const last = p.last_signal_ts ? new Date(p.last_signal_ts).getTime() : NaN;
+  if (Number.isFinite(last) && Date.now() - last > 26 * 3600000) {
+    return `Última lectura: ${new Date(last).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
+  }
+  return 'Falta un perfil completo de hace 24 h';
 };
 
 export default function ProbeDailyChangeCard({ probes, onOpen }) {
