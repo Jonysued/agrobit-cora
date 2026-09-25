@@ -1,6 +1,6 @@
 import { backend } from '@/api/backendClient';
 import { sensorService } from './sensorService';
-import { weatherService } from './weatherService';
+import { selectGaritaStation, aggregateGaritaObservations } from './garitaWeather';
 
 // ============================================================
 // soilWaterService — CÁLCULO DEL ESTADO HÍDRICO ACTUAL del perfil
@@ -536,17 +536,18 @@ export const soilWaterService = {
     const irrigationEvents = [...new Set(logs
       .filter(l => l.date && (programById.get(l.program_id)?.lot_ids || []).includes(lot.id))
       .map(l => l.date))].sort();
-    const farms = await backend.entities.Farm.list();
-    const farm = farms.find(f => f.name === lot.farm);
-    const obs = farm ? await weatherService.getObservedWeather(farm.id, 500) : [];
-    const rainByDay = new Map();
-    obs.forEach(o => {
-      if (o.rainfall_mm > 0) {
-        const d = o.timestamp.slice(0, 10);
-        rainByDay.set(d, round1((rainByDay.get(d) || 0) + o.rainfall_mm));
-      }
-    });
-    const rainEvents = [...rainByDay.entries()].map(([date, mm]) => ({ date, mm })).sort((a, b) => a.date.localeCompare(b.date));
+    // La calibración cruza la sonda con la MISMA lluvia observada que
+    // alimenta las curvas: Garita para todos los lotes, por ID de
+    // estación y día local, sin tomar otra estación de la finca.
+    const garita = selectGaritaStation(await backend.entities.WeatherStation.list());
+    const observations = garita
+      ? await backend.entities.WeatherObservation.filter({ weather_station_id: garita.id }, '-timestamp', 2000)
+      : [];
+    const { byDay } = aggregateGaritaObservations(observations);
+    const rainEvents = [...byDay.entries()]
+      .filter(([, value]) => value.rain > 0)
+      .map(([date, value]) => ({ date, mm: value.rain }))
+      .sort((a, b) => a.date.localeCompare(b.date));
 
     return {
       probe,
