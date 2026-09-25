@@ -80,9 +80,11 @@ function withoutUndefined(value) {
 
 function applyOrder(query, sort = '-created_date') {
   if (!sort) return query;
-  const descending = sort.startsWith('-');
-  const column = descending ? sort.slice(1) : sort;
-  return query.order(column, { ascending: !descending });
+  return sort.split(',').reduce((ordered, field) => {
+    const descending = field.startsWith('-');
+    const column = descending ? field.slice(1) : field;
+    return ordered.order(column, { ascending: !descending });
+  }, query);
 }
 
 function entityApi(entityName) {
@@ -99,7 +101,7 @@ function entityApi(entityName) {
       return data || [];
     },
 
-    async filter(criteria = {}, sort = '-created_date', limit = 1000) {
+    async filter(criteria = {}, sort = '-created_date', limit = 1000, offset = 0) {
       let query = supabase.from(table).select('*');
       for (const [column, value] of Object.entries(criteria || {})) {
         if (value === null) query = query.is(column, null);
@@ -115,7 +117,7 @@ function entityApi(entityName) {
         else query = query.eq(column, value);
       }
       query = applyOrder(query, sort);
-      if (limit) query = query.limit(limit);
+      if (limit) query = query.range(offset, offset + limit - 1);
       const { data, error } = await query;
       fail(error);
       return data || [];

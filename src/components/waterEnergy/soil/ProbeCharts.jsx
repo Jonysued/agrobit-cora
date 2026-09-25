@@ -8,6 +8,7 @@ export const PROBE_RANGES = [
   ['24h', 1, '24 horas'],
   ['7d', 7, '7 días'],
   ['30d', 30, '30 días'],
+  ['60d', 60, '60 días'],
   ['90d', 90, '90 días'],
 ];
 
