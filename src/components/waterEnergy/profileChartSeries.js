@@ -65,7 +65,7 @@ export function buildProfileSeries(detail, L, today) {
   // gráfico mostraría dos líneas superpuestas con la misma leyenda.
   const firstSchedIdx = (scenarioWithoutIrrigation || []).findIndex(p => (p.irrigation_mm || 0) > 0);
   const hasScheduledIrrigation = firstSchedIdx >= 0;
-  // ---- Forecast (30 días): un punto por día + salto por escenario ----
+  // ---- Pronóstico (hasta 15 días): un punto por día + salto por escenario ----
   // El salto de la línea verde incluye además el riego recomendado.
   (scenarioWithoutIrrigation || []).forEach((p, i) => {
     if (i > 0) {

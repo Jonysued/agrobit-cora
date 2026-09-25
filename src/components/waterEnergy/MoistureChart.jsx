@@ -6,7 +6,7 @@ import { buildProfileSeries } from './profileChartSeries';
 // SUMA DE PERFIL (mm de agua almacenada en el perfil del suelo) —
 // CURVA CALCULADA del lote: reconstrucción diaria desde el estado
 // inicial (riegos EJECUTADOS, lluvia observada, ETc) como línea
-// negra + HOY + forecast a 30 días con los riegos PROGRAMADOS (línea
+// negra + HOY + pronóstico a 15 días con los riegos PROGRAMADOS (línea
 // azul) y, si corresponde, el escenario con el riego RECOMENDADO
 // (línea verde discontinua).
 // Zonas: verde = zona objetivo (Target mín → Target máx), rosa =
@@ -44,10 +44,16 @@ export default function MoistureChart({ detail }) {
   // Serie del gráfico: un punto por día + punto intermedio a las 00:00
   // del día siguiente de cada riego o lluvia — el salto lee
   // EXACTAMENTE los mm aplicados y desde ahí baja con la ETc del día.
-  const data = buildProfileSeries(detail, { H, S, R }, today);
+  const forecastEndTs = dayTs(today) + 15 * DAY;
+  const data = buildProfileSeries(detail, { H, S, R }, today).filter(d => d.t <= forecastEndTs);
+  const forecastDays = (detail.weather || []).filter(d => d.date > today && dayTs(d.date) <= forecastEndTs);
+  const simulatedDays = forecastDays.filter(d => d.simulated);
+  const observedForecastDays = forecastDays.filter(d => !d.simulated);
+  const forecastSource = observedForecastDays.some(d => d.source === 'open-meteo')
+    ? 'Open-Meteo' : observedForecastDays.length ? 'pronóstico guardado' : null;
   // Sin riegos programados a futuro no hay línea azul: la leyenda y el
   // gráfico solo muestran "Riego programado" cuando existe.
-  const hasScheduled = (detail.scheduled_irrigation || []).length > 0;
+  const hasScheduled = (detail.scheduled_irrigation || []).some(e => e.date > today && dayTs(e.date) <= forecastEndTs);
   const rechargeMm = state.recharge_storage_mm;
   const targetMm = state.target_storage_mm;
   const fcMm = state.field_capacity_storage_mm;
@@ -123,10 +129,14 @@ export default function MoistureChart({ detail }) {
           {activeDay !== today && <button type="button" onClick={() => setSelectedDay(today)} className="rounded-lg px-2 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Ir a hoy</button>}
         </div>
       </div>
+      <p className="mt-3 text-xs text-slate-500">
+        Pronóstico hasta 15 días · {forecastSource ? `Fuente: ${forecastSource}` : 'Sin pronóstico meteorológico real'}
+        {simulatedDays.length > 0 && <span className="ml-2 font-semibold text-amber-700">· {simulatedDays.length} {simulatedDays.length === 1 ? 'día simulado' : 'días simulados'}</span>}
+      </p>
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4" aria-live="polite">
         <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{fmtTip(activeTs)} · {isFuture ? 'Proyección' : activeDay === today ? 'Hoy' : 'Histórico'}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{fmtTip(activeTs)} · {isFuture ? (forecastDays.find(d => d.date === activeDay)?.simulated ? 'Simulación' : 'Pronóstico') : activeDay === today ? 'Hoy' : 'Histórico'}</p>
             <p className="mt-1 text-3xl font-bold tracking-tight text-charcoal">{selectedValue != null ? mm(selectedValue) : 'Sin dato'}</p>
           </div>
           {delta != null && <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${delta > 0 ? 'bg-emerald-100 text-emerald-800' : delta < 0 ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'}`}>{delta > 0 ? '+' : ''}{mm(delta)} vs. día anterior</span>}
