@@ -32,10 +32,6 @@ async function syncAllSentekProbes() {
   const synced = await Promise.all(probes.map(async probe => {
     try {
       const lotId = await resolveProbeLotId(serviceBackend, probe);
-      if (!lotId) {
-        await serviceBackend.entities.SoilProbe.update(probe.id, { connection_status: 'misconfigured' });
-        return { probe: probe.name, ok: false, skipped: 'Sin lote vinculado' };
-      }
       return { probe: probe.name, ...(await syncSentekProbe(serviceBackend, probe, lotId)) };
     } catch (error) {
       await serviceBackend.entities.SoilProbe.update(probe.id, { connection_status: 'error' });
@@ -76,10 +72,6 @@ async function handle(action, payload) {
     if (!payload.probe_id) return { ok: false, error: 'Falta probe_id' };
     const probe = await serviceBackend.entities.SoilProbe.get(payload.probe_id);
     const lotId = await resolveProbeLotId(serviceBackend, probe);
-    if (!lotId) {
-      await serviceBackend.entities.SoilProbe.update(probe.id, { connection_status: 'misconfigured' });
-      return { ok: false, error: 'La sonda no tiene un lote vinculado.' };
-    }
     return syncSentekProbe(serviceBackend, probe, lotId);
   }
   if (action === 'testSentekProbe') {
