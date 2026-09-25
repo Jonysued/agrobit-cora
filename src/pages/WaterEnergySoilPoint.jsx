@@ -30,7 +30,7 @@ function Summary({ data }) {
     <div className="grid gap-2 rounded-2xl border border-emerald-950/10 bg-white p-3 shadow-sm sm:grid-cols-3 sm:p-4">
       <div className="rounded-xl bg-[#f2f7ef] px-4 py-3">
         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Estado hídrico</p>
-        <p className="mt-1 text-lg font-extrabold text-emerald-900">{data.status || 'Sin configurar'}</p>
+        <p className="mt-1 text-lg font-extrabold text-emerald-900">{data.status || (data.configuration_status === 'unlinked' ? 'Solo medición' : 'Sin configurar')}</p>
       </div>
       <div className="rounded-xl bg-[#f2f7ef] px-4 py-3">
         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Suma del perfil</p>
@@ -69,7 +69,7 @@ function ProbeDashboard({ data, openChart }) {
     <>
       <Summary data={data} />
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        {CHARTS.map(chart => {
+        {CHARTS.filter(chart => data.configuration_status !== 'unlinked' || chart.id !== 'root').map(chart => {
           const allChannels = data.measurement_channels || [];
           const available = chart.id === 'temperature'
             ? allChannels.some(channel => channel.sensor_type === 'soil_temperature')
@@ -98,7 +98,7 @@ function ProbeChartDetail({ data, chartId, setChartId }) {
           <div className="min-w-[240px]">
             <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Medición</label>
             <select value={chartId} onChange={e => setChartId(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-charcoal outline-none focus:border-emerald-700 xl:w-72">
-              {CHARTS.map(chart => <option key={chart.id} value={chart.id}>{chart.title}</option>)}
+              {CHARTS.filter(chart => data.configuration_status !== 'unlinked' || chart.id !== 'root').map(chart => <option key={chart.id} value={chart.id}>{chart.title}</option>)}
             </select>
           </div>
           <div>
@@ -131,7 +131,7 @@ export default function WaterEnergySoilPoint() {
     setData(null); setErr(false);
     soilWaterService.getProbeAnalysis(probeId).then(setData).catch(() => setErr(true));
   }, [probeId]);
-  const validChart = useMemo(() => CHARTS.some(chart => chart.id === chartId), [chartId]);
+  const validChart = useMemo(() => CHARTS.some(chart => chart.id === chartId && (data?.configuration_status !== 'unlinked' || chart.id !== 'root')), [chartId, data]);
   if (!data) return err ? <div className="p-6 text-sm text-slate-500">No se pudo cargar la sonda.</div> : <LoadingState />;
   const missingText = (data.missing_configuration || []).map(k => CONFIG_LABELS[k] || k).join(', ');
   const setChart = id => id ? setSearchParams({ grafico: id }) : setSearchParams({});
@@ -142,7 +142,7 @@ export default function WaterEnergySoilPoint() {
       <div>
         <button type="button" onClick={() => validChart ? setChart(null) : navigate('/water-energy/sensores')} className="inline-flex items-center gap-1 text-xs font-bold text-emerald-900 hover:underline"><ArrowLeft size={13} /> {validChart ? 'Todos los gráficos' : 'Sensores'}</button>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-          <div><h1 className="text-xl font-extrabold text-charcoal md:text-2xl">{data.probe?.name}</h1><p className="mt-0.5 text-xs text-slate-500">{data.lot?.name} · última lectura {data.lastReadingAt ? new Date(data.lastReadingAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</p></div>
+          <div><h1 className="text-xl font-extrabold text-charcoal md:text-2xl">{data.probe?.name}</h1><p className="mt-0.5 text-xs text-slate-500">{data.lot?.name || 'Sin lote vinculado'} · última lectura {data.lastReadingAt ? new Date(data.lastReadingAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</p></div>
           <div className="flex items-center gap-2">{data.probe?.connection_status === 'disconnected' && <span className="rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-bold uppercase text-red-700">Desconectada</span>}<span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase text-emerald-800">{SOURCE_LABEL[data.source] || data.source}</span></div>
         </div>
       </div>

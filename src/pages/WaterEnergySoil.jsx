@@ -33,13 +33,13 @@ export default function WaterEnergySoil() {
       <ModuleHeader />
       <div>
         <h2 className="text-lg font-bold text-charcoal">Sensores</h2>
-        <p className="text-xs text-slate-500">Sondas de humedad del perfil de suelo por lote — solo monitoreo.</p>
+        <p className="text-xs text-slate-500">Mediciones de cada sonda, incluso antes de vincularla a un lote.</p>
       </div>
       {!rows.length ? (
         <div className="rounded-2xl border border-black/5 bg-white p-10 text-center shadow-sm">
           <Gauge className="mx-auto text-slate-300" size={32} />
           <p className="mt-3 text-sm font-semibold text-charcoal">Todavía no hay sondas configuradas</p>
-          <p className="mt-1 text-xs text-slate-500">Registrá la sonda en Water & Energy → Configuración → Sensores y vinculá su lote en Vinculación de perfiles.</p>
+          <p className="mt-1 text-xs text-slate-500">Registrá y sincronizá la sonda en Water & Energy → Configuración → Sensores.</p>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -57,6 +57,12 @@ export default function WaterEnergySoil() {
               </div>
               {row.missing ? (
                 <p className="mt-5 text-xs text-slate-400">{row.missing}</p>
+              ) : row.configuration_status === 'unlinked' ? (
+                <div className="mt-5">
+                  <p className="text-3xl font-bold tracking-tight text-charcoal">{row.total_profile_water_mm ?? '—'} mm</p>
+                  <p className="mt-2 text-xs text-slate-500">Suma medida del perfil · 0–{row.measured_profile_depth_cm} cm</p>
+                  <p className="mt-1 text-xs text-slate-500">Última lectura: {rel(row.lastReadingAt)}</p>
+                </div>
               ) : row.current_available_water_mm == null ? (
                 <div className="mt-5">
                   <p className="text-sm font-semibold text-amber-700">Configuración incompleta</p>
