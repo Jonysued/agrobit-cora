@@ -1,6 +1,7 @@
 import { backend } from '@/api/backendClient';
 import { sensorService } from './sensorService';
 import { selectGaritaStation, aggregateGaritaObservations } from './garitaWeather';
+import { measuredProbeProfile } from './engine/measuredProbeProfile';
 
 // ============================================================
 // soilWaterService — CÁLCULO DEL ESTADO HÍDRICO ACTUAL del perfil
@@ -296,12 +297,39 @@ export function linkedLotsFor(probe, lots, profiles, models) {
   return ids.filter(id => lotsById.has(id)).map(id => lotsById.get(id)).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// Lecturas propias de una sonda sin lote: integrar solamente las
+// profundidades medidas. No se calculan umbrales ni estado agronómico.
+function unlinkedProbeState(probe, channels, readings) {
+  const { history, measuredDepth } = measuredProbeProfile(channels, readings);
+  const latest = history.at(-1);
+  return {
+    probe, probeId: probe.id, lot: null, lotName: 'Sin lote vinculado',
+    probeProvider: probe.provider, connectionStatus: probe.connection_status,
+    configuration_status: 'unlinked', measured_profile_depth_cm: measuredDepth,
+    total_profile_water_mm: latest?.profile ?? null,
+    lastReadingAt: latest ? new Date(latest.t).toISOString() : null,
+    last_signal_ts: latest?.t ?? null,
+    source: readings.find(reading => new Date(reading.timestamp).getTime() === latest?.t)?.source || null,
+    history,
+    daily_change_mm: latest ? (() => {
+      const previous = [...history].reverse().find(h => h.t <= latest.t - DAY_MS);
+      return previous ? round1(latest.profile - previous.profile) : null;
+    })() : null,
+  };
+}
+
 // Estado de una sonda (compartido por listado, detalle, forecast y getters)
 async function stateForProbe(probe, lots, profiles, models) {
   const linkedLots = linkedLotsFor(probe, lots, profiles, models);
   const lot = linkedLots[0] || null;
   if (!lot) {
-    return { probe, probeId: probe.id, lotName: 'Sin lote vinculado', missing: 'Sonda sin lote vinculado — vinculá el lote en Water & Energy → Configuración → Vinculación de perfiles.' };
+    const [channels, readings] = await Promise.all([
+      sensorService.getAllProbeChannels(probe.id),
+      backend.entities.SensorReading.filter({ probe_id: probe.id }, '-timestamp', 1000),
+    ]);
+    if (!channels.some(channel => channel.sensor_type === 'soil_moisture')) return { probe, probeId: probe.id, lotName: 'Sin lote vinculado', missing: 'Sonda sin canales de humedad — sincronizá sus lecturas en Configuración → Sensores.' };
+    if (!readings.length) return { probe, probeId: probe.id, lotName: 'Sin lote vinculado', missing: 'Sin lecturas — sincronizá la sonda en Configuración → Sensores.' };
+    return unlinkedProbeState(probe, channels, readings);
   }
   const lotName = linkedLots.length > 1 ? `${lot.name} (+${linkedLots.length - 1} lotes)` : lot.name;
   const channels = await sensorService.getProbeChannels(probe.id);
@@ -514,13 +542,16 @@ export const soilWaterService = {
     if (!probe) return null;
     const [lots, profiles, models] = await Promise.all([backend.entities.Lot.list(), backend.entities.SoilProfile.list(), backend.entities.SoilBehaviorModel.list()]);
     const lot = linkedLotsFor(probe, lots, profiles, models)[0] || null;
-    if (!lot) return { probe, lot: null, missing: 'Sonda sin lote vinculado — vinculá el lote en Water & Energy → Configuración → Vinculación de perfiles.' };
     const [allChannels, readings] = await Promise.all([
       sensorService.getAllProbeChannels(probe.id),
       sensorService.getProbeReadings(probe.id, Date.now() - 95 * DAY_MS, Date.now()),
     ]);
     const channels = allChannels.filter(channel => channel.sensor_type === 'soil_moisture');
     if (!channels.length) return { probe, lot, missing: 'La sonda no tiene canales configurados.' };
+    if (!lot) {
+      if (!readings.length) return { probe, lot: null, missing: 'Sin lecturas — sincronizá la sonda en Configuración → Sensores.' };
+      return { ...unlinkedProbeState(probe, channels, readings), channels, measurement_channels: allChannels, readings, events: { irrigation: [], rain: [] } };
+    }
     const profile = profiles.find(p => p.lot_id === lot.id) || null;
     const state = await buildState(profile, channels, readings);
     const history = state._model ? usefulWaterSeries(readings, channels, state._model) : [];

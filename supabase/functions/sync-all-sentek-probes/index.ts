@@ -1,8 +1,8 @@
 import { requireAdminOrCron, serviceBackend, withCors } from '../_shared/backend.ts';
 import { resolveProbeLotId, syncSentekProbe } from '../_shared/sentekSync.ts';
 
-// Sincroniza automáticamente TODAS las sondas Sentek activas con lote
-// vinculado. La invoca la tarea programada "Sync Sondas Sentek" —
+// Sincroniza automáticamente TODAS las sondas Sentek activas, incluso
+// antes de asignarlas a un lote. La invoca la tarea programada —
 // corre con service role porque no hay usuario en el contexto.
 Deno.serve(withCors(async function (req) {
   try {
@@ -10,13 +10,7 @@ Deno.serve(withCors(async function (req) {
     const client = serviceBackend;
     const probes = await client.entities.SoilProbe.filter({ provider: 'sentek', active: true });
     const results = await Promise.all(probes.map(async probe => {
-      // Lote vinculado: DIRECTO o derivado del modelo de suelo del que
-      // la sonda es referencia (mismo criterio que la app).
       const lotId = await resolveProbeLotId(client, probe);
-      if (!lotId) {
-        await client.entities.SoilProbe.update(probe.id, { connection_status: 'misconfigured' });
-        return { probe: probe.name, ok: false, skipped: 'Sin lote vinculado' };
-      }
       try {
         const r = await syncSentekProbe(client, probe, lotId);
         return { probe: probe.name, ...r };

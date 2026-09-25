@@ -82,7 +82,7 @@ export default function SensorSection({ lots, probes, profiles, models, onChange
             <Field label="ID del dispositivo (API)"><input value={form.external_device_id ?? ''} onChange={e => set('external_device_id', e.target.value)} className={inputCls} placeholder={form.provider === 'sentek' ? 'Nombre del logger en IrriMAX (ej. BARNEA)' : 'ID en la API del proveedor'} /></Field>
           </div>
           <label className="mt-3 flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={form.active !== false} onChange={e => set('active', e.target.checked)} className="h-4 w-4 accent-emerald-700" />Activa</label>
-          <p className="mt-2 text-[11px] text-slate-400">Las credenciales de la API del proveedor se configuran de forma segura en el backend (Secrets). En Sentek, el ID del dispositivo es el nombre del logger tal como aparece en IrriMAX Live. El lote se vincula en la columna "Lote" de la tabla — al vincularla, la sonda sincroniza lecturas y alimenta los pronósticos de ese lote.</p>
+          <p className="mt-2 text-[11px] text-slate-400">Las credenciales de la API del proveedor se configuran de forma segura en el backend (Secrets). En Sentek, el ID del dispositivo es el nombre del logger tal como aparece en IrriMAX Live. Las lecturas se sincronizan aunque la sonda todavía no tenga un lote asignado.</p>
           <button disabled={busy} className="mt-4 w-full rounded-xl bg-emerald-900 py-2.5 font-bold text-white transition hover:bg-emerald-800 disabled:opacity-60">{busy ? 'Guardando…' : 'Guardar sonda'}</button>
         </form>
       )}

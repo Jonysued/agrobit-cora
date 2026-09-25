@@ -27,10 +27,6 @@ Deno.serve(withCors(async function (req) {
     const sentek = await Promise.all(probes.map(async probe => {
       try {
         const lotId = await resolveProbeLotId(client, probe);
-        if (!lotId) {
-          await client.entities.SoilProbe.update(probe.id, { connection_status: 'misconfigured' });
-          return { probe: probe.name, ok: false, skipped: 'Sin lote vinculado' };
-        }
         return { probe: probe.name, ...(await syncSentekProbe(client, probe, lotId)) };
       } catch (error) {
         await client.entities.SoilProbe.update(probe.id, { connection_status: 'error' });
