@@ -18,6 +18,24 @@ const secrets = { get: (name) => Deno.env.get(name) || null };
 const CREDENTIAL = "SENTEK_IRRIMAX_API_TOKEN";
 const API = "https://www.irrimaxlive.com/api/";
 const TZ = "-03:00";
+let loggersInFlight = null;
+
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// IrriMAX ocasionalmente responde 500 o demora. Reintentar solo errores
+// temporarios; una API key rechazada o un logger mal configurado no mejora
+// repitiendo la misma solicitud.
+async function fetchWithRetry(url, timeoutMs, attempts) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (response.ok || ![429, 500, 502, 503, 504].includes(response.status) || attempt === attempts) return response;
+    } catch (error) {
+      if (attempt === attempts) throw error;
+    }
+    await pause(500 * attempt);
+  }
+}
 
 function getKey() {
   try { return secrets.get(CREDENTIAL) || null; } catch (e) { return null; }
@@ -60,13 +78,11 @@ function parseSensors(block) {
 }
 
 // ---- getloggers: loggers de la cuenta y todos sus sensores de suelo ----
-export async function getSentekLoggers() {
+async function loadSentekLoggers() {
   const key = getKey();
   if (!key) return missingCredentials();
   try {
-    const res = await fetch(`${API}?cmd=getloggers&key=${encodeURIComponent(key)}`, {
-      signal: AbortSignal.timeout(15000),
-    });
+    const res = await fetchWithRetry(`${API}?cmd=getloggers&key=${encodeURIComponent(key)}`, 15000, 3);
     if (res.status === 401 || res.status === 403) {
       return { ok: false, status: "error", message: "IrriMAX Live rechazó la API key — verificá el token generado en tu página de Settings." };
     }
@@ -85,6 +101,16 @@ export async function getSentekLoggers() {
   } catch (e) {
     return { ok: false, status: "error", message: `No se pudo contactar IrriMAX Live: ${e.message}` };
   }
+}
+
+// Una sincronización de cinco sondas descubre los loggers una sola vez.
+// Se comparte únicamente la solicitud en curso; la siguiente corrida
+// vuelve a consultar al proveedor y puede recuperarse de un error previo.
+export async function getSentekLoggers() {
+  if (!loggersInFlight) {
+    loggersInFlight = loadSentekLoggers().finally(() => { loggersInFlight = null; });
+  }
+  return loggersInFlight;
 }
 
 // ---- Prueba de conexión de una sonda Sentek registrada ----
@@ -135,9 +161,7 @@ export async function fetchSentekReadings(probe, fromIso) {
   const local = new Date(fromMs - 3 * 3600000);
   const from = `${local.getUTCFullYear()}${pad(local.getUTCMonth() + 1)}${pad(local.getUTCDate())}${pad(local.getUTCHours())}${pad(local.getUTCMinutes())}${pad(local.getUTCSeconds())}`;
   try {
-    const res = await fetch(`${API}?cmd=getreadings&key=${encodeURIComponent(key)}&name=${encodeURIComponent(probe.external_device_id)}&from=${from}`, {
-      signal: AbortSignal.timeout(25000),
-    });
+    const res = await fetchWithRetry(`${API}?cmd=getreadings&key=${encodeURIComponent(key)}&name=${encodeURIComponent(probe.external_device_id)}&from=${from}`, 20000, 2);
     if (!res.ok) {
       return { ok: false, status: "error", message: `IrriMAX Live respondió con código ${res.status} al pedir las lecturas.` };
     }
