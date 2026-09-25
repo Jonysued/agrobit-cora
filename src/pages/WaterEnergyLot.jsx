@@ -79,7 +79,7 @@ export default function WaterEnergyLot() {
           )}
           {detail.forecast_status === 'ok' && (
             <>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
                 <MetricCard
                   label="Suma de perfil"
                   value={`${state.total_profile_water_mm} mm`}
@@ -89,6 +89,12 @@ export default function WaterEnergyLot() {
                 <MetricCard label="Capacidad de campo" value={state.field_capacity_storage_mm != null ? `${state.field_capacity_storage_mm} mm` : '—'} detail={`Agua útil ${state.total_available_water_capacity_mm} mm · marchitez ${state.wilting_storage_mm} mm`} tone="light" />
                 <MetricCard label="Umbral de recarga" value={state.recharge_storage_mm != null ? `${state.recharge_storage_mm} mm` : '—'} tone="light" />
                 <MetricCard label="Objetivo de recarga" value={state.target_storage_mm != null ? `${state.target_storage_mm} mm` : '—'} tone="light" />
+                <MetricCard
+                  label="Kc actual"
+                  value={detail.kc != null ? detail.kc.toFixed(3) : 'Falta Kc'}
+                  detail={detail.kc_details?.stage ? `${detail.kc_details.stage} · ${detail.kc_details.age_years ?? '—'} años${detail.kc_details.phenology_delay_days ? ` · atraso ${detail.kc_details.phenology_delay_days} d` : ''}` : ''}
+                  tone="light"
+                />
                 <MetricCard label="ETc · 15 días" value={detail.kc_missing ? 'Falta Kc' : `${round1(detail.scenarioWithoutIrrigation.slice(0, 15).reduce((s, p) => s + (p.etc_mm || 0), 0))} mm`} tone="light" />
                 <MetricCard label="Lluvia prevista · 15 días" value={`${round1(detail.scenarioWithoutIrrigation.slice(0, 15).reduce((s, p) => s + (p.rainfall_mm || 0), 0))} mm`} tone="light" />
                 <MetricCard label="Riego recomendado" value={detail.recommendation ? `${detail.recommendation.recommended_irrigation_mm} mm` : detail.forecast_quality?.level === 'blocked' ? 'Pausado' : detail.kc_missing ? 'Falta Kc' : 'No requerido'} tone={detail.recommendation ? 'amber' : 'light'} />
