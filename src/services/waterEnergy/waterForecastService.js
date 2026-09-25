@@ -30,14 +30,11 @@ import { runUsefulWaterScenario } from './engine/waterBalanceEngine';
 
 const round1 = n => Math.round(n * 10) / 10;
 
-// Insumos diarios del balance futuro. Kc de cada día, en orden de
-// prioridad: 1) Kc EXPLÍCITO del perfil (current_kc, fijo para todo el
-// forecast); 2) tabla MENSUAL del cultivo (granadas/olivos): un Kc
-// distinto según el mes de cada día. Sin Kc manual ni tabla no hay
-// demanda (ETc = 0) y la UI lo informa. Lluvia efectiva = lluvia tal cual.
-function forecastInputs(weatherDays, manualKc, crop, etcCorrectionFactor = 1) {
+// Insumos diarios: el Kc se recalcula para cada fecha según cultivo,
+// edad del lote, etapa fenológica y desfase de campaña configurado.
+function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1) {
   return (weatherDays || []).map(w => {
-    const kc = manualKc ?? kcService.kcForCropDate(crop, w.date);
+    const kc = kcService.kcForLotDate(lot, w.date, profile);
     return {
       date: w.date,
       eto_mm: w.eto_mm ?? 0,
@@ -138,15 +135,12 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
 
   // Balance futuro: clima + riegos PROGRAMADOS del lote (con la
   // eficiencia de recarga del modelo de suelo de referencia).
-  // Kc: el EXPLÍCITO del perfil (current_kc) o, si no hay, la tabla
-  // MENSUAL del cultivo (un Kc distinto por mes del año).
-  const explicitKc = profile.current_kc ?? null;
-  const hasMonthlyKc = kcService.hasMonthlyKc(lot.crop);
-  const kc = explicitKc ?? (hasMonthlyKc ? kcService.kcForCropDate(lot.crop, (weatherDays || [])[0]?.date) : null);
-  const kc_source = explicitKc != null ? 'manual' : hasMonthlyKc ? 'tabla_mensual' : null;
+  const kc_details = kcService.detailsForLotDate(lot, (weatherDays || [])[0]?.date, profile);
+  const kc = kc_details.kc;
+  const kc_source = kc_details.source;
   const kc_missing = kc == null;
   const scheduledByDate = new Map((curve.events?.scheduled || []).map(e => [e.date, e.mm]));
-  const baseDays = forecastInputs(weatherDays, explicitKc, lot.crop, curve.etc_correction_factor ?? 1);
+  const baseDays = forecastInputs(weatherDays, lot, profile, curve.etc_correction_factor ?? 1);
   const forecast_quality = forecastQuality(curve, weatherDays, kc_missing);
   const config = {
     total_available_water_capacity_mm: curve.config.total_available_water_capacity_mm,
@@ -172,6 +166,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
     ...row,
     kc,
     kc_source,
+    kc_details,
     kc_missing,
     efficiency,
     scheduled_irrigation: curve.events?.scheduled || [],

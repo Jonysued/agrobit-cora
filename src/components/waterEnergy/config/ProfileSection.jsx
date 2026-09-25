@@ -7,7 +7,7 @@ import { soilBehaviorService } from '@/services/waterEnergy/soilBehaviorService'
 import { computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from '@/services/waterEnergy/soilWaterService';
 import { backend } from '@/api/backendClient';
 
-const EMPTY = { lot_id: '', name: '', soil_type: 'Franco', root_zone_depth_cm: 60, field_capacity_vwc: 0.28, wilting_point_vwc: 0.12, target_min_vwc: 0.17, target_max_vwc: 0.24, initial_vwc: 0.21, current_kc: '', notes: '' };
+const EMPTY = { lot_id: '', name: '', soil_type: 'Franco', root_zone_depth_cm: 60, saturation_vwc: 0.46, field_capacity_vwc: 0.31, wilting_point_vwc: 0.15, saturated_hydraulic_conductivity_mm_day: 250, target_min_vwc: 0.254, target_max_vwc: 0.294, initial_vwc: 0.21, current_kc: '', kc_override_start_date: '', kc_override_end_date: '', phenology_delay_days: 0, phenology_delay_start_date: '', phenology_delay_end_date: '', notes: '' };
 const num = v => (v === '' || v == null ? null : Number(v));
 const toMm = v => (v == null ? '—' : `${Math.round(v * 10) / 10} mm`);
 // Target mín/máx en mm = VWC × profundidad del perfil × 10
@@ -114,6 +114,13 @@ export default function ProfileSection({ lots, profiles, onChange }) {
       target_max_vwc: mmToVwc(mmInputs.target_max),
       initial_vwc: mmToVwc(mmInputs.initial),
       current_kc: num(form.current_kc),
+      kc_override_start_date: form.kc_override_start_date || null,
+      kc_override_end_date: form.kc_override_end_date || null,
+      phenology_delay_days: num(form.phenology_delay_days) ?? 0,
+      phenology_delay_start_date: form.phenology_delay_start_date || null,
+      phenology_delay_end_date: form.phenology_delay_end_date || null,
+      saturation_vwc: num(form.saturation_vwc),
+      saturated_hydraulic_conductivity_mm_day: num(form.saturated_hydraulic_conductivity_mm_day),
     });
     const profileId = saved?.id || form.id;
     for (const l of layers) {
@@ -171,13 +178,23 @@ export default function ProfileSection({ lots, profiles, onChange }) {
               <p className="text-[10px] leading-tight text-slate-400">mm de agua almacenada sobre el perfil de cálculo ({convDepth} cm) — independiente de la profundidad radicular.</p>
             </Field>
             <Field label="Punto de marchitez (mm)"><input required type="number" step="any" min="0" value={mmInputs.wilting_point ?? ''} onChange={e => setMmInputs(m => ({ ...m, wilting_point: e.target.value }))} className={inputCls} /></Field>
+            <Field label="Saturación (VWC)"><input type="number" step="any" min="0" max="1" value={form.saturation_vwc ?? ''} onChange={e => set('saturation_vwc', e.target.value)} className={inputCls} /></Field>
+            <Field label="Ksat (mm/día)"><input type="number" step="any" min="0" value={form.saturated_hydraulic_conductivity_mm_day ?? ''} onChange={e => set('saturated_hydraulic_conductivity_mm_day', e.target.value)} className={inputCls} /></Field>
             <Field label="Target mín. (mm)"><input required type="number" step="any" min="0" value={mmInputs.target_min ?? ''} onChange={e => setMmInputs(m => ({ ...m, target_min: e.target.value }))} className={inputCls} /></Field>
             <Field label="Target máx. (mm)"><input required type="number" step="any" min="0" value={mmInputs.target_max ?? ''} onChange={e => setMmInputs(m => ({ ...m, target_max: e.target.value }))} className={inputCls} /></Field>
             <Field label="Humedad inicial (mm)"><input type="number" step="any" min="0" value={mmInputs.initial ?? ''} onChange={e => setMmInputs(m => ({ ...m, initial: e.target.value }))} className={inputCls} /></Field>
-            <Field label="Kc del cultivo">
+            <Field label="Override temporal de Kc">
               <input type="number" step="any" min="0" value={form.current_kc ?? ''} onChange={e => set('current_kc', e.target.value)} className={inputCls} placeholder="0.65" />
-              <p className="text-[10px] leading-tight text-slate-400">Coeficiente de cultivo del forecast hídrico (ETc = ET0 × Kc). Granadas y Olivos usan automáticamente su tabla de Kc mensual — este valor aplica solo a otros cultivos. Sin Kc no se genera recomendación de riego.</p>
+              <p className="text-[10px] leading-tight text-slate-400">Granadas y olivos calculan Kc automáticamente por cultivo, edad y fecha fenológica. Usá este valor solo como excepción temporal.</p>
             </Field>
+            <Field label="Override desde"><input required={form.current_kc !== '' && form.current_kc != null} type="date" value={form.kc_override_start_date ?? ''} onChange={e => set('kc_override_start_date', e.target.value)} className={inputCls} /></Field>
+            <Field label="Override hasta"><input required={form.current_kc !== '' && form.current_kc != null} type="date" value={form.kc_override_end_date ?? ''} onChange={e => set('kc_override_end_date', e.target.value)} className={inputCls} /></Field>
+            <Field label="Desfase fenológico (días)">
+              <input type="number" step="1" min="-90" max="90" value={form.phenology_delay_days ?? 0} onChange={e => set('phenology_delay_days', e.target.value)} className={inputCls} />
+              <p className="text-[10px] leading-tight text-slate-400">Días de atraso de la campaña respecto de la curva calendario. Puede limitarse a un período.</p>
+            </Field>
+            <Field label="Desfase desde"><input type="date" value={form.phenology_delay_start_date ?? ''} onChange={e => set('phenology_delay_start_date', e.target.value)} className={inputCls} /></Field>
+            <Field label="Desfase hasta"><input type="date" value={form.phenology_delay_end_date ?? ''} onChange={e => set('phenology_delay_end_date', e.target.value)} className={inputCls} /></Field>
             <div className="sm:col-span-2"><Field label="Notas"><input value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} className={inputCls} placeholder="Observaciones…" /></Field></div>
           </div>
           <ProfileLayersEditor
@@ -195,7 +212,7 @@ export default function ProfileSection({ lots, profiles, onChange }) {
       {profiles.length > 0 && (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[900px] text-sm">
-            <thead><tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Lote</th><th className="pr-3">Suelo</th><th className="pr-3">Perfil / Rad. (cm)</th><th className="pr-3">CC / PM (mm)</th><th className="pr-3">Target mín / máx (mm)</th><th className="pr-3">Capas</th><th /></tr></thead>
+            <thead><tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Lote</th><th className="pr-3">Suelo</th><th className="pr-3">Perfil / Rad. (cm)</th><th className="pr-3">CC / PM (mm)</th><th className="pr-3">Target mín / máx (mm)</th><th className="pr-3">Ksat</th><th className="pr-3">Capas</th><th /></tr></thead>
             <tbody>
               {profiles.map(p => {
                 const cfg = mmCfg[p.id];
@@ -206,6 +223,7 @@ export default function ProfileSection({ lots, profiles, onChange }) {
                   <td className="pr-3 text-slate-600">{cfg?.profile_depth_cm ?? DEFAULT_FULL_PROFILE_DEPTH_CM} / {p.root_zone_depth_cm ?? '—'}</td>
                   <td className="pr-3 text-slate-600">{toMm(cfg?.field_capacity_storage_mm)} / {toMm(cfg?.wilting_storage_mm)}</td>
                   <td className="pr-3 text-slate-600">{toMm(targetMm(p.target_min_vwc, cfg?.profile_depth_cm))} / {toMm(targetMm(p.target_max_vwc, cfg?.profile_depth_cm))}</td>
+                  <td className="pr-3 text-slate-600">{p.saturated_hydraulic_conductivity_mm_day != null ? `${p.saturated_hydraulic_conductivity_mm_day} mm/d` : '—'}</td>
                   <td className="pr-3 text-slate-600">{layerCounts[p.id] || 0}</td>
                   <td className="whitespace-nowrap text-right">
                     <button onClick={() => openEdit(p)} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 transition hover:border-emerald-600 hover:bg-emerald-50 hover:text-emerald-800"><Pencil size={12} className="inline" /> Editar</button>
