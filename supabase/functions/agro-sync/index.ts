@@ -102,7 +102,19 @@ Deno.serve(async req => {
     const cronSecret = Deno.env.get('CRON_SECRET') || '';
     const cron = cronActions.has(action) && cronSecret && req.headers.get('x-cron-secret') === cronSecret;
     if (!cron) await requireAdmin(req);
-    return json(await handle(action, payload));
+    const result = await handle(action, payload);
+    // pg_cron registra que envió la solicitud aun cuando una sonda
+    // falló. Un estado HTTP de error deja visible el fallo real en
+    // net._http_response y el log sin exponer credenciales.
+    if (cron && !result.ok) {
+      console.error('[agro-sync] Falló una sincronización programada', {
+        action,
+        probes: (result.synced || result.sentek?.synced || [])
+          .filter(item => !item.ok)
+          .map(item => ({ probe: item.probe, status: item.status, message: item.message })),
+      });
+    }
+    return json(result, cron && !result.ok ? 502 : 200);
   } catch (error) {
     console.error(error);
     return json({ error: error.message || 'Unexpected error' }, Number(error?.status) || 500);
