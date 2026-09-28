@@ -42,48 +42,65 @@ export function dailyProbeProfile(channels, readings) {
   return [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
 }
 
-// La respuesta RELATIVA de un perfil húmedo frente a uno seco puede
-// transferirse a lotes vinculados sin conocer la ubicación física ni el
-// cultivo de la sonda. La tasa absoluta NO sustituye a ET0 × Kc del lote.
+// Toda transición entre perfiles completos participa. Las subidas revelan
+// recargas observadas, y las bajadas muestran cómo evoluciona la extracción.
+// Sin conocer la lámina aplicada en la sonda, solo se transfieren razones
+// relativas a los lotes; nunca sus mm absolutos ni un Kc supuesto.
 export function estimateProbeDynamics(days, weather) {
-  const increases = new Set();
-  const valid = days.filter(d => Number.isFinite(d.mm));
-  const sorted = [...valid].sort((a, b) => a.mm - b.mm);
-  const lowBoundary = sorted[Math.floor(sorted.length * 0.3)]?.mm;
-  const highBoundary = sorted[Math.floor(sorted.length * 0.7)]?.mm;
-  const low = [];
-  const high = [];
-  const drops = [];
-  for (let i = 1; i < valid.length; i++) {
-    if (nextDay(valid[i - 1].day) !== valid[i].day) continue;
-    if (valid[i].mm - valid[i - 1].mm > 1) increases.add(valid[i].day);
-  }
+  const valid = days.filter(d => Number.isFinite(d.mm)).sort((a, b) => a.day.localeCompare(b.day));
+  const falls = [];
+  const rises = [];
+  const postRiseFalls = [];
+  let stableDays = 0;
+  let riseWithRain = 0;
+  let riseWithoutObservedRain = 0;
+  let riseWithoutWeather = 0;
+  let previousDirection = null;
   for (let i = 1; i < valid.length; i++) {
     const previous = valid[i - 1];
     const current = valid[i];
-    if (nextDay(previous.day) !== current.day || increases.has(previous.day) || increases.has(current.day)) continue;
-    // Si no hay observación de Garita, el día no se considera limpio:
-    // podría haber llovido o la ET0 no ser comparable.
-    const today = weather.get(current.day);
-    const yesterday = weather.get(previous.day);
-    if (!today || !yesterday || today.rain > 0 || yesterday.rain > 0 || !(today.eto > 0)) continue;
-    const drop = previous.mm - current.mm;
-    if (!(drop > 0 && drop < 10)) continue;
-    drops.push(drop);
-    const normalized = drop / today.eto;
-    if (previous.mm <= lowBoundary) low.push(normalized);
-    if (previous.mm >= highBoundary) high.push(normalized);
+    if (nextDay(previous.day) !== current.day) { previousDirection = null; continue; }
+    const change = round(current.mm - previous.mm, 1);
+    if (change > 0) {
+      rises.push(change);
+      const rain = weather?.get(current.day)?.rain;
+      const previousRain = weather?.get(previous.day)?.rain;
+      if (rain > 0 || previousRain > 0) riseWithRain++;
+      else if (rain == null || previousRain == null) riseWithoutWeather++;
+      else riseWithoutObservedRain++;
+      previousDirection = 'rise';
+    } else if (change < 0) {
+      const drop = -change;
+      falls.push(drop);
+      if (previousDirection === 'rise') postRiseFalls.push(drop);
+      previousDirection = 'fall';
+    } else {
+      stableDays++;
+      previousDirection = 'stable';
+    }
   }
-  const enough = low.length >= 5 && high.length >= 5 && drops.length >= 20 && highBoundary > lowBoundary;
-  const relative = enough ? median(low) / median(high) : null;
+  const typicalFall = falls.length ? median(falls) : null;
+  // El comportamiento reciente se compara contra el de ESA MISMA sonda.
+  // El peso crece gradualmente; no existe una barrera arbitraria de 20 días.
+  const recentFalls = falls.slice(-7);
+  const trend = falls.length && recentFalls.length
+    ? median(recentFalls) / typicalFall : null;
+  const trendWeight = Math.min(1, falls.length / 10);
+  const postRise = postRiseFalls.length && typicalFall
+    ? median(postRiseFalls) / typicalFall : null;
+  const postWeight = Math.min(1, postRiseFalls.length / 3);
+  const clamp = ratio => round(Math.max(0.7, Math.min(1.15, ratio)), 2);
   return {
     profile_days: valid.length,
-    depletion_sample_count: drops.length,
-    low_storage_samples: low.length,
-    high_storage_samples: high.length,
-    depletion_rate_mm_day: drops.length >= 5 ? round(median(drops), 1) : null,
-    // Acotado: jamás reemplaza el Kc ni la ET0 de cada lote.
-    relative_drydown_factor: Number.isFinite(relative)
-      ? round(Math.max(0.7, Math.min(1.15, relative)), 2) : null,
+    depletion_sample_count: falls.length,
+    recharge_sample_count: rises.length,
+    stable_day_count: stableDays,
+    rise_with_garita_rain: riseWithRain,
+    rise_without_observed_rain: riseWithoutObservedRain,
+    rise_without_weather: riseWithoutWeather,
+    depletion_rate_mm_day: typicalFall == null ? null : round(typicalFall, 1),
+    rise_rate_mm_day: rises.length ? round(median(rises), 1) : null,
+    trend_factor: Number.isFinite(trend) ? clamp(1 + (trend - 1) * trendWeight) : null,
+    post_rise_factor: Number.isFinite(postRise) ? clamp(1 + (postRise - 1) * postWeight) : null,
   };
 }
