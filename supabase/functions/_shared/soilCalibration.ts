@@ -63,23 +63,21 @@ export async function calibrateAllSoilModels() {
       const estimated = estimateProbeDynamics(days, weather);
       const attemptAt = new Date().toISOString();
       for (const model of matching) {
-        const learned = estimated.relative_drydown_factor
-          ?? model.calibration_diagnostics?.relative_drydown_factor ?? null;
         const summary = {
           ...estimated,
-          relative_drydown_factor: learned,
-          method: 'probe_history_relative_drydown',
+          method: 'probe_history_rise_and_fall',
           first_probe_day: days[0]?.day || null,
           last_probe_day: days.at(-1)?.day || null,
           last_probe_reading_at: probe.last_reading_at,
           weather_station: 'Garita',
         };
-        const status = days.length < 5 ? 'sin_datos'
-          : learned != null ? 'partial' : 'uncalibrated';
+        const transitions = estimated.recharge_sample_count + estimated.depletion_sample_count;
+        const status = days.length < 2 ? 'sin_datos'
+          : transitions ? 'partial' : 'uncalibrated';
         const updates = {
           calibration_status: status,
-          sample_count: estimated.depletion_sample_count,
-          recharge_sample_count: 0,
+          sample_count: transitions,
+          recharge_sample_count: estimated.recharge_sample_count,
           depletion_sample_count: estimated.depletion_sample_count,
           calibration_diagnostics: summary,
           last_calibration_attempt_at: attemptAt,
@@ -88,12 +86,12 @@ export async function calibrateAllSoilModels() {
         // inferir eficiencia de riego ni multiplicador absoluto de ETc.
         updates.recharge_efficiency = null;
         updates.etc_correction_factor = null;
-        if (estimated.depletion_rate_mm_day != null) updates.depletion_rate_mm_day = estimated.depletion_rate_mm_day;
-        if (estimated.relative_drydown_factor != null) updates.last_calibration_at = attemptAt;
+        updates.depletion_rate_mm_day = estimated.depletion_rate_mm_day;
+        if (transitions) updates.last_calibration_at = attemptAt;
         const { error } = await serviceClient.from('soil_behavior_models').update(updates).eq('id', model.id);
         if (error) throw new Error(error.message);
       }
-      results.push({ probe: probe.name, ok: true, status: days.length < 5 ? 'sin_datos' : 'evaluated',
+      results.push({ probe: probe.name, ok: true, status: days.length < 2 ? 'sin_datos' : 'evaluated',
         models: matching.length, ...estimated });
     } catch (error) {
       results.push({ probe: probe.name, ok: false, message: error.message });
