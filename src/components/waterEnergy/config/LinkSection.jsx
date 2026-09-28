@@ -1,8 +1,18 @@
-import React, { useState } from 'react';
-import { FlaskConical } from 'lucide-react';
+import React from 'react';
 import ConfigPanel, { inputCls } from './ConfigPanel';
-import { Button } from '@/components/ui/button';
-import { soilBehaviorService, waterForecastService } from '@/services/waterEnergy';
+import { waterForecastService } from '@/services/waterEnergy';
+
+function CalibrationStatus({ model }) {
+  if (!model) return null;
+  const label = model.calibration_status === 'calibrated' ? 'Calibrado'
+    : model.calibration_status === 'partial' ? 'Aprendizaje parcial'
+    : model.calibration_status === 'sin_datos' ? 'Sin datos suficientes'
+    : 'En observación';
+  const last = model.last_calibration_at
+    ? `Última calibración: ${new Date(model.last_calibration_at).toLocaleString('es-AR')}`
+    : 'Aún sin parámetros aprendidos';
+  return <span className="shrink-0 text-xs text-slate-500" title={last}>{label}</span>;
+}
 
 // Vinculación de cada lote (vía su perfil de suelo) a su MODELO DE
 // SUELO y a su bomba. El modelo de suelo representa el comportamiento
@@ -11,31 +21,9 @@ import { soilBehaviorService, waterForecastService } from '@/services/waterEnerg
 // propios riegos, lluvia y demanda del cultivo. La tarifa energética
 // es global (igual para todos los lotes).
 export default function LinkSection({ lots, profiles, probes, models, pumps, onChange }) {
-  const [calibratingId, setCalibratingId] = useState(null);
-  const [calibMessage, setCalibMessage] = useState(null);
   const save = async (profile, field, value) => {
     await waterForecastService.saveProfile({ ...profile, [field]: value || null });
     onChange();
-  };
-  // Calibración EXPLÍCITA del modelo de suelo: aprende el comportamiento
-  // de la sonda de referencia. Nunca se ejecuta automáticamente.
-  const calibrate = async (modelId) => {
-    if (!modelId) return;
-    setCalibratingId(modelId);
-    setCalibMessage(null);
-    try {
-      const m = await soilBehaviorService.calibrate(modelId);
-      setCalibMessage(
-        m?.calibration_status === 'sin_sonda' ? 'El modelo no tiene sonda de referencia vinculada.'
-        : m?.calibration_status === 'sin_datos' ? 'La sonda de referencia no tiene suficientes lecturas para calibrar.'
-        : 'Modelo de suelo calibrado.'
-      );
-      onChange();
-    } catch (e) {
-      setCalibMessage(e?.message || 'No se pudo calibrar el modelo.');
-    } finally {
-      setCalibratingId(null);
-    }
   };
   const probeById = new Map((probes || []).map(p => [p.id, p]));
   // Selección actual: modelo explícito, o el derivado del vínculo
@@ -71,10 +59,7 @@ export default function LinkSection({ lots, profiles, probes, models, pumps, onC
                           return <option key={m.id} value={m.id}>{m.name}{probe ? ` · Ref: ${probe.name}` : ''}{eff}</option>;
                         })}
                       </select>
-                      <Button size="sm" variant="outline" className="h-8 shrink-0 whitespace-nowrap" disabled={!valueFor(p) || calibratingId != null} onClick={() => calibrate(valueFor(p))}>
-                        <FlaskConical size={13} className="mr-1" />
-                        {calibratingId === valueFor(p) ? 'Calibrando…' : 'Calibrar modelo'}
-                      </Button>
+                      <CalibrationStatus model={(models || []).find(m => m.id === valueFor(p))} />
                     </div>
                   </td>
                   <td className="py-2 pr-3">
@@ -89,7 +74,7 @@ export default function LinkSection({ lots, profiles, probes, models, pumps, onC
           </table>
         </div>
       )}
-      {calibMessage && <p className="mt-3 text-xs font-semibold text-slate-600">{calibMessage}</p>}
+      <p className="mt-3 text-xs text-slate-500">Los modelos se evalúan automáticamente cada día. Solo se aplican parámetros con suficientes lecturas y eventos reales del sitio de referencia.</p>
     </ConfigPanel>
   );
 }
