@@ -4,7 +4,7 @@ import { kcService } from './kcService';
 import { soilWaterService, computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from './soilWaterService';
 import { soilBehaviorService } from './soilBehaviorService';
 import { selectGaritaStation, aggregateGaritaObservations } from './garitaWeather';
-import { drydownFactor, afterRiseFactor } from './soilResponse';
+import { drydownFactor, afterRiseFactor, probeProfileLoss } from './soilResponse';
 
 // ============================================================
 // lotWaterStateService — ESTADO HÍDRICO CALCULADO DE CADA LOTE.
@@ -106,7 +106,7 @@ async function referenceFullDepthCm(profile, models) {
 
 // ---- Contexto compartido (una sola pasada para todos los lotes) ----
 async function loadContext(lots) {
-  const [profiles, models, states, logs, programs, allLayers, allChannels, designs, stations] = await Promise.all([
+  const [profiles, models, states, logs, programs, allLayers, allChannels, designs, stations, allLots] = await Promise.all([
     backend.entities.SoilProfile.list(),
     soilBehaviorService.getModels(),
     backend.entities.LotWaterState.list('-timestamp', 2000),
@@ -116,6 +116,7 @@ async function loadContext(lots) {
     backend.entities.SoilProbeChannel.list(),
     backend.entities.IrrigationDesign.list(),
     backend.entities.WeatherStation.list(),
+    backend.entities.Lot.list(),
   ]);
   // Configuración estática de cada perfil (SIN sonda) — capas cargadas
   // UNA sola vez para todos los perfiles: sin consultas por perfil.
@@ -141,7 +142,24 @@ async function loadContext(lots) {
     : [];
   const observed = aggregateGaritaObservations(observations);
   const executed = executedIrrigationFrom(logs, programs, lots, designs);
-  return { profiles, models, states, configs, garita, observed, executed, programs, designs, loggedProgramIds: new Set(logs.map(l => l.program_id)) };
+  return { profiles, models, states, configs, garita, observed, executed, programs, designs, allLots, referenceKcCache: new Map(), loggedProgramIds: new Set(logs.map(l => l.program_id)) };
+}
+
+function referenceKc(ctx, model, date) {
+  const probeId = model?.reference_probe_id;
+  if (!probeId) return null;
+  const key = `${probeId}|${date}`;
+  if (ctx.referenceKcCache.has(key)) return ctx.referenceKcCache.get(key);
+  const linked = ctx.profiles.filter(p => p.probe_id === probeId
+    || (p.soil_behavior_model_id && ctx.models.some(m => m.id === p.soil_behavior_model_id && m.reference_probe_id === probeId)));
+  const kc = linked.map(p => {
+    const lot = ctx.allLots.find(l => l.id === p.lot_id);
+    return lot ? kcService.kcForLotDate(lot, date, p) : null;
+  }).filter(Number.isFinite).sort((a, b) => a - b);
+  const mid = Math.floor(kc.length / 2);
+  const result = kc.length ? (kc.length % 2 ? kc[mid] : (kc[mid - 1] + kc[mid]) / 2) : null;
+  ctx.referenceKcCache.set(key, result);
+  return result;
 }
 
 // ---- Estado de UN lote: ancla + reconstrucción diaria hasta hoy ----
@@ -238,9 +256,11 @@ async function computeLot(lot, ctx, withHistory) {
     if (obs.byDay.get(d)?.eto == null) estimatedEtoDays++;
     // Kc propio del lote para ese día: cultivo + edad + fenología.
     const kc = kcService.kcForLotDate(lot, d, profile);
-    const etc = kc != null && eto != null
+    const learnedLoss = kc != null && eto != null
+      ? probeProfileLoss(model, { date: d, eto, kc, referenceKc: referenceKc(ctx, model, d), meanEto: obs.meanEto }) : null;
+    const etc = learnedLoss ?? (kc != null && eto != null
       ? round1(eto * kc * etcCorrectionFactor * drydownFactor(model, d)
-        * (previousStepHadRecharge ? afterRiseFactor(model) : 1)) : 0;
+        * (previousStepHadRecharge ? afterRiseFactor(model) : 1)) : 0);
     let next = water + irrPrev + rain - etc;
     if (taw != null && next > taw) next = taw; // excedente = drenaje
     if (next < 0) next = 0; // nunca baja del punto de marchitez
@@ -322,6 +342,11 @@ async function computeLot(lot, ctx, withHistory) {
     etc_correction_factor: etcCorrectionFactor,
     soil_response_factor: drydownFactor(model),
     post_rise_factor: afterRiseFactor(model),
+    reference_kc_by_date: Object.fromEntries(Array.from({ length: 15 }, (_, i) => {
+      const day = dayAfter(end, i + 1);
+      return [day, referenceKc(ctx, model, day)];
+    })),
+    garita_mean_eto: obs.meanEto,
     recent_recharge: previousStepHadRecharge,
     daily_change_mm,
     currentUsefulMm: water,

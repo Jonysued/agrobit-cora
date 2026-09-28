@@ -18,6 +18,34 @@ export function drydownFactor(model, date = null) {
     && value >= 0.7 && value <= 1.15 ? value : 1;
 }
 
+// La caída medida por la sonda es la referencia de agua del perfil.
+// La diferencia de ETc respecto de un lote representativo vinculado
+// ajusta cultivo/edad/clima sin multiplicar TODA la caída por el Kc.
+// Las subidas de la sonda no se copian: solo suben los lotes con sus
+// propios riegos o lluvia registrados.
+export function probeProfileLoss(model, { date = null, eto, kc, referenceKc, forecastFactor = null, meanEto = null }) {
+  const data = learned(model);
+  const typical = Number(data?.depletion_rate_mm_day);
+  if (!(typical > 0) || !Number.isFinite(eto) || !Number.isFinite(kc)) return null;
+  const observed = date && data.daily_drydown_factors?.find(d => d.day === date);
+  let probeLoss;
+  if (forecastFactor != null) {
+    const climate = meanEto > 0 ? eto / meanEto : 1;
+    // El exceso del episodio (p. ej. drenaje tras una recarga) se
+    // conserva en mm; solo la extracción basal sigue la ET0 prevista.
+    probeLoss = typical * (climate + forecastFactor - 1);
+  } else if (observed?.fall_mm > 0) {
+    probeLoss = observed.fall_mm;
+  } else if (observed) {
+    // La recarga de la sonda no prueba un riego en este lote.
+    probeLoss = typical * (meanEto > 0 ? eto / meanEto : 1);
+  } else {
+    return null;
+  }
+  const reference = Number.isFinite(referenceKc) ? referenceKc : kc;
+  return Math.round(Math.max(0, probeLoss + eto * (kc - reference)) * 10) / 10;
+}
+
 export function forecastDrydownFactor(model, dayIndex, rechargeAt = null, asOfDay = null) {
   const data = learned(model);
   const baseline = drydownFactor(model, 'outside-observed-history');

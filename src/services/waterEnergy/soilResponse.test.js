@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { drydownFactor, afterRiseFactor, forecastDrydownFactor } from './soilResponse.js';
+import { drydownFactor, afterRiseFactor, forecastDrydownFactor, probeProfileLoss } from './soilResponse.js';
 
 const model = { calibration_diagnostics: {
   method: 'probe_history_rise_and_fall', depletion_sample_count: 5,
@@ -87,4 +87,16 @@ test('una fase actual sin continuación aprendida se atenúa; la recarga propia 
   assert.equal(forecastDrydownFactor(probe, 1, null, '2026-09-28'), 1.35);
   assert.equal(forecastDrydownFactor(probe, 0, 0, '2026-09-28'), 0.7);
   assert.equal(forecastDrydownFactor(probe, 0, null, '2026-09-29'), 1);
+});
+
+test('la caída del perfil parte de los mm de la sonda y ajusta el cultivo de forma aditiva', () => {
+  const barnea = { calibration_diagnostics: {
+    method: 'probe_history_rise_and_fall', depletion_rate_mm_day: 3,
+    daily_drydown_factors: [{ day: '2026-09-28', fall_mm: 8.6 }],
+  } };
+  const common = { date: '2026-09-28', eto: 5.2, referenceKc: 0.547, meanEto: 5 };
+  assert.equal(probeProfileLoss(barnea, { ...common, kc: 0.547 }), 8.6);
+  assert.equal(probeProfileLoss(barnea, { ...common, kc: 0.137 }), 6.5);
+  assert.equal(probeProfileLoss(barnea, { ...common, date: '2026-09-27', kc: 0.547 }), null);
+  assert.equal(probeProfileLoss(null, { ...common, kc: 0.137 }), null);
 });
