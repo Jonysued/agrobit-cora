@@ -35,9 +35,11 @@ const round1 = n => Math.round(n * 10) / 10;
 // edad del lote, etapa fenológica y desfase de campaña configurado.
 function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1, postRiseFactor = 1, model = null, scheduledByDate = new Map()) {
   let rechargeAt = null;
+  const firstDate = weatherDays?.[0]?.date;
+  const asOfDay = firstDate ? new Date(Date.parse(`${firstDate}T12:00:00Z`) - 86400000).toISOString().slice(0, 10) : null;
   return (weatherDays || []).map((w, index) => {
     const kc = kcService.kcForLotDate(lot, w.date, profile);
-    const factor = forecastDrydownFactor(model, index, rechargeAt);
+    const factor = forecastDrydownFactor(model, index, rechargeAt, asOfDay);
     // La recarga prevista se refleja en el punto del día siguiente;
     // el primer descenso posterior inicia otra fase del ciclo aprendido.
     if ((w.effective_rainfall_mm ?? w.rainfall_mm ?? 0) > 0 || (scheduledByDate.get(w.date) ?? 0) > 0) {

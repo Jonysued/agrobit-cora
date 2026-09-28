@@ -18,7 +18,7 @@ export function drydownFactor(model, date = null) {
     && value >= 0.7 && value <= 1.15 ? value : 1;
 }
 
-export function forecastDrydownFactor(model, dayIndex, rechargeAt = null) {
+export function forecastDrydownFactor(model, dayIndex, rechargeAt = null, asOfDay = null) {
   const data = learned(model);
   const baseline = drydownFactor(model, 'outside-observed-history');
   const cycle = data?.drydown_cycle;
@@ -26,7 +26,20 @@ export function forecastDrydownFactor(model, dayIndex, rechargeAt = null) {
   const phase = rechargeAt != null && dayIndex >= rechargeAt
     ? dayIndex - rechargeAt + 1 : currentPhase + dayIndex + 1;
   const learnedPhase = cycle?.find(entry => entry.day === phase && entry.samples >= 2);
-  if (learnedPhase && Number.isFinite(learnedPhase.factor)) return learnedPhase.factor;
+  if (learnedPhase && Number.isFinite(learnedPhase.factor)) {
+    // La mediana describe la forma del ciclo, pero el episodio actual
+    // puede ser mucho más intenso. Continuar su amplitud durante ese
+    // mismo ciclo evita un salto artificial al comenzar el pronóstico.
+    // Una recarga propia del lote inicia un ciclo nuevo de amplitud típica.
+    const first = cycle.find(entry => entry.day === 1 && entry.samples >= 2);
+    const recent = data?.recent_24h_factor;
+    const sameCycle = rechargeAt == null && currentPhase > 0 && asOfDay === data?.last_probe_day;
+    if (sameCycle && first && Number.isFinite(recent) && first.factor > 0) {
+      const intensity = Math.max(0.7, Math.min(2, recent / first.factor));
+      return Math.round(Math.max(0.7, Math.min(3, learnedPhase.factor * intensity)) * 100) / 100;
+    }
+    return learnedPhase.factor;
+  }
   // Sin suficientes ciclos para esta fase se usa la tendencia de ESA
   // sonda, en vez de imponer una vuelta lineal arbitraria en cinco días.
   return baseline;
