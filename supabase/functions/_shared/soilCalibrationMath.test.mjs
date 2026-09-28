@@ -48,3 +48,21 @@ test('aprende la respuesta relativa del historial sin ubicación ni cultivo de l
   assert.equal(short.rise_without_weather, 1);
   assert.equal(short.post_rise_factor, 0.89);
 });
+
+test('reconoce bajada de 24 horas oculta por recarga en el cierre diario', () => {
+  const days = [
+    { day: '2026-09-24', mm: 200 }, { day: '2026-09-25', mm: 197 },
+    { day: '2026-09-26', mm: 194 }, { day: '2026-09-27', mm: 212 },
+    { day: '2026-09-28', mm: 209 },
+  ];
+  const snapshots = [
+    { day: '2026-09-27', time: Date.parse('2026-09-27T15:00:00Z'), mm: 218 },
+    { day: '2026-09-27', time: Date.parse('2026-09-28T02:30:00Z'), mm: 212 },
+    { day: '2026-09-28', time: Date.parse('2026-09-28T15:00:00Z'), mm: 209 },
+  ];
+  const learned = estimateProbeDynamics(days, new Map(), snapshots);
+  assert.equal(learned.depletion_rate_mm_day, 3);
+  assert.equal(learned.recent_24h_fall_mm, 9);
+  assert.equal(learned.recent_24h_factor, 3);
+  assert.equal(learned.daily_drydown_factors.at(-1).day, '2026-09-28');
+});

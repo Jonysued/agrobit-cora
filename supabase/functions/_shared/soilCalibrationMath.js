@@ -12,7 +12,7 @@ const median = values => {
 
 // Exactamente el mismo límite entre profundidades que usa
 // measuredProbeProfile: cada sensor representa hasta los puntos medios.
-export function dailyProbeProfile(channels, readings) {
+export function probeProfileSnapshots(channels, readings) {
   const depths = [...new Set(channels.filter(c => c.sensor_type === 'soil_moisture')
     .map(c => Number(c.depth_cm)).filter(Number.isFinite))].sort((a, b) => a - b);
   if (depths.length < 2) return [];
@@ -32,12 +32,20 @@ export function dailyProbeProfile(channels, readings) {
     if (!byTime.has(ms)) byTime.set(ms, new Map());
     byTime.get(ms).set(depth, value / 100);
   }
-  const byDay = new Map();
+  const snapshots = [];
   for (const [ms, values] of byTime) {
     if (!depths.every(depth => values.has(depth))) continue;
     const day = dayKey(ms);
     const profile = round(depths.reduce((total, depth) => total + values.get(depth) * thickness.get(depth), 0), 1);
-    if (!byDay.has(day) || ms > byDay.get(day).time) byDay.set(day, { day, time: ms, mm: profile });
+    snapshots.push({ day, time: ms, mm: profile });
+  }
+  return snapshots.sort((a, b) => a.time - b.time);
+}
+
+export function dailyProbeProfile(channels, readings) {
+  const byDay = new Map();
+  for (const snapshot of probeProfileSnapshots(channels, readings)) {
+    byDay.set(snapshot.day, snapshot);
   }
   return [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
 }
@@ -46,7 +54,7 @@ export function dailyProbeProfile(channels, readings) {
 // recargas observadas, y las bajadas muestran cómo evoluciona la extracción.
 // Sin conocer la lámina aplicada en la sonda, solo se transfieren razones
 // relativas a los lotes; nunca sus mm absolutos ni un Kc supuesto.
-export function estimateProbeDynamics(days, weather) {
+export function estimateProbeDynamics(days, weather, snapshots = []) {
   const valid = days.filter(d => Number.isFinite(d.mm)).sort((a, b) => a.day.localeCompare(b.day));
   const falls = [];
   const rises = [];
@@ -90,6 +98,35 @@ export function estimateProbeDynamics(days, weather) {
     ? median(postRiseFalls) / typicalFall : null;
   const postWeight = Math.min(1, postRiseFalls.length / 3);
   const clamp = ratio => round(Math.max(0.7, Math.min(1.15, ratio)), 2);
+  // Una lectura de cierre puede esconder una recarga seguida de drenaje
+  // durante ese mismo día. Comparar horas equivalentes separadas 24 h
+  // permite aprender la bajada actual del perfil completo sin copiar
+  // su humedad absoluta al lote. El historial diario entero sigue siendo
+  // la referencia para la tasa habitual.
+  const trailing = [];
+  if (typicalFall && snapshots.length) {
+    const ordered = [...snapshots].sort((a, b) => a.time - b.time);
+    const latestByDay = new Map();
+    for (const snapshot of ordered) latestByDay.set(snapshot.day, snapshot);
+    for (const snapshot of latestByDay.values()) {
+      const desired = snapshot.time - 86400000;
+      let lo = 0, hi = ordered.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (ordered[mid].time < desired) lo = mid + 1;
+        else hi = mid;
+      }
+      const candidates = [ordered[lo - 1], ordered[lo]].filter(Boolean);
+      const prior = candidates.reduce((best, item) =>
+        !best || Math.abs(item.time - desired) < Math.abs(best.time - desired) ? item : best, null);
+      if (prior && Math.abs(prior.time - desired) > 3600000) continue;
+      if (!prior) continue;
+      const fall = round(prior.mm - snapshot.mm, 1);
+      trailing.push({ day: snapshot.day, fall_mm: fall, factor: fall > 0
+        ? round(Math.max(0.7, Math.min(3, fall / typicalFall)), 2) : 1 });
+    }
+  }
+  const latest = trailing.at(-1);
   return {
     profile_days: valid.length,
     depletion_sample_count: falls.length,
@@ -102,5 +139,8 @@ export function estimateProbeDynamics(days, weather) {
     rise_rate_mm_day: rises.length ? round(median(rises), 1) : null,
     trend_factor: Number.isFinite(trend) ? clamp(1 + (trend - 1) * trendWeight) : null,
     post_rise_factor: Number.isFinite(postRise) ? clamp(1 + (postRise - 1) * postWeight) : null,
+    recent_24h_fall_mm: latest?.fall_mm ?? null,
+    recent_24h_factor: latest?.factor ?? null,
+    daily_drydown_factors: trailing,
   };
 }
