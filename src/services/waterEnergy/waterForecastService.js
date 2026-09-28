@@ -33,8 +33,8 @@ const round1 = n => Math.round(n * 10) / 10;
 
 // Insumos diarios: el Kc se recalcula para cada fecha según cultivo,
 // edad del lote, etapa fenológica y desfase de campaña configurado.
-function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1, postRiseFactor = 1, model = null, scheduledByDate = new Map()) {
-  let rechargeAt = null;
+function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1, postRiseFactor = 1, model = null, scheduledByDate = new Map(), recentRecharge = false) {
+  let rechargeAt = recentRecharge ? 0 : null;
   const firstDate = weatherDays?.[0]?.date;
   const asOfDay = firstDate ? new Date(Date.parse(`${firstDate}T12:00:00Z`) - 86400000).toISOString().slice(0, 10) : null;
   return (weatherDays || []).map((w, index) => {
@@ -154,7 +154,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const kc_missing = kc == null;
   const scheduledByDate = new Map((curve.events?.scheduled || []).map(e => [e.date, e.mm]));
   const baseDays = forecastInputs(weatherDays, lot, profile,
-    curve.etc_correction_factor ?? 1, curve.post_rise_factor ?? 1, model);
+    curve.etc_correction_factor ?? 1, curve.post_rise_factor ?? 1, model, new Map(), curve.recent_recharge);
   const forecast_quality = forecastQuality(curve, weatherDays, kc_missing);
   const config = {
     total_available_water_capacity_mm: curve.config.total_available_water_capacity_mm,
@@ -165,7 +165,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   // (solo lluvia − ETc), sin ningún riego futuro.
   const scenarioNoIrrigation = runUsefulWaterScenario(curve.currentUsefulMm, config, baseDays, curve.recent_recharge);
   const scheduledBaseDays = forecastInputs(weatherDays, lot, profile,
-    curve.etc_correction_factor ?? 1, curve.post_rise_factor ?? 1, model, scheduledByDate);
+    curve.etc_correction_factor ?? 1, curve.post_rise_factor ?? 1, model, scheduledByDate, curve.recent_recharge);
   const days = scheduledBaseDays.map(d => ({
     ...d,
     irrigation_mm: scheduledByDate.get(d.date) ?? 0,
@@ -187,7 +187,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const scenarioWithIrrigation = recommendation
     ? runUsefulWaterScenario(curve.currentUsefulMm, config,
       forecastInputs(weatherDays, lot, profile, curve.etc_correction_factor ?? 1,
-        curve.post_rise_factor ?? 1, model, recommendedByDate)
+        curve.post_rise_factor ?? 1, model, recommendedByDate, curve.recent_recharge)
         .map(d => ({ ...d, irrigation_mm: recommendedByDate.get(d.date) ?? 0 })),
       curve.recent_recharge)
     : scenarioScheduled;

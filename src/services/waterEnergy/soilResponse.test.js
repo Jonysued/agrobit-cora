@@ -62,3 +62,29 @@ test('BARNEA mantiene la intensidad observada al continuar el ciclo actual', () 
   assert.equal(forecastDrydownFactor(barnea, 1, null, '2026-09-28'), 1.86);
   assert.equal(forecastDrydownFactor(barnea, 0, 0, '2026-09-28'), 1.73);
 });
+
+test('una fase observada una sola vez también influye, sin imponerla por completo', () => {
+  const glonet = { calibration_diagnostics: {
+    method: 'probe_history_rise_and_fall', depletion_sample_count: 3,
+    trend_factor: 1, current_drydown_phase: 0, last_probe_day: '2026-09-28',
+    drydown_cycle: [
+      { day: 1, factor: 0.7, samples: 1 },
+      { day: 2, factor: 1.6, samples: 1 },
+    ],
+  } };
+  assert.equal(forecastDrydownFactor(glonet, 0, null, '2026-09-28'), 0.85);
+  assert.equal(forecastDrydownFactor(glonet, 1, null, '2026-09-28'), 1.3);
+});
+
+test('una fase actual sin continuación aprendida se atenúa; la recarga propia reinicia', () => {
+  const probe = { calibration_diagnostics: {
+    method: 'probe_history_rise_and_fall', depletion_sample_count: 4,
+    trend_factor: 1, last_probe_day: '2026-09-28', current_drydown_phase: 3,
+    recent_24h_factor: 1.82,
+    drydown_cycle: [{ day: 1, factor: 0.7, samples: 2 }, { day: 3, factor: 1.82, samples: 1 }],
+  } };
+  assert.equal(forecastDrydownFactor(probe, 0, null, '2026-09-28'), 1.53);
+  assert.equal(forecastDrydownFactor(probe, 1, null, '2026-09-28'), 1.35);
+  assert.equal(forecastDrydownFactor(probe, 0, 0, '2026-09-28'), 0.7);
+  assert.equal(forecastDrydownFactor(probe, 0, null, '2026-09-29'), 1);
+});
