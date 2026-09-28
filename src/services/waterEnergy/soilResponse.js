@@ -18,16 +18,23 @@ export function drydownFactor(model, date = null) {
     && value >= 0.7 && value <= 1.15 ? value : 1;
 }
 
-export function forecastDrydownFactor(model, dayIndex) {
-  const baseline = learned(model)?.trend_factor ?? 1;
-  const current = drydownFactor(model);
-  // Una bajada intensa tras una recarga reciente no se extrapola
-  // durante los quince días: vuelve gradualmente a la tendencia larga.
-  return Math.round((baseline + (current - baseline) * Math.max(0, 1 - dayIndex / 5)) * 100) / 100;
+export function forecastDrydownFactor(model, dayIndex, rechargeAt = null) {
+  const data = learned(model);
+  const baseline = drydownFactor(model, 'outside-observed-history');
+  const cycle = data?.drydown_cycle;
+  const currentPhase = Number(data?.current_drydown_phase) || 0;
+  const phase = rechargeAt != null && dayIndex >= rechargeAt
+    ? dayIndex - rechargeAt + 1 : currentPhase + dayIndex + 1;
+  const learnedPhase = cycle?.find(entry => entry.day === phase && entry.samples >= 2);
+  if (learnedPhase && Number.isFinite(learnedPhase.factor)) return learnedPhase.factor;
+  // Sin suficientes ciclos para esta fase se usa la tendencia de ESA
+  // sonda, en vez de imponer una vuelta lineal arbitraria en cinco días.
+  return baseline;
 }
 
 export function afterRiseFactor(model) {
   const data = learned(model);
+  if (data?.drydown_cycle?.some(entry => entry.day === 1 && entry.samples >= 2)) return 1;
   const value = data?.post_rise_factor;
   return data?.recharge_sample_count > 0 && Number.isFinite(value)
     && value >= 0.7 && value <= 1.15 ? value : 1;

@@ -66,3 +66,21 @@ test('reconoce bajada de 24 horas oculta por recarga en el cierre diario', () =>
   assert.equal(learned.recent_24h_factor, 3);
   assert.equal(learned.daily_drydown_factors.at(-1).day, '2026-09-28');
 });
+
+test('aprende repetidos ciclos de recarga y extracción sin fijar el retorno en cinco días', () => {
+  const falls = [-10, 8, 4, 3, 2, -9, 7, 5, 3, 2, -8, 9];
+  let mm = 100;
+  const firstDay = '2026-09-01';
+  const snapshots = [{ day: firstDay, time: Date.parse(`${firstDay}T12:00:00Z`), mm }];
+  falls.forEach((fall, index) => {
+    mm -= fall;
+    const day = new Date(Date.UTC(2026, 8, index + 2)).toISOString().slice(0, 10);
+    snapshots.push({ day, time: Date.parse(`${day}T12:00:00Z`), mm });
+  });
+  const learned = estimateProbeDynamics(snapshots, new Map(), snapshots);
+  assert.equal(learned.current_drydown_phase, 1);
+  assert.equal(learned.drydown_cycle.find(p => p.day === 1).fall_mm, 8);
+  assert.equal(learned.drydown_cycle.find(p => p.day === 1).samples, 3);
+  assert.equal(learned.drydown_cycle.find(p => p.day === 2).fall_mm, 4.5);
+  assert.equal(learned.drydown_cycle.find(p => p.day === 3).fall_mm, 3);
+});
