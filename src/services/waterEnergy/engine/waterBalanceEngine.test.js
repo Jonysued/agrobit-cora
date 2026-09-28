@@ -38,6 +38,16 @@ test('la lluvia y el riego del día X ingresan en X+1', () => {
   assert.equal(scenario[1].available_water_mm, 105);
 });
 
+test('la respuesta posterior a la recarga afecta X+2 sin copiar la humedad de la sonda', () => {
+  const days = Array.from({ length: 3 }, (_, n) => ({
+    date: `2026-09-${24 + n}`, eto_mm: 5, kc: 1, etc_correction_factor: 0.8,
+    post_rise_factor: 0.8, rainfall_mm: 0, irrigation_mm: n === 0 ? 10 : 0,
+  }));
+  const scenario = runUsefulWaterScenario(100, config, days);
+  assert.deepEqual(scenario.map(row => row.available_water_mm), [96, 102, 98.8]);
+  assert.deepEqual(scenario.map(row => row.etc_mm), [4, 4, 3.2]);
+});
+
 test('la recomendación descuenta solo entradas que llegan a X+1', () => {
   const needed = netIrrigationNeeded(
     140,
