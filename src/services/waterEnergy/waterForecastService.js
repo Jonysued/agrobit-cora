@@ -32,7 +32,7 @@ const round1 = n => Math.round(n * 10) / 10;
 
 // Insumos diarios: el Kc se recalcula para cada fecha según cultivo,
 // edad del lote, etapa fenológica y desfase de campaña configurado.
-function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1) {
+function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1, postRiseFactor = 1) {
   return (weatherDays || []).map(w => {
     const kc = kcService.kcForLotDate(lot, w.date, profile);
     return {
@@ -43,6 +43,7 @@ function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1) {
       rainfall_mm: w.rainfall_mm ?? 0,
       effective_rainfall_mm: w.effective_rainfall_mm ?? round1((w.rainfall_mm ?? 0) * 0.7),
       etc_correction_factor: etcCorrectionFactor,
+      post_rise_factor: postRiseFactor,
     };
   });
 }
@@ -143,7 +144,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const kc_missing = kc == null;
   const scheduledByDate = new Map((curve.events?.scheduled || []).map(e => [e.date, e.mm]));
   const baseDays = forecastInputs(weatherDays, lot, profile,
-    (curve.etc_correction_factor ?? 1) * (curve.soil_response_factor ?? 1));
+    (curve.etc_correction_factor ?? 1) * (curve.soil_response_factor ?? 1), curve.post_rise_factor ?? 1);
   const forecast_quality = forecastQuality(curve, weatherDays, kc_missing);
   const config = {
     total_available_water_capacity_mm: curve.config.total_available_water_capacity_mm,
@@ -152,16 +153,16 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   };
   // TENDENCIA SIN RIEGO: continuación natural de la curva actual
   // (solo lluvia − ETc), sin ningún riego futuro.
-  const scenarioNoIrrigation = runUsefulWaterScenario(curve.currentUsefulMm, config, baseDays);
+  const scenarioNoIrrigation = runUsefulWaterScenario(curve.currentUsefulMm, config, baseDays, curve.recent_recharge);
   const days = baseDays.map(d => ({
     ...d,
     irrigation_mm: scheduledByDate.get(d.date) ?? 0,
   }));
-  const scenarioScheduled = runUsefulWaterScenario(curve.currentUsefulMm, config, days);
+  const scenarioScheduled = runUsefulWaterScenario(curve.currentUsefulMm, config, days, curve.recent_recharge);
   // El escenario y la recomendación comparten los 15 días del pronóstico.
   const canRecommend = !kc_missing && forecast_quality.level !== 'blocked';
   const { recommendation, scenarioWithIrrigation } = canRecommend
-    ? irrigationRecommendationService.withRecommendation(config, lot, curve.currentUsefulMm, days, scenarioScheduled.slice(0, 15), efficiency)
+    ? irrigationRecommendationService.withRecommendation(config, lot, curve.currentUsefulMm, days, scenarioScheduled.slice(0, 15), efficiency, curve.recent_recharge)
     : { recommendation: null, scenarioWithIrrigation: scenarioScheduled };
   const energy = recommendation ? energyService.compute(recommendation.recommended_irrigation_m3, pump, tariff, rateMmH, recommendation.recommended_irrigation_mm) : null;
   return {

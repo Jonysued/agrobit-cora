@@ -33,7 +33,8 @@ export function stepUsefulWaterDay(availableMm, config, day) {
   // La corrección aprendida se aplica SOBRE ETc, nunca además de ETc:
   // así la sonda ajusta la magnitud observada sin descontar dos veces
   // la demanda del cultivo.
-  const etcFactor = day.etc_correction_factor ?? 1;
+  const etcFactor = (day.etc_correction_factor ?? 1)
+    * (day.after_recharge ? (day.post_rise_factor ?? 1) : 1);
   const etcMm = round1(rawEtcMm * etcFactor);
   // Solo la fracción efectiva de la lluvia entra al perfil. El total
   // pronosticado se conserva aparte para mostrarlo en la interfaz.
@@ -57,7 +58,7 @@ export function stepUsefulWaterDay(availableMm, config, day) {
 // Escenario de N días en mm de agua útil.
 // config: { total_available_water_capacity_mm, recharge_threshold_mm, target_water_mm }
 // days:   [{ date, eto_mm, kc, rainfall_mm, effective_rainfall_mm, irrigation_mm }]
-export function runUsefulWaterScenario(startMm, config, days) {
+export function runUsefulWaterScenario(startMm, config, days, recentRecharge = false) {
   let available = startMm;
   const taw = config.total_available_water_capacity_mm;
   // REGLA DEL GRÁFICO: la curva sube DESPUÉS del riego o la lluvia,
@@ -67,12 +68,15 @@ export function runUsefulWaterScenario(startMm, config, days) {
   // startMm: el primer día del escenario no arrastra pendiente.
   let pendingIrr = 0;
   let pendingEffectiveRain = 0;
+  let previousStepHadRecharge = recentRecharge;
   return (days || []).map((d, idx) => {
     const r = stepUsefulWaterDay(available, config, {
       ...d,
+      after_recharge: previousStepHadRecharge,
       irrigation_mm: pendingIrr,
       effective_rainfall_mm: pendingEffectiveRain,
     });
+    previousStepHadRecharge = pendingIrr > 0 || pendingEffectiveRain > 0;
     pendingIrr = round1(d.irrigation_mm || 0);
     pendingEffectiveRain = round1(d.effective_rainfall_mm ?? d.rainfall_mm ?? 0);
     available = r.availableMm;

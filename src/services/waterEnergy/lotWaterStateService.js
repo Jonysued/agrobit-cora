@@ -4,7 +4,7 @@ import { kcService } from './kcService';
 import { soilWaterService, computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from './soilWaterService';
 import { soilBehaviorService } from './soilBehaviorService';
 import { selectGaritaStation, aggregateGaritaObservations } from './garitaWeather';
-import { drydownFactor } from './soilResponse';
+import { drydownFactor, afterRiseFactor } from './soilResponse';
 
 // ============================================================
 // lotWaterStateService — ESTADO HÍDRICO CALCULADO DE CADA LOTE.
@@ -218,6 +218,7 @@ async function computeLot(lot, ctx, withHistory) {
   let estimatedEtoDays = 0;
   let missingRainDays = 0;
   let water = anchor.useful;
+  let previousStepHadRecharge = false;
   // REGLA DEL GRÁFICO: la curva sube DESPUÉS del riego o la lluvia,
   // nunca antes. El punto de cada día refleja la demanda (ETc) de ESE
   // día, pero el agua (riego o lluvia) del día X recién entra al
@@ -238,11 +239,13 @@ async function computeLot(lot, ctx, withHistory) {
     // Kc propio del lote para ese día: cultivo + edad + fenología.
     const kc = kcService.kcForLotDate(lot, d, profile);
     const etc = kc != null && eto != null
-      ? round1(eto * kc * etcCorrectionFactor * drydownFactor(model, water, taw)) : 0;
+      ? round1(eto * kc * etcCorrectionFactor * drydownFactor(model)
+        * (previousStepHadRecharge ? afterRiseFactor(model) : 1)) : 0;
     let next = water + irrPrev + rain - etc;
     if (taw != null && next > taw) next = taw; // excedente = drenaje
     if (next < 0) next = 0; // nunca baja del punto de marchitez
     water = round1(next);
+    previousStepHadRecharge = irrPrev > 0 || rain > 0;
     if (irrPrev > 0) irrigationEvents.push({ date: prev, mm: irrPrev });
     if (grossRain > 0) rainEvents.push({ date: prev, mm: grossRain, effective_mm: rain });
     history.push({ date: d, mm: water });
@@ -263,6 +266,7 @@ async function computeLot(lot, ctx, withHistory) {
     history[history.length - 1] = { date: end, mm: water };
     if (irrToday > 0) irrigationEvents.push({ date: end, mm: irrToday });
     if (grossRainToday > 0) rainEvents.push({ date: end, mm: grossRainToday, effective_mm: rainToday });
+    previousStepHadRecharge = true;
   }
 
   // ---- Sin retro-proyección ----
@@ -316,7 +320,9 @@ async function computeLot(lot, ctx, withHistory) {
     lot, profile, config, model,
     efficiency,
     etc_correction_factor: etcCorrectionFactor,
-    soil_response_factor: drydownFactor(model, water, taw),
+    soil_response_factor: drydownFactor(model),
+    post_rise_factor: afterRiseFactor(model),
+    recent_recharge: previousStepHadRecharge,
     daily_change_mm,
     currentUsefulMm: water,
     currentStoredMm: round1(wilting + water),
@@ -333,7 +339,7 @@ async function computeLot(lot, ctx, withHistory) {
       model_status: model?.calibration_status || 'sin_modelo',
       recharge_efficiency_learned: model?.recharge_efficiency != null,
       etc_correction_learned: model?.etc_correction_factor != null,
-      relative_drydown_learned: model?.calibration_diagnostics?.relative_drydown_factor != null,
+      probe_dynamics_learned: model?.calibration_diagnostics?.method === 'probe_history_rise_and_fall',
     },
     // Punto de partida de la curva (fecha + valor en escala de Suma de
     // perfil): el gráfico encuadra su ventana y marca este punto para

@@ -26,15 +26,25 @@ test('aprende la respuesta relativa del historial sin ubicación ni cultivo de l
   let mm = 300;
   for (let n = 0; n < 80; n++) {
     const day = new Date(Date.UTC(2026, 0, n + 1)).toISOString().slice(0, 10);
-    if (n === 39) mm += 80; // recarga observada, sin saber cuántos mm se aplicaron
-    else mm -= n < 40 ? 1 : 2;
+    if (n === 49) mm += 80; // recarga observada, sin saber cuántos mm se aplicaron
+    else mm -= n < 50 ? 1 : 2;
     days.push({ day, mm });
-    weather.set(day, { rain: 0, eto: 4 });
+    weather.set(day, { rain: n === 49 ? 5 : 0, eto: 4 });
   }
   const learned = estimateProbeDynamics(days, weather);
   assert.equal(learned.profile_days, 80);
-  assert.ok(learned.depletion_sample_count >= 70);
-  assert.equal(learned.relative_drydown_factor, 0.7);
-  assert.equal(learned.depletion_rate_mm_day, 2);
-  assert.equal(estimateProbeDynamics(days.slice(0, 8), weather).relative_drydown_factor, null);
+  assert.equal(learned.depletion_sample_count, 78);
+  assert.equal(learned.recharge_sample_count, 1);
+  assert.equal(learned.rise_with_garita_rain, 1);
+  assert.equal(learned.trend_factor, 1.15);
+  assert.equal(learned.post_rise_factor, 1.15);
+  assert.equal(learned.depletion_rate_mm_day, 1);
+  const short = estimateProbeDynamics([
+    { day: '2026-09-01', mm: 100 }, { day: '2026-09-02', mm: 98 },
+    { day: '2026-09-03', mm: 102 }, { day: '2026-09-04', mm: 101 },
+  ]);
+  assert.equal(short.depletion_sample_count, 2);
+  assert.equal(short.recharge_sample_count, 1);
+  assert.equal(short.rise_without_weather, 1);
+  assert.equal(short.post_rise_factor, 0.89);
 });
