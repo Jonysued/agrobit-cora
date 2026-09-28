@@ -15,14 +15,25 @@ test('aplica tendencias y dinámica después de la recarga sin percentiles húme
   assert.equal(drydownFactor({ calibration_diagnostics: { ...model.calibration_diagnostics, method: 'probe_history_relative_drydown' } }), 1);
 });
 
-test('usa la caída reciente y retorna a la tendencia histórica en la proyección', () => {
+test('la proyección sigue las fases aprendidas por la sonda y reinicia tras una recarga prevista', () => {
   const recent = { calibration_diagnostics: {
     ...model.calibration_diagnostics, trend_factor: 0.88,
     recent_24h_factor: 2.9,
     daily_drydown_factors: [{ day: '2026-09-28', factor: 2.9 }],
+    current_drydown_phase: 1,
+    drydown_cycle: [
+      { day: 1, factor: 2.7, samples: 4 },
+      { day: 2, factor: 1.4, samples: 3 },
+      { day: 3, factor: 1.1, samples: 3 },
+      { day: 4, factor: 0.95, samples: 2 },
+    ],
   } };
   assert.equal(drydownFactor(recent, '2026-09-28'), 2.9);
   assert.equal(drydownFactor(recent, '2026-09-27'), 0.88);
-  assert.equal(forecastDrydownFactor(recent, 0), 2.9);
+  assert.equal(forecastDrydownFactor(recent, 0), 1.4);
+  assert.equal(forecastDrydownFactor(recent, 1), 1.1);
+  assert.equal(forecastDrydownFactor(recent, 2, 2), 2.7);
+  assert.equal(forecastDrydownFactor(recent, 3, 2), 1.4);
   assert.equal(forecastDrydownFactor(recent, 5), 0.88);
+  assert.equal(afterRiseFactor(recent), 1);
 });
