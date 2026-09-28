@@ -127,6 +127,30 @@ export function estimateProbeDynamics(days, weather, snapshots = []) {
     }
   }
   const latest = trailing.at(-1);
+  // Cada subida observada inicia un ciclo. Aprendemos la bajada del
+  // primer, segundo, etc. día posterior a esa subida, usando todos los
+  // ciclos disponibles de esta sonda. No asumimos que la fase rápida
+  // deba desaparecer después de un número fijo de días.
+  const phaseFalls = new Map();
+  let phase = 0;
+  for (let i = 0; i < trailing.length; i++) {
+    const entry = trailing[i];
+    const previous = trailing[i - 1];
+    if (previous && nextDay(previous.day) !== entry.day) phase = 0;
+    if (entry.fall_mm <= 0) { phase = 0; continue; }
+    if (phase === 0 && !(previous?.fall_mm <= 0 && nextDay(previous.day) === entry.day)) continue;
+    phase++;
+    if (phase > 15) continue;
+    if (!phaseFalls.has(phase)) phaseFalls.set(phase, []);
+    phaseFalls.get(phase).push(entry.fall_mm);
+  }
+  const probeFalls = trailing.filter(entry => entry.fall_mm > 0).map(entry => entry.fall_mm);
+  const probeMedian = probeFalls.length ? median(probeFalls) : typicalFall;
+  const drydownCycle = [...phaseFalls.entries()].map(([day, values]) => ({
+    day, samples: values.length,
+    fall_mm: round(median(values), 1),
+    factor: round(Math.max(0.7, Math.min(3, median(values) / probeMedian)), 2),
+  }));
   return {
     profile_days: valid.length,
     depletion_sample_count: falls.length,
@@ -142,5 +166,7 @@ export function estimateProbeDynamics(days, weather, snapshots = []) {
     recent_24h_fall_mm: latest?.fall_mm ?? null,
     recent_24h_factor: latest?.factor ?? null,
     daily_drydown_factors: trailing,
+    drydown_cycle: drydownCycle,
+    current_drydown_phase: phase,
   };
 }
