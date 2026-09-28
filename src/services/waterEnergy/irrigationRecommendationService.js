@@ -43,14 +43,14 @@ export const irrigationRecommendationService = {
       // REGLA X+1: el riego recomendado del día del cruce entra en el
       // punto del día siguiente. Para llegar al objetivo en ese punto
       // se consideran únicamente las entradas del DÍA DEL CRUCE y la
-      // ETc del día siguiente. Las entradas del día siguiente recién
+      // pérdida del perfil del día siguiente. Las entradas del día siguiente recién
       // impactan un día después y no pueden descontarse acá.
       const irrHit = round1((days || [])[hitIdx]?.irrigation_mm || 0);
       const rainHit = round1((days || [])[hitIdx]?.effective_rainfall_mm ?? (days || [])[hitIdx]?.rainfall_mm ?? 0);
       const nextDay = (days || [])[hitIdx + 1];
       const projectedNext = (scenarioWithoutIrrigation || [])[hitIdx + 1];
       const needed = netIrrigationNeeded(target, p.available_water_mm, (days || [])[hitIdx],
-        projectedNext ? { etc_mm: projectedNext.etc_mm } : nextDay);
+        projectedNext ? { etc_mm: projectedNext.profile_loss_mm ?? projectedNext.etc_mm } : nextDay);
       // Un faltante menor a medio mm es ruido de redondeo: el riego ya
       // programado cubre la recarga y ese cruce no genera recomendación.
       if (needed > 0.5) {

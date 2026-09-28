@@ -5,7 +5,7 @@ import { energyService } from './energyService';
 import { irrigationRecommendationService } from './irrigationRecommendationService';
 import { lotWaterStateService } from './lotWaterStateService';
 import { runUsefulWaterScenario } from './engine/waterBalanceEngine';
-import { forecastDrydownFactor } from './soilResponse';
+import { forecastDrydownFactor, probeProfileLoss } from './soilResponse';
 
 // ============================================================
 // waterForecastService — orquestador del módulo Water & Energy.
@@ -33,13 +33,17 @@ const round1 = n => Math.round(n * 10) / 10;
 
 // Insumos diarios: el Kc se recalcula para cada fecha según cultivo,
 // edad del lote, etapa fenológica y desfase de campaña configurado.
-function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1, postRiseFactor = 1, model = null, scheduledByDate = new Map(), recentRecharge = false) {
+function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1, postRiseFactor = 1, model = null, scheduledByDate = new Map(), recentRecharge = false, referenceKcs = {}, meanEto = null) {
   let rechargeAt = recentRecharge ? 0 : null;
   const firstDate = weatherDays?.[0]?.date;
   const asOfDay = firstDate ? new Date(Date.parse(`${firstDate}T12:00:00Z`) - 86400000).toISOString().slice(0, 10) : null;
   return (weatherDays || []).map((w, index) => {
     const kc = kcService.kcForLotDate(lot, w.date, profile);
     const factor = forecastDrydownFactor(model, index, rechargeAt, asOfDay);
+    const profileLoss = kc != null ? probeProfileLoss(model, {
+      eto: w.eto_mm ?? 0, kc, referenceKc: referenceKcs[w.date],
+      forecastFactor: factor, meanEto,
+    }) : null;
     // La recarga prevista se refleja en el punto del día siguiente;
     // el primer descenso posterior inicia otra fase del ciclo aprendido.
     if ((w.effective_rainfall_mm ?? w.rainfall_mm ?? 0) > 0 || (scheduledByDate.get(w.date) ?? 0) > 0) {
@@ -50,6 +54,7 @@ function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1, post
       eto_mm: w.eto_mm ?? 0,
       kc: kc != null ? kc : null,
       etc_mm: kc != null ? round1((w.eto_mm ?? 0) * kc) : 0,
+      profile_loss_mm: profileLoss,
       rainfall_mm: w.rainfall_mm ?? 0,
       effective_rainfall_mm: w.effective_rainfall_mm ?? round1((w.rainfall_mm ?? 0) * 0.7),
       etc_correction_factor: etcCorrectionFactor * factor,
@@ -154,7 +159,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const kc_missing = kc == null;
   const scheduledByDate = new Map((curve.events?.scheduled || []).map(e => [e.date, e.mm]));
   const baseDays = forecastInputs(weatherDays, lot, profile,
-    curve.etc_correction_factor ?? 1, curve.post_rise_factor ?? 1, model, new Map(), curve.recent_recharge);
+    curve.etc_correction_factor ?? 1, curve.post_rise_factor ?? 1, model, new Map(), curve.recent_recharge, curve.reference_kc_by_date, curve.garita_mean_eto);
   const forecast_quality = forecastQuality(curve, weatherDays, kc_missing);
   const config = {
     total_available_water_capacity_mm: curve.config.total_available_water_capacity_mm,
@@ -165,7 +170,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   // (solo lluvia − ETc), sin ningún riego futuro.
   const scenarioNoIrrigation = runUsefulWaterScenario(curve.currentUsefulMm, config, baseDays, curve.recent_recharge);
   const scheduledBaseDays = forecastInputs(weatherDays, lot, profile,
-    curve.etc_correction_factor ?? 1, curve.post_rise_factor ?? 1, model, scheduledByDate, curve.recent_recharge);
+    curve.etc_correction_factor ?? 1, curve.post_rise_factor ?? 1, model, scheduledByDate, curve.recent_recharge, curve.reference_kc_by_date, curve.garita_mean_eto);
   const days = scheduledBaseDays.map(d => ({
     ...d,
     irrigation_mm: scheduledByDate.get(d.date) ?? 0,
@@ -187,7 +192,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const scenarioWithIrrigation = recommendation
     ? runUsefulWaterScenario(curve.currentUsefulMm, config,
       forecastInputs(weatherDays, lot, profile, curve.etc_correction_factor ?? 1,
-        curve.post_rise_factor ?? 1, model, recommendedByDate, curve.recent_recharge)
+        curve.post_rise_factor ?? 1, model, recommendedByDate, curve.recent_recharge, curve.reference_kc_by_date, curve.garita_mean_eto)
         .map(d => ({ ...d, irrigation_mm: recommendedByDate.get(d.date) ?? 0 })),
       curve.recent_recharge)
     : scenarioScheduled;

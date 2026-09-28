@@ -36,11 +36,12 @@ export function stepUsefulWaterDay(availableMm, config, day) {
   const etcFactor = (day.etc_correction_factor ?? 1)
     * (day.after_recharge ? (day.post_rise_factor ?? 1) : 1);
   const etcMm = round1(rawEtcMm * etcFactor);
+  const profileLossMm = day.profile_loss_mm != null ? round1(day.profile_loss_mm) : etcMm;
   // Solo la fracción efectiva de la lluvia entra al perfil. El total
   // pronosticado se conserva aparte para mostrarlo en la interfaz.
   const rainMm = day.effective_rainfall_mm ?? day.rainfall_mm ?? 0;
   const irrMm = day.irrigation_mm || 0;
-  let next = availableMm + rainMm + irrMm - etcMm;
+  let next = availableMm + rainMm + irrMm - profileLossMm;
   let drainageMm = 0;
   const taw = config.total_available_water_capacity_mm;
   if (taw != null && next > taw) {
@@ -52,7 +53,7 @@ export function stepUsefulWaterDay(availableMm, config, day) {
     next = 0;
     belowWilting = true;
   }
-  return { availableMm: round1(next), drainageMm, belowWilting, etcMm };
+  return { availableMm: round1(next), drainageMm, belowWilting, etcMm: day.profile_loss_mm != null ? round1(rawEtcMm) : etcMm, profileLossMm };
 }
 
 // Escenario de N días en mm de agua útil.
@@ -88,6 +89,7 @@ export function runUsefulWaterScenario(startMm, config, days, recentRecharge = f
       eto_mm: round1(d.eto_mm || 0),
       kc: d.kc != null ? d.kc : null,
       etc_mm: r.etcMm,
+      profile_loss_mm: r.profileLossMm,
       rainfall_mm: round1(d.rainfall_mm ?? 0),
       effective_rainfall_mm: round1(d.effective_rainfall_mm ?? 0),
       irrigation_mm: round1(d.irrigation_mm || 0),

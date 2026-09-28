@@ -149,6 +149,7 @@ export default function MoistureChart({ detail }) {
           {(forecastDay?.irrigation_mm || historicIrrigation) > 0 && <span>Riego: <b>{mm(forecastDay?.irrigation_mm ?? historicIrrigation)}</b></span>}
           {isFuture && recommendedIrrigation > (forecastDay?.irrigation_mm || 0) && <span>Riego recomendado: <b>{mm(recommendedIrrigation - (forecastDay?.irrigation_mm || 0))}</b></span>}
           {forecastDay?.etc_mm != null && <span>ETc: <b>{mm(forecastDay.etc_mm)}</b></span>}
+          {forecastDay?.profile_loss_mm != null && <span>Bajada calculada del perfil: <b>{mm(forecastDay.profile_loss_mm)}</b></span>}
         </div>
         <p className="mt-2 text-[11px] text-slate-500">En la proyección, la lluvia y el riego de este día se reflejan en el valor del día siguiente.</p>
       </div>
