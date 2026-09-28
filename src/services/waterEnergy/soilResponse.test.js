@@ -1,17 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { drydownFactor } from './soilResponse.js';
+import { drydownFactor, afterRiseFactor } from './soilResponse.js';
 
 const model = { calibration_diagnostics: {
-  method: 'probe_history_relative_drydown', depletion_sample_count: 50,
-  relative_drydown_factor: 0.8,
+  method: 'probe_history_rise_and_fall', depletion_sample_count: 5,
+  recharge_sample_count: 2, trend_factor: 0.8, post_rise_factor: 1.1,
 } };
 
-test('modula solo la demanda de lotes secos, sin imponer humedad de la sonda', () => {
-  assert.equal(drydownFactor(model, 80, 100), 1);
-  assert.equal(drydownFactor(model, 45, 100), 0.9);
-  assert.equal(drydownFactor(model, 20, 100), 0.8);
-  assert.equal(drydownFactor(null, 20, 100), 1);
-  assert.equal(drydownFactor(model, 20, null), 1);
-  assert.equal(drydownFactor({ calibration_diagnostics: { ...model.calibration_diagnostics, depletion_sample_count: 8 } }, 20, 100), 1);
+test('aplica tendencias y dinámica después de la recarga sin percentiles húmedo/seco', () => {
+  assert.equal(drydownFactor(model), 0.8);
+  assert.equal(afterRiseFactor(model), 1.1);
+  assert.equal(drydownFactor(null), 1);
+  assert.equal(afterRiseFactor(null), 1);
+  assert.equal(drydownFactor({ calibration_diagnostics: { ...model.calibration_diagnostics, method: 'probe_history_relative_drydown' } }), 1);
 });
