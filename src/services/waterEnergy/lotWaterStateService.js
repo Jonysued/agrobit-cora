@@ -239,7 +239,7 @@ async function computeLot(lot, ctx, withHistory) {
     // Kc propio del lote para ese día: cultivo + edad + fenología.
     const kc = kcService.kcForLotDate(lot, d, profile);
     const etc = kc != null && eto != null
-      ? round1(eto * kc * etcCorrectionFactor * drydownFactor(model)
+      ? round1(eto * kc * etcCorrectionFactor * drydownFactor(model, d)
         * (previousStepHadRecharge ? afterRiseFactor(model) : 1)) : 0;
     let next = water + irrPrev + rain - etc;
     if (taw != null && next > taw) next = taw; // excedente = drenaje

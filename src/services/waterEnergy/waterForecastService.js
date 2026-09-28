@@ -5,6 +5,7 @@ import { energyService } from './energyService';
 import { irrigationRecommendationService } from './irrigationRecommendationService';
 import { lotWaterStateService } from './lotWaterStateService';
 import { runUsefulWaterScenario } from './engine/waterBalanceEngine';
+import { forecastDrydownFactor } from './soilResponse';
 
 // ============================================================
 // waterForecastService — orquestador del módulo Water & Energy.
@@ -32,8 +33,8 @@ const round1 = n => Math.round(n * 10) / 10;
 
 // Insumos diarios: el Kc se recalcula para cada fecha según cultivo,
 // edad del lote, etapa fenológica y desfase de campaña configurado.
-function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1, postRiseFactor = 1) {
-  return (weatherDays || []).map(w => {
+function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1, postRiseFactor = 1, model = null) {
+  return (weatherDays || []).map((w, index) => {
     const kc = kcService.kcForLotDate(lot, w.date, profile);
     return {
       date: w.date,
@@ -42,7 +43,7 @@ function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1, post
       etc_mm: kc != null ? round1((w.eto_mm ?? 0) * kc) : 0,
       rainfall_mm: w.rainfall_mm ?? 0,
       effective_rainfall_mm: w.effective_rainfall_mm ?? round1((w.rainfall_mm ?? 0) * 0.7),
-      etc_correction_factor: etcCorrectionFactor,
+      etc_correction_factor: etcCorrectionFactor * forecastDrydownFactor(model, index),
       post_rise_factor: postRiseFactor,
     };
   });
@@ -144,7 +145,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const kc_missing = kc == null;
   const scheduledByDate = new Map((curve.events?.scheduled || []).map(e => [e.date, e.mm]));
   const baseDays = forecastInputs(weatherDays, lot, profile,
-    (curve.etc_correction_factor ?? 1) * (curve.soil_response_factor ?? 1), curve.post_rise_factor ?? 1);
+    curve.etc_correction_factor ?? 1, curve.post_rise_factor ?? 1, model);
   const forecast_quality = forecastQuality(curve, weatherDays, kc_missing);
   const config = {
     total_available_water_capacity_mm: curve.config.total_available_water_capacity_mm,

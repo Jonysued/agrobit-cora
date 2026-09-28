@@ -2,7 +2,7 @@
 // Calibración diaria a partir de TODO el historial disponible de la sonda.
 // No presupone dónde está instalada: el vínculo ya está en soil_profiles.
 import { serviceClient } from './backend.ts';
-import { dailyProbeProfile, estimateProbeDynamics } from './soilCalibrationMath.js';
+import { probeProfileSnapshots, estimateProbeDynamics } from './soilCalibrationMath.js';
 import { aggregateGaritaObservations } from '../../../src/services/waterEnergy/garitaWeather.js';
 
 const PAGE_SIZE = 1000;
@@ -59,8 +59,10 @@ export async function calibrateAllSoilModels() {
       if (channelError) throw new Error(channelError.message);
       const readings = await pages('sensor_readings', 'id,timestamp,probe_channel_id,value',
         query => query.eq('probe_id', probe.id));
-      const days = dailyProbeProfile(channels, readings);
-      const estimated = estimateProbeDynamics(days, weather);
+      const snapshots = probeProfileSnapshots(channels, readings);
+      const byDay = new Map(snapshots.map(snapshot => [snapshot.day, snapshot]));
+      const days = [...byDay.values()];
+      const estimated = estimateProbeDynamics(days, weather, snapshots);
       const attemptAt = new Date().toISOString();
       for (const model of matching) {
         const summary = {
