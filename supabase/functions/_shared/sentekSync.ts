@@ -46,9 +46,12 @@ export async function resolveProbeLotId(client, probe) {
 // `client` es un cliente de datos (usuario admin o service role).
 // `lotId` (opcional) es el lote efectivo resuelto por el llamador —
 // las lecturas lo registran como contexto.
-export async function syncSentekProbe(client, probe, lotId) {
+export async function syncSentekProbe(client, probe, lotId, { backfillDays = 0 } = {}) {
   const effectiveLotId = lotId || probe.lot_id || null;
-  const result = await fetchSentekReadings(probe, probe.last_reading_at);
+  const backfillSince = backfillDays > 0
+    ? new Date(Date.now() - Math.min(30, backfillDays) * 86400000).toISOString() : null;
+  const result = await fetchSentekReadings(probe, backfillSince || probe.last_reading_at,
+    { historical: Boolean(backfillSince) || !probe.last_reading_at });
   if (!result.ok) {
     await client.entities.SoilProbe.update(probe.id, { connection_status: result.status || 'error' });
     return { ok: false, status: result.status || 'error', message: result.message };
@@ -56,7 +59,7 @@ export async function syncSentekProbe(client, probe, lotId) {
   // Sin novedades: mensaje claro con la antigüedad del último dato
   // disponible en IrriMAX (guía al usuario hacia el logger si no reporta).
   const apiLastMs = result.rows.reduce((m, r) => Math.max(m, new Date(r.timestamp).getTime() || 0), 0);
-  const refMs = apiLastMs || (probe.last_reading_at ? new Date(probe.last_reading_at).getTime() : 0);
+  const refMs = Math.max(apiLastMs, probe.last_reading_at ? new Date(probe.last_reading_at).getTime() || 0 : 0);
   const staleDataMessage = () => {
     const when = refMs ? new Date(refMs).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
     const ageH = refMs ? Math.max(0, Math.round((Date.now() - refMs) / 3600000)) : null;
@@ -110,7 +113,19 @@ export async function syncSentekProbe(client, probe, lotId) {
     const timestamp = new Date(reading.timestamp).getTime();
     if (timestamp > (lastByChannel.get(reading.probe_channel_id) || 0)) lastByChannel.set(reading.probe_channel_id, timestamp);
   }
+  // Para el recupero histórico se insertan solamente lecturas ANTERIORES
+  // a la primera guardada de cada canal. La serie ya existente queda
+  // intacta y volver a ejecutar el recupero no duplica sus extremos.
+  const firstByChannel = new Map();
+  if (backfillSince) {
+    const uniqueChannels = [...new Map([...channels.values()].map(ch => [ch.id, ch])).values()];
+    await Promise.all(uniqueChannels.map(async ch => {
+      const oldest = await client.entities.SensorReading.filter({ probe_channel_id: ch.id }, 'timestamp', 1);
+      firstByChannel.set(ch.id, oldest[0] ? new Date(oldest[0].timestamp).getTime() : Infinity);
+    }));
+  }
   const payload = [];
+  const seen = new Set();
   let maxTs = 0;
   for (const row of result.rows) {
     const t = new Date(row.timestamp).getTime();
@@ -120,7 +135,12 @@ export async function syncSentekProbe(client, probe, lotId) {
       const key = `${measurement.sensor_type}|${measurement.depth_cm}|${measurement.external_channel_id}`;
       const ch = channels.get(key);
       if (!ch) continue;
-      if (t <= (lastByChannel.get(ch.id) || 0)) continue;
+      const keyReading = `${ch.id}|${row.timestamp}`;
+      if (seen.has(keyReading)) continue;
+      const isNewer = t > (lastByChannel.get(ch.id) || 0);
+      const isHistorical = Boolean(backfillSince) && t < (firstByChannel.get(ch.id) ?? Infinity);
+      if (!isNewer && !isHistorical) continue;
+      seen.add(keyReading);
       const rec = {
         probe_id: probe.id,
         probe_channel_id: ch.id,
@@ -146,7 +166,7 @@ export async function syncSentekProbe(client, probe, lotId) {
     ingested += batch.length;
   }
   if (maxTs) {
-    const last_reading_at = new Date(maxTs).toISOString();
+    const last_reading_at = new Date(refMs).toISOString();
     const connection_status = probeConnectionStatus(last_reading_at);
     await client.entities.SoilProbe.update(probe.id, {
       connection_status,
@@ -155,6 +175,7 @@ export async function syncSentekProbe(client, probe, lotId) {
     return {
       ok: true,
       ingested,
+      historical: Boolean(backfillSince),
       timestamps: result.rows.length,
       channels: definitions.length,
       connection_status,

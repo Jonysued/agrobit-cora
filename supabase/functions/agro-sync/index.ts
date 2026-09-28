@@ -10,7 +10,7 @@ const cors = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
 };
 const json = (body, status = 200) => Response.json(body, { status, headers: cors });
-const cronActions = new Set(['syncAllSentekProbes', 'syncAllWeatherStations', 'syncAllIntegrations', 'calibrateSoilModels']);
+const cronActions = new Set(['syncAllSentekProbes', 'syncAllWeatherStations', 'syncAllIntegrations', 'calibrateSoilModels', 'backfillSentek30Days']);
 
 async function syncAllWeatherStations() {
   const stations = await serviceBackend.entities.WeatherStation.list('-created_date', 1000);
@@ -44,6 +44,13 @@ async function syncAllSentekProbes() {
 
 async function handle(action, payload) {
   if (action === 'calibrateSoilModels') return calibrateAllSoilModels();
+  if (action === 'backfillSentek30Days') {
+    if (!payload.probe_id) return { ok: false, error: 'Falta probe_id' };
+    const probe = await serviceBackend.entities.SoilProbe.get(payload.probe_id);
+    if (probe.provider !== 'sentek' || probe.active === false) return { ok: false, error: 'Sonda Sentek inactiva o no encontrada' };
+    const lotId = await resolveProbeLotId(serviceBackend, probe);
+    return { probe: probe.name, ...(await syncSentekProbe(serviceBackend, probe, lotId, { backfillDays: 30 })) };
+  }
   if (action === 'syncAllWeatherStations') return syncAllWeatherStations();
   if (action === 'syncAllSentekProbes') return syncAllSentekProbes();
   if (action === 'syncAllIntegrations') {

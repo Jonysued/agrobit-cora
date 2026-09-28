@@ -146,22 +146,21 @@ export async function testSentekProbe(probe) {
   };
 }
 
-// ---- Lecturas de una sonda desde una fecha (o 14 días por defecto).
+// ---- Lecturas de una sonda desde una fecha (30 días en el alta inicial).
 // Devuelve [{timestamp, measurements: [{sensor_type, depth_cm, unit, value}]}].
-export async function fetchSentekReadings(probe, fromIso) {
+export async function fetchSentekReadings(probe, fromIso, { historical = false } = {}) {
   const test = await testSentekProbe(probe);
   if (!test.ok) return test;
   const key = getKey();
   const pad = n => String(n).padStart(2, "0");
   // Ventana incremental: desde la última lectura menos 2 h de margen.
-  // Primera importación acotada a 7 días: alcanza para inicializar los gráficos
-  // sin exceder el tiempo máximo de la Edge Function con históricos masivos.
-  const fromMs = (fromIso ? new Date(fromIso).getTime() : Date.now() - 7 * 86400000) - 2 * 3600000;
+  // Primera importación: un mes. Las siguientes siguen siendo incrementales.
+  const fromMs = (fromIso ? new Date(fromIso).getTime() : Date.now() - 30 * 86400000) - 2 * 3600000;
   // Hora local del sitio (UTC-3): componentes de pared locales de un instante UTC.
   const local = new Date(fromMs - 3 * 3600000);
   const from = `${local.getUTCFullYear()}${pad(local.getUTCMonth() + 1)}${pad(local.getUTCDate())}${pad(local.getUTCHours())}${pad(local.getUTCMinutes())}${pad(local.getUTCSeconds())}`;
   try {
-    const res = await fetchWithRetry(`${API}?cmd=getreadings&key=${encodeURIComponent(key)}&name=${encodeURIComponent(probe.external_device_id)}&from=${from}`, 20000, 2);
+    const res = await fetchWithRetry(`${API}?cmd=getreadings&key=${encodeURIComponent(key)}&name=${encodeURIComponent(probe.external_device_id)}&from=${from}`, historical ? 45000 : 20000, 2);
     if (!res.ok) {
       return { ok: false, status: "error", message: `IrriMAX Live respondió con código ${res.status} al pedir las lecturas.` };
     }
