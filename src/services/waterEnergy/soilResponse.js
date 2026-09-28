@@ -25,23 +25,32 @@ export function forecastDrydownFactor(model, dayIndex, rechargeAt = null, asOfDa
   const currentPhase = Number(data?.current_drydown_phase) || 0;
   const phase = rechargeAt != null && dayIndex >= rechargeAt
     ? dayIndex - rechargeAt + 1 : currentPhase + dayIndex + 1;
-  const learnedPhase = cycle?.find(entry => entry.day === phase && entry.samples >= 2);
+  const learnedPhase = cycle?.find(entry => entry.day === phase && entry.samples > 0);
+  const sameCycle = rechargeAt == null && currentPhase > 0 && asOfDay === data?.last_probe_day;
+  const current = cycle?.find(entry => entry.day === currentPhase && entry.samples > 0);
+  const recent = data?.recent_24h_factor;
   if (learnedPhase && Number.isFinite(learnedPhase.factor)) {
+    // Una sola repetición también aporta información, con menos peso
+    // que una fase observada en varios ciclos de la misma sonda.
+    const typical = learnedPhase.samples >= 2 ? learnedPhase.factor
+      : (learnedPhase.factor + baseline) / 2;
     // La mediana describe la forma del ciclo, pero el episodio actual
     // puede ser mucho más intenso. Continuar su amplitud durante ese
     // mismo ciclo evita un salto artificial al comenzar el pronóstico.
     // Una recarga propia del lote inicia un ciclo nuevo de amplitud típica.
-    const first = cycle.find(entry => entry.day === 1 && entry.samples >= 2);
-    const recent = data?.recent_24h_factor;
-    const sameCycle = rechargeAt == null && currentPhase > 0 && asOfDay === data?.last_probe_day;
-    if (sameCycle && first && Number.isFinite(recent) && first.factor > 0) {
-      const intensity = Math.max(0.7, Math.min(2, recent / first.factor));
-      return Math.round(Math.max(0.7, Math.min(3, learnedPhase.factor * intensity)) * 100) / 100;
+    if (sameCycle && current && Number.isFinite(recent) && current.factor > 0) {
+      const intensity = Math.max(0.7, Math.min(2, recent / current.factor));
+      return Math.round(Math.max(0.7, Math.min(3, typical * intensity)) * 100) / 100;
     }
-    return learnedPhase.factor;
+    return Math.round(typical * 100) / 100;
   }
-  // Sin suficientes ciclos para esta fase se usa la tendencia de ESA
-  // sonda, en vez de imponer una vuelta lineal arbitraria en cinco días.
+  // Sin observaciones para esta fase se usa la tendencia de ESA
+  // sonda. Si el episodio actual sigue activo, su efecto se atenúa
+  // gradualmente hasta que haya una fase histórica o una recarga.
+  if (sameCycle && Number.isFinite(recent)) {
+    return Math.round(Math.max(0.7, Math.min(3,
+      baseline + (recent - baseline) * (0.65 ** (dayIndex + 1)))) * 100) / 100;
+  }
   return baseline;
 }
 
