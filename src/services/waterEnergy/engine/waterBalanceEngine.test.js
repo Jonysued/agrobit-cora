@@ -29,6 +29,16 @@ test('aplica la corrección observada sobre ETc una sola vez', () => {
   assert.equal(result.availableMm, 95);
 });
 
+test('descuenta la bajada aprendida del perfil y expone por separado ETc del cultivo', () => {
+  const result = stepUsefulWaterDay(100, config, {
+    eto_mm: 5.2, kc: 0.137, etc_mm: 0.7,
+    profile_loss_mm: 6.5, etc_correction_factor: 2.92,
+  });
+  assert.equal(result.etcMm, 0.7);
+  assert.equal(result.profileLossMm, 6.5);
+  assert.equal(result.availableMm, 93.5);
+});
+
 test('la lluvia y el riego del día X ingresan en X+1', () => {
   const scenario = runUsefulWaterScenario(100, config, [
     { date: '2026-09-24', eto_mm: 5, kc: 1, rainfall_mm: 10, effective_rainfall_mm: 7, irrigation_mm: 8 },
