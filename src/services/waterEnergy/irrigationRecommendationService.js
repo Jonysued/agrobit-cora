@@ -23,7 +23,7 @@ import { netIrrigationNeeded } from './engine/recommendationMath';
 const round1 = n => Math.round(n * 10) / 10;
 
 export const irrigationRecommendationService = {
-  withRecommendation(config, lot, startMm, days, scenarioWithoutIrrigation, efficiency) {
+  withRecommendation(config, lot, startMm, days, scenarioWithoutIrrigation, efficiency, recentRecharge = false) {
     const threshold = config.recharge_threshold_mm;
     const target = config.target_water_mm;
     if (threshold == null || target == null) {
@@ -48,7 +48,9 @@ export const irrigationRecommendationService = {
       const irrHit = round1((days || [])[hitIdx]?.irrigation_mm || 0);
       const rainHit = round1((days || [])[hitIdx]?.effective_rainfall_mm ?? (days || [])[hitIdx]?.rainfall_mm ?? 0);
       const nextDay = (days || [])[hitIdx + 1];
-      const needed = netIrrigationNeeded(target, p.available_water_mm, (days || [])[hitIdx], nextDay);
+      const projectedNext = (scenarioWithoutIrrigation || [])[hitIdx + 1];
+      const needed = netIrrigationNeeded(target, p.available_water_mm, (days || [])[hitIdx],
+        projectedNext ? { etc_mm: projectedNext.etc_mm } : nextDay);
       // Un faltante menor a medio mm es ruido de redondeo: el riego ya
       // programado cubre la recarga y ese cruce no genera recomendación.
       if (needed > 0.5) {
@@ -82,7 +84,7 @@ export const irrigationRecommendationService = {
     // a lo ya programado ese día (grossMm × eff = neededMm).
     const scenarioWithIrrigation = runUsefulWaterScenario(startMm, config, days.map(d => (
       d.date === hit.date ? { ...d, irrigation_mm: round1((d.irrigation_mm || 0) + deliveredNetMm) } : d
-    )));
+    )), recentRecharge);
     return { recommendation, scenarioWithIrrigation };
   },
 
