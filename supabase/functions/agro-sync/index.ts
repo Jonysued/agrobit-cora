@@ -3,13 +3,14 @@ import { testSentekProbe } from '../_shared/sentekAdapters.ts';
 import { probeConnectionStatus, resolveProbeLotId, syncSentekProbe } from '../_shared/sentekSync.ts';
 import { testStation } from '../_shared/weatherAdapters.ts';
 import { syncWeatherStation, weatherConnectionStatus } from '../_shared/weatherSync.ts';
+import { calibrateAllSoilModels } from '../_shared/soilCalibration.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
 };
 const json = (body, status = 200) => Response.json(body, { status, headers: cors });
-const cronActions = new Set(['syncAllSentekProbes', 'syncAllWeatherStations', 'syncAllIntegrations']);
+const cronActions = new Set(['syncAllSentekProbes', 'syncAllWeatherStations', 'syncAllIntegrations', 'calibrateSoilModels']);
 
 async function syncAllWeatherStations() {
   const stations = await serviceBackend.entities.WeatherStation.list('-created_date', 1000);
@@ -42,6 +43,7 @@ async function syncAllSentekProbes() {
 }
 
 async function handle(action, payload) {
+  if (action === 'calibrateSoilModels') return calibrateAllSoilModels();
   if (action === 'syncAllWeatherStations') return syncAllWeatherStations();
   if (action === 'syncAllSentekProbes') return syncAllSentekProbes();
   if (action === 'syncAllIntegrations') {
@@ -109,7 +111,7 @@ Deno.serve(async req => {
     if (cron && !result.ok) {
       console.error('[agro-sync] Falló una sincronización programada', {
         action,
-        probes: (result.synced || result.sentek?.synced || [])
+        probes: (result.synced || result.sentek?.synced || result.calibrated || [])
           .filter(item => !item.ok)
           .map(item => ({ probe: item.probe, status: item.status, message: item.message })),
       });

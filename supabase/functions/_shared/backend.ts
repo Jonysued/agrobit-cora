@@ -5,6 +5,8 @@ const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const client = createClient(url, serviceRoleKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
+// Consultas paginadas de calibración (la API genérica limita cada lista a 1000 filas).
+export const serviceClient = client;
 
 const tables: Record<string, string> = {
   Campaign: 'campaigns', EnergyTariff: 'energy_tariffs', Farm: 'farms',
