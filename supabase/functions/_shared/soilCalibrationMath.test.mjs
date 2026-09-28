@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dailyProbeProfile, estimateCalibration } from './soilCalibrationMath.js';
+import { dailyProbeProfile, estimateProbeDynamics } from './soilCalibrationMath.js';
 
 test('suma el perfil medido completo y descarta una lectura incompleta', () => {
   const channels = [
@@ -20,27 +20,21 @@ test('suma el perfil medido completo y descarta una lectura incompleta', () => {
   ]);
 });
 
-test('aprende recarga y demanda solo con suficientes eventos limpios', () => {
+test('aprende la respuesta relativa del historial sin ubicación ni cultivo de la sonda', () => {
   const days = [];
   const weather = new Map();
-  const irrigation = new Map();
   let mm = 300;
-  for (let d = 1; d <= 30; d++) {
-    const day = `2026-09-${String(d).padStart(2, '0')}`;
-    if ([5, 15, 25].includes(d)) {
-      irrigation.set(day, 20);
-      mm += 16;
-    } else mm -= 2;
+  for (let n = 0; n < 80; n++) {
+    const day = new Date(Date.UTC(2026, 0, n + 1)).toISOString().slice(0, 10);
+    if (n === 39) mm += 80; // recarga observada, sin saber cuántos mm se aplicaron
+    else mm -= n < 40 ? 1 : 2;
     days.push({ day, mm });
-    weather.set(day, { rain: 0, eto: 5 });
+    weather.set(day, { rain: 0, eto: 4 });
   }
-  const result = estimateCalibration(days, weather, irrigation, () => 0.5);
-  assert.equal(result.recharge_sample_count, 3);
-  assert.equal(result.recharge_efficiency, 0.8);
-  assert.equal(result.etc_correction_factor, 0.8);
-  assert.equal(result.depletion_rate_mm_day, 2);
-  weather.set('2026-09-16', { rain: 5, eto: 5 });
-  const contaminated = estimateCalibration(days, weather, irrigation, () => 0.5);
-  assert.equal(contaminated.recharge_efficiency, null);
-  assert.equal(estimateCalibration(days, weather, new Map(), null).etc_correction_factor, null);
+  const learned = estimateProbeDynamics(days, weather);
+  assert.equal(learned.profile_days, 80);
+  assert.ok(learned.depletion_sample_count >= 70);
+  assert.equal(learned.relative_drydown_factor, 0.7);
+  assert.equal(learned.depletion_rate_mm_day, 2);
+  assert.equal(estimateProbeDynamics(days.slice(0, 8), weather).relative_drydown_factor, null);
 });

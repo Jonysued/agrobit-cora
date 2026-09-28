@@ -42,43 +42,48 @@ export function dailyProbeProfile(channels, readings) {
   return [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
 }
 
-export function estimateCalibration(days, weather, irrigation, kcForDay) {
-  const byDay = new Map(days.map(row => [row.day, row.mm]));
-  const eventDays = new Set([...irrigation].filter(([, mm]) => mm > 0).map(([day]) => day));
-  for (const [day, item] of weather) if (item.rain > 0) eventDays.add(day);
-  const recharge = [];
-  for (const [day, applied] of irrigation) {
-    if (!(applied > 0) || !byDay.has(day) || (weather.get(day)?.rain || 0) > 0) continue;
-    const previous = days.find(row => nextDay(row.day) === day);
-    if (!previous) continue;
-    const following = [day, nextDay(day), nextDay(nextDay(day))];
-    if (following.slice(1).some(d => eventDays.has(d))) continue;
-    const after = following.map(d => byDay.get(d)).filter(v => v != null);
-    if (!after.length) continue;
-    const rise = Math.max(...after) - previous.mm;
-    if (rise > 0 && rise <= applied * 1.15) recharge.push(Math.min(1, rise / applied));
+// La respuesta RELATIVA de un perfil húmedo frente a uno seco puede
+// transferirse a lotes vinculados sin conocer la ubicación física ni el
+// cultivo de la sonda. La tasa absoluta NO sustituye a ET0 × Kc del lote.
+export function estimateProbeDynamics(days, weather) {
+  const increases = new Set();
+  const valid = days.filter(d => Number.isFinite(d.mm));
+  const sorted = [...valid].sort((a, b) => a.mm - b.mm);
+  const lowBoundary = sorted[Math.floor(sorted.length * 0.3)]?.mm;
+  const highBoundary = sorted[Math.floor(sorted.length * 0.7)]?.mm;
+  const low = [];
+  const high = [];
+  const drops = [];
+  for (let i = 1; i < valid.length; i++) {
+    if (nextDay(valid[i - 1].day) !== valid[i].day) continue;
+    if (valid[i].mm - valid[i - 1].mm > 1) increases.add(valid[i].day);
   }
-  const depletion = [];
-  const factors = [];
-  for (let i = 1; i < days.length; i++) {
-    const previous = days[i - 1].day;
-    const day = days[i].day;
-    if (nextDay(previous) !== day || eventDays.has(previous) || eventDays.has(day)) continue;
-    const drop = days[i - 1].mm - days[i].mm;
+  for (let i = 1; i < valid.length; i++) {
+    const previous = valid[i - 1];
+    const current = valid[i];
+    if (nextDay(previous.day) !== current.day || increases.has(previous.day) || increases.has(current.day)) continue;
+    // Si no hay observación de Garita, el día no se considera limpio:
+    // podría haber llovido o la ET0 no ser comparable.
+    const today = weather.get(current.day);
+    const yesterday = weather.get(previous.day);
+    if (!today || !yesterday || today.rain > 0 || yesterday.rain > 0 || !(today.eto > 0)) continue;
+    const drop = previous.mm - current.mm;
     if (!(drop > 0 && drop < 10)) continue;
-    depletion.push(drop);
-    const eto = weather.get(day)?.eto;
-    const kc = kcForDay?.(day);
-    const ratio = eto > 0 && kc > 0 ? drop / (eto * kc) : null;
-    if (ratio != null && ratio >= 0.3 && ratio <= 2) factors.push(ratio);
+    drops.push(drop);
+    const normalized = drop / today.eto;
+    if (previous.mm <= lowBoundary) low.push(normalized);
+    if (previous.mm >= highBoundary) high.push(normalized);
   }
+  const enough = low.length >= 5 && high.length >= 5 && drops.length >= 20 && highBoundary > lowBoundary;
+  const relative = enough ? median(low) / median(high) : null;
   return {
-    profile_days: days.length,
-    recharge_sample_count: recharge.length,
-    depletion_sample_count: depletion.length,
-    etc_sample_count: factors.length,
-    recharge_efficiency: recharge.length >= 3 ? round(median(recharge), 2) : null,
-    depletion_rate_mm_day: depletion.length >= 5 ? round(median(depletion), 1) : null,
-    etc_correction_factor: factors.length >= 5 ? round(Math.max(0.5, Math.min(1.5, median(factors))), 2) : null,
+    profile_days: valid.length,
+    depletion_sample_count: drops.length,
+    low_storage_samples: low.length,
+    high_storage_samples: high.length,
+    depletion_rate_mm_day: drops.length >= 5 ? round(median(drops), 1) : null,
+    // Acotado: jamás reemplaza el Kc ni la ET0 de cada lote.
+    relative_drydown_factor: Number.isFinite(relative)
+      ? round(Math.max(0.7, Math.min(1.15, relative)), 2) : null,
   };
 }

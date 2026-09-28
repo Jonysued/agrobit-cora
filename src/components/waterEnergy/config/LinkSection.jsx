@@ -74,7 +74,7 @@ export default function LinkSection({ lots, profiles, probes, models, pumps, onC
           </table>
         </div>
       )}
-      <p className="mt-3 text-xs text-slate-500">Los modelos se evalúan automáticamente cada día. Solo se aplican parámetros con suficientes lecturas y eventos reales del sitio de referencia.</p>
+      <p className="mt-3 text-xs text-slate-500">Cada sonda aprende de todo su historial disponible. La vinculación transmite su respuesta relativa de secado; el cultivo, Kc y riegos siguen siendo propios de cada lote. Sin datos suficientes, no se aplica ajuste.</p>
     </ConfigPanel>
   );
 }

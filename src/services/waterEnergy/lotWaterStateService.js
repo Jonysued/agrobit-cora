@@ -4,6 +4,7 @@ import { kcService } from './kcService';
 import { soilWaterService, computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from './soilWaterService';
 import { soilBehaviorService } from './soilBehaviorService';
 import { selectGaritaStation, aggregateGaritaObservations } from './garitaWeather';
+import { drydownFactor } from './soilResponse';
 
 // ============================================================
 // lotWaterStateService — ESTADO HÍDRICO CALCULADO DE CADA LOTE.
@@ -236,7 +237,8 @@ async function computeLot(lot, ctx, withHistory) {
     if (obs.byDay.get(d)?.eto == null) estimatedEtoDays++;
     // Kc propio del lote para ese día: cultivo + edad + fenología.
     const kc = kcService.kcForLotDate(lot, d, profile);
-    const etc = kc != null && eto != null ? round1(eto * kc * etcCorrectionFactor) : 0;
+    const etc = kc != null && eto != null
+      ? round1(eto * kc * etcCorrectionFactor * drydownFactor(model, water, taw)) : 0;
     let next = water + irrPrev + rain - etc;
     if (taw != null && next > taw) next = taw; // excedente = drenaje
     if (next < 0) next = 0; // nunca baja del punto de marchitez
@@ -314,6 +316,7 @@ async function computeLot(lot, ctx, withHistory) {
     lot, profile, config, model,
     efficiency,
     etc_correction_factor: etcCorrectionFactor,
+    soil_response_factor: drydownFactor(model, water, taw),
     daily_change_mm,
     currentUsefulMm: water,
     currentStoredMm: round1(wilting + water),
@@ -330,6 +333,7 @@ async function computeLot(lot, ctx, withHistory) {
       model_status: model?.calibration_status || 'sin_modelo',
       recharge_efficiency_learned: model?.recharge_efficiency != null,
       etc_correction_learned: model?.etc_correction_factor != null,
+      relative_drydown_learned: model?.calibration_diagnostics?.relative_drydown_factor != null,
     },
     // Punto de partida de la curva (fecha + valor en escala de Suma de
     // perfil): el gráfico encuadra su ventana y marca este punto para

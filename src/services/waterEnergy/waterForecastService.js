@@ -142,7 +142,8 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const kc_source = kc_details.source;
   const kc_missing = kc == null;
   const scheduledByDate = new Map((curve.events?.scheduled || []).map(e => [e.date, e.mm]));
-  const baseDays = forecastInputs(weatherDays, lot, profile, curve.etc_correction_factor ?? 1);
+  const baseDays = forecastInputs(weatherDays, lot, profile,
+    (curve.etc_correction_factor ?? 1) * (curve.soil_response_factor ?? 1));
   const forecast_quality = forecastQuality(curve, weatherDays, kc_missing);
   const config = {
     total_available_water_capacity_mm: curve.config.total_available_water_capacity_mm,
