@@ -20,6 +20,7 @@ test('la proyección sigue las fases aprendidas por la sonda y reinicia tras una
     ...model.calibration_diagnostics, trend_factor: 0.88,
     recent_24h_factor: 2.9,
     daily_drydown_factors: [{ day: '2026-09-28', factor: 2.9 }],
+    last_probe_day: '2026-09-28',
     current_drydown_phase: 1,
     drydown_cycle: [
       { day: 1, factor: 2.7, samples: 4 },
@@ -35,5 +36,29 @@ test('la proyección sigue las fases aprendidas por la sonda y reinicia tras una
   assert.equal(forecastDrydownFactor(recent, 2, 2), 2.7);
   assert.equal(forecastDrydownFactor(recent, 3, 2), 1.4);
   assert.equal(forecastDrydownFactor(recent, 5), 0.88);
+  // La intensidad reciente modifica la forma aprendida del mismo
+  // episodio. Una recarga del lote la reinicia, y un dato viejo no la
+  // conserva artificialmente en el pronóstico.
+  assert.equal(forecastDrydownFactor(recent, 0, null, '2026-09-28'), 1.5);
+  assert.equal(forecastDrydownFactor(recent, 1, null, '2026-09-28'), 1.18);
+  assert.equal(forecastDrydownFactor(recent, 2, 2, '2026-09-28'), 2.7);
+  assert.equal(forecastDrydownFactor(recent, 0, null, '2026-09-29'), 1.4);
   assert.equal(afterRiseFactor(recent), 1);
+});
+
+test('BARNEA mantiene la intensidad observada al continuar el ciclo actual', () => {
+  const barnea = { calibration_diagnostics: {
+    method: 'probe_history_rise_and_fall', depletion_sample_count: 20,
+    last_probe_day: '2026-09-28', current_drydown_phase: 1,
+    recent_24h_factor: 2.92,
+    trend_factor: 0.88,
+    drydown_cycle: [
+      { day: 1, factor: 1.73, samples: 6 },
+      { day: 2, factor: 1.25, samples: 3 },
+      { day: 3, factor: 1.1, samples: 2 },
+    ],
+  } };
+  assert.equal(forecastDrydownFactor(barnea, 0, null, '2026-09-28'), 2.11);
+  assert.equal(forecastDrydownFactor(barnea, 1, null, '2026-09-28'), 1.86);
+  assert.equal(forecastDrydownFactor(barnea, 0, 0, '2026-09-28'), 1.73);
 });
