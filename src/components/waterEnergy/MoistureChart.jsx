@@ -101,6 +101,11 @@ export default function MoistureChart({ detail }) {
   const selectedValue = isFuture ? (selectedPoint?.[S] ?? selectedPoint?.[H]) : activeDay === today ? (selectedPoint?.[H] ?? state.total_profile_water_mm) : selectedPoint?.[H];
   const previousValue = previousPoint && (isFuture && previousPoint.t > todayTs ? (previousPoint[S] ?? previousPoint[H]) : previousPoint[H]);
   const delta = selectedValue != null && previousValue != null ? Math.round((selectedValue - previousValue) * 10) / 10 : null;
+  const probeData = detail.model?.calibration_diagnostics;
+  const probeName = detail.model?.name?.replace(/^Modelo de suelo ·\s*/, '') || 'sonda vinculada';
+  const probeDay = probeData?.daily_drydown_factors?.find(p => p.day === activeDay);
+  const probeChange = probeDay && Number.isFinite(probeDay.fall_mm) ? -probeDay.fall_mm : null;
+  const probeLastDay = probeData?.last_probe_day;
   const forecastDay = (detail.scenarioWithoutIrrigation || []).find(p => p.date === activeDay);
   const recommendedIrrigation = (detail.scenarioWithIrrigation || []).find(p => p.date === activeDay)?.irrigation_mm;
   const historicRain = (detail.events?.rain || []).find(e => e.date === activeDay)?.mm;
@@ -152,6 +157,15 @@ export default function MoistureChart({ detail }) {
           {forecastDay?.profile_loss_mm != null && <span>Bajada calculada del perfil: <b>{mm(forecastDay.profile_loss_mm)}</b></span>}
         </div>
         <p className="mt-2 text-[11px] text-slate-500">En la proyección, la lluvia y el riego de este día se reflejan en el valor del día siguiente.</p>
+        {probeLastDay && !isFuture && (
+          <p className="mt-2 border-t border-slate-200 pt-2 text-xs text-slate-600">
+            {probeChange != null
+              ? <>Sonda {probeName} el mismo día: <b>{probeChange > 0 ? '+' : ''}{mm(probeChange)}</b>. El lote ajusta esa bajada por su cultivo y suma solo sus riegos registrados y la lluvia.</>
+              : activeDay > probeLastDay
+                ? <>Sonda {probeName} sin lectura desde el {fmtTip(dayTs(probeLastDay))}. La bajada de este lote es una estimación, no una medición nueva.</>
+                : <>Sin comparación diaria completa de la sonda {probeName} para esta fecha.</>}
+          </p>
+        )}
       </div>
       <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
         {rechargeMm != null && <span><i className="mr-1.5 inline-block w-4 align-middle" style={{ borderTop: '2px dashed #ec407a' }} />Recarga {mm(rechargeMm)}</span>}
