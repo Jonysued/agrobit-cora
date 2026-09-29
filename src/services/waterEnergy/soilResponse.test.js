@@ -42,7 +42,8 @@ test('la proyección sigue las fases aprendidas por la sonda y reinicia tras una
   assert.equal(forecastDrydownFactor(recent, 0, null, '2026-09-28'), 1.5);
   assert.equal(forecastDrydownFactor(recent, 1, null, '2026-09-28'), 1.18);
   assert.equal(forecastDrydownFactor(recent, 2, 2, '2026-09-28'), 2.7);
-  assert.equal(forecastDrydownFactor(recent, 0, null, '2026-09-29'), 1.4);
+  assert.equal(forecastDrydownFactor(recent, 0, null, '2026-09-29'), 1.18);
+  assert.equal(forecastDrydownFactor(recent, 0, null, '2026-10-02'), 0.88);
   assert.equal(afterRiseFactor(recent), 1);
 });
 
@@ -60,6 +61,13 @@ test('BARNEA mantiene la intensidad observada al continuar el ciclo actual', () 
   } };
   assert.equal(forecastDrydownFactor(barnea, 0, null, '2026-09-28'), 2.11);
   assert.equal(forecastDrydownFactor(barnea, 1, null, '2026-09-28'), 1.86);
+  // Si no llega la lectura del 29, el lote sigue el segundo día del
+  // episodio observado. El pronóstico del 30 continúa en el tercero.
+  assert.equal(forecastDrydownFactor(barnea, 0, null, '2026-09-29'), 1.86);
+  assert.equal(probeProfileLoss({ calibration_diagnostics: {
+    ...barnea.calibration_diagnostics, depletion_rate_mm_day: 3,
+  } }, { date: '2026-09-29', eto: 5, kc: 0.55, referenceKc: 0.55,
+    meanEto: 5, forecastFactor: forecastDrydownFactor(barnea, 0, null, '2026-09-28') }), 6.3);
   assert.equal(forecastDrydownFactor(barnea, 0, 0, '2026-09-28'), 1.73);
 });
 
@@ -86,7 +94,7 @@ test('una fase actual sin continuación aprendida se atenúa; la recarga propia 
   assert.equal(forecastDrydownFactor(probe, 0, null, '2026-09-28'), 1.53);
   assert.equal(forecastDrydownFactor(probe, 1, null, '2026-09-28'), 1.35);
   assert.equal(forecastDrydownFactor(probe, 0, 0, '2026-09-28'), 0.7);
-  assert.equal(forecastDrydownFactor(probe, 0, null, '2026-09-29'), 1);
+  assert.equal(forecastDrydownFactor(probe, 0, null, '2026-09-29'), 1.35);
 });
 
 test('la caída del perfil parte de los mm de la sonda y ajusta el cultivo de forma aditiva', () => {

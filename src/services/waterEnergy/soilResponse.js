@@ -51,10 +51,18 @@ export function forecastDrydownFactor(model, dayIndex, rechargeAt = null, asOfDa
   const baseline = drydownFactor(model, 'outside-observed-history');
   const cycle = data?.drydown_cycle;
   const currentPhase = Number(data?.current_drydown_phase) || 0;
+  // La última lectura puede ser de ayer aunque el balance del lote ya
+  // haya avanzado hasta hoy. Conservar la fase de ESA sonda durante
+  // dos días sin datos y avanzar el número de días que faltan.
+  const gap = asOfDay && data?.last_probe_day
+    ? Math.round((Date.parse(`${asOfDay}T12:00:00Z`) - Date.parse(`${data.last_probe_day}T12:00:00Z`)) / 86400000)
+    : 0;
+  const recentEnough = Boolean(asOfDay && data?.last_probe_day) && gap >= 0 && gap <= 2;
+  if (asOfDay && !recentEnough && rechargeAt == null) return baseline;
   const phase = rechargeAt != null && dayIndex >= rechargeAt
-    ? dayIndex - rechargeAt + 1 : currentPhase + dayIndex + 1;
+    ? dayIndex - rechargeAt + 1 : currentPhase + (recentEnough ? gap : 0) + dayIndex + 1;
   const learnedPhase = cycle?.find(entry => entry.day === phase && entry.samples > 0);
-  const sameCycle = rechargeAt == null && currentPhase > 0 && asOfDay === data?.last_probe_day;
+  const sameCycle = rechargeAt == null && currentPhase > 0 && recentEnough;
   const current = cycle?.find(entry => entry.day === currentPhase && entry.samples > 0);
   const recent = data?.recent_24h_factor;
   if (learnedPhase && Number.isFinite(learnedPhase.factor)) {
@@ -77,7 +85,7 @@ export function forecastDrydownFactor(model, dayIndex, rechargeAt = null, asOfDa
   // gradualmente hasta que haya una fase histórica o una recarga.
   if (sameCycle && Number.isFinite(recent)) {
     return Math.round(Math.max(0.7, Math.min(3,
-      baseline + (recent - baseline) * (0.65 ** (dayIndex + 1)))) * 100) / 100;
+      baseline + (recent - baseline) * (0.65 ** (gap + dayIndex + 1)))) * 100) / 100;
   }
   return baseline;
 }

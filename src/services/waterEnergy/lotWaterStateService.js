@@ -4,7 +4,7 @@ import { kcService } from './kcService';
 import { soilWaterService, computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from './soilWaterService';
 import { soilBehaviorService } from './soilBehaviorService';
 import { selectGaritaStation, aggregateGaritaObservations } from './garitaWeather';
-import { drydownFactor, afterRiseFactor, probeProfileLoss } from './soilResponse';
+import { drydownFactor, afterRiseFactor, forecastDrydownFactor, probeProfileLoss } from './soilResponse';
 
 // ============================================================
 // lotWaterStateService — ESTADO HÍDRICO CALCULADO DE CADA LOTE.
@@ -256,8 +256,14 @@ async function computeLot(lot, ctx, withHistory) {
     if (obs.byDay.get(d)?.eto == null) estimatedEtoDays++;
     // Kc propio del lote para ese día: cultivo + edad + fenología.
     const kc = kcService.kcForLotDate(lot, d, profile);
+    const lastProbeDay = model?.calibration_diagnostics?.last_probe_day;
+    const missingProbeDays = lastProbeDay && d > lastProbeDay
+      ? Math.round((Date.parse(`${d}T12:00:00Z`) - Date.parse(`${lastProbeDay}T12:00:00Z`)) / 86400000) : 0;
+    const continuedFactor = missingProbeDays > 0 && missingProbeDays <= 2
+      ? forecastDrydownFactor(model, 0, null, prev) : null;
     const learnedLoss = kc != null && eto != null
-      ? probeProfileLoss(model, { date: d, eto, kc, referenceKc: referenceKc(ctx, model, d), meanEto: obs.meanEto }) : null;
+      ? probeProfileLoss(model, { date: d, eto, kc, referenceKc: referenceKc(ctx, model, d),
+        meanEto: obs.meanEto, forecastFactor: continuedFactor }) : null;
     const etc = learnedLoss ?? (kc != null && eto != null
       ? round1(eto * kc * etcCorrectionFactor * drydownFactor(model, d)
         * (previousStepHadRecharge ? afterRiseFactor(model) : 1)) : 0);
