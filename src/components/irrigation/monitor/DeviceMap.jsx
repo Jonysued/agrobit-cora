@@ -20,7 +20,7 @@ export default function DeviceMap({ devices, allDevices = devices, lots = [], on
   const polygons = lots.filter(l => l.polygon?.length > 2);
   const points = useMemo(() => draft ? [[draft.lat, draft.lng]] : located.length
     ? located.map(d => d.position) : polygons.flatMap(l => l.polygon), [devices, lots, draft]);
-  return <div className="relative overflow-hidden rounded-xl border border-slate-200">
+  return <div className="relative isolate z-0 overflow-hidden rounded-xl border border-slate-200">
     <MapContainer center={points[0] || [-32.1, -68.5]} zoom={13} className={onPick ? 'h-64 w-full' : 'h-[440px] w-full'} scrollWheelZoom>
       <TileLayer attribution="&copy; Esri" url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" />
       <MapControl points={points} onPick={onPick} />
