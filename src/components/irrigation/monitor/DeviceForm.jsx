@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { MapPin } from 'lucide-react';
 import DeviceMap from './DeviceMap';
 import { monitoringService } from '@/services/irrigation/monitoringService';
+import { PORTION_LABELS } from '@/lib/irrigationTurnos';
 const input = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:bg-slate-100';
 export default function DeviceForm({ device, devices, lots, pumps, onSaved, onCancel }) {
   const [form, setForm] = useState(device ? { ...device, latitude: device.latitude ?? '', longitude: device.longitude ?? '' }
@@ -23,6 +24,7 @@ export default function DeviceForm({ device, devices, lots, pumps, onSaved, onCa
   const linkedLots = lots.filter(l => l.farm === form.farm);
   return <form onSubmit={save} className="space-y-4">
     <div className="grid gap-3 sm:grid-cols-2">
+      {form.kind === 'valve' && <label className="text-sm font-semibold">Sector del lote<select disabled={locked} className={input} value={form.portion || ''} onChange={e => set('portion', e.target.value)}>{Object.entries(PORTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
       <label className="text-sm font-semibold">Tipo<select disabled={!!device} className={input} value={form.kind} onChange={e => setForm(f => ({ ...f, kind: e.target.value, lot_ids: [], parent_well_id: '', pump_id: '' }))}><option value="valve">Válvula</option><option value="well">Pozo</option></select></label>
       <label className="text-sm font-semibold">Nombre / código<input required maxLength={120} className={input} value={form.name} onChange={e => set('name', e.target.value)} placeholder="Ej. Válvula C1 norte" /></label>
       <label className="text-sm font-semibold">Finca<select required disabled={locked} className={input} value={form.farm} onChange={e => setForm(f => ({ ...f, farm: e.target.value, lot_ids: [] }))}><option value="">Seleccionar</option>{farms.map(f => <option key={f}>{f}</option>)}</select></label>
