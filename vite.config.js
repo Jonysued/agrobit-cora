@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react'
+import { offlineShell } from './pwa-shell.js'
 import { defineConfig } from 'vite'
 import { fileURLToPath, URL } from 'node:url'
 
@@ -11,5 +12,6 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    offlineShell(),
   ]
 });
