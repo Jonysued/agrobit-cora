@@ -30,6 +30,21 @@ import { forecastDrydownFactor, probeProfileLoss } from './soilResponse';
 // ============================================================
 
 const round1 = n => Math.round(n * 10) / 10;
+const OVERVIEW_FRESH_MS = 60_000;
+const OVERVIEW_DISPLAY_MS = 10 * 60_000;
+let overviewCache = null;
+let overviewPending = null;
+let overviewGeneration = 0;
+
+// Una operación del usuario (riego, perfil, lote, etc.) invalida el
+// resumen inmediatamente; las visitas repetidas de solo lectura no.
+if (typeof window !== 'undefined') {
+  window.addEventListener('lucient:data-mutated', () => {
+    overviewGeneration += 1;
+    overviewCache = null;
+    overviewPending = null;
+  });
+}
 
 // Insumos diarios: el Kc se recalcula para cada fecha según cultivo,
 // edad del lote, etapa fenológica y desfase de campaña configurado.
@@ -219,6 +234,10 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
 }
 
 export const waterForecastService = {
+  peekFarmOverview() {
+    return overviewCache && Date.now() - overviewCache.updatedAt < OVERVIEW_DISPLAY_MS
+      ? overviewCache : null;
+  },
   // ---- Datos base (lotes y perfiles) ----
   async getLots() { return backend.entities.Lot.list(); },
   async getProfiles() { return backend.entities.SoilProfile.list(); },
@@ -272,15 +291,39 @@ export const waterForecastService = {
   },
 
   // ---- Dashboard: filas por lote + totales de 15 días ----
-  async getFarmOverview() {
-    const [lots, pumps, tariffs, designs] = await Promise.all([
-      this.getLots(),
-      energyService.getPumps(),
-      energyService.getTariffs(),
-      backend.entities.IrrigationDesign.list(),
+  getFarmOverview({ force = false } = {}) {
+    if (!force && overviewCache && Date.now() - overviewCache.updatedAt < OVERVIEW_FRESH_MS) {
+      return Promise.resolve(overviewCache.data);
+    }
+    if (!force && overviewPending) return overviewPending;
+    const generation = ++overviewGeneration;
+    const request = this.calculateFarmOverview().then(data => {
+      if (generation === overviewGeneration) overviewCache = { data, updatedAt: Date.now() };
+      return data;
+    }).finally(() => {
+      if (overviewPending === request) overviewPending = null;
+    });
+    overviewPending = request;
+    return request;
+  },
+
+  async calculateFarmOverview() {
+    const lotsPromise = this.getLots();
+    const pumpsPromise = energyService.getPumps();
+    const tariffsPromise = energyService.getTariffs();
+    const designsPromise = backend.entities.IrrigationDesign.list();
+    const lots = await lotsPromise;
+    // La reconstrucción del pasado y el pronóstico remoto son independientes.
+    // Ambos arrancan tan pronto están los lotes, en lugar de sumar latencias.
+    const curvesPromise = lotWaterStateService.getLotStates(lots, { withHistory: false });
+    const weatherPromise = weatherService.getFarmForecast(lots);
+    const [pumps, tariffs, designs, curves, weather] = await Promise.all([
+      pumpsPromise,
+      tariffsPromise,
+      designsPromise,
+      curvesPromise,
+      weatherPromise,
     ]);
-    const curves = await lotWaterStateService.getLotStates(lots, { withHistory: false });
-    const weather = await weatherService.getFarmForecast(lots);
     const rows = lots.map(lot => {
       const curve = curves.get(lot.id);
       if (!curve?.profile) return { lot, profile: null, state: null, forecast_status: 'no_disponible' };
