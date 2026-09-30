@@ -6,23 +6,20 @@ import LotForecastTable from '@/components/waterEnergy/LotForecastTable';
 import ProbeDailyChangeCard from '@/components/waterEnergy/ProbeDailyChangeCard';
 import MetricCard from '@/components/MetricCard';
 import LoadingState from '@/components/LoadingState';
-import { Button } from '@/components/ui/button';
 import { waterForecastService, soilWaterService } from '@/services/waterEnergy';
 import { weatherService } from '@/services/waterEnergy/weatherService';
 
+const OVERVIEW_REFRESH_MS = 2 * 60_000;
+const PROBE_REFRESH_MS = 5 * 60_000;
+
 export default function WaterEnergy() {
   const navigate = useNavigate();
-  const [data, setData] = useState(null);
+  const [snapshot, setSnapshot] = useState(() => waterForecastService.peekFarmOverview());
   const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [farms, setFarms] = useState([]);
   const [farmId, setFarmId] = useState(null);
   const [probes, setProbes] = useState([]);
-  useEffect(() => {
-    weatherService.getFarms().then(fs => { setFarms(fs); const preferred = fs.find(f => f.name === 'Las 500'); if (fs.length) setFarmId((preferred || fs[0]).id); }).catch(() => setFarms([]));
-    // Variación de cada sonda (carga independiente: si falla, la
-    // tarjeta simplemente no aparece).
-    soilWaterService.getProbeSummaries().then(setProbes).catch(() => setProbes([]));
-  }, []);
   // "Failed to fetch" = falla transitoria de red: la carga del panel
   // dispara ~25 consultas en paralelo y, en una conexión inestable,
   // si una sola se cae el panel entero muestra error. Se reintenta
@@ -30,23 +27,66 @@ export default function WaterEnergy() {
   const isNetworkError = e => /failed to fetch|network|load failed|connection|timed?\s?out/i.test(e?.message || '');
   const loadOverview = (retries = 1) => {
     setError(null);
+    setRefreshing(true);
     waterForecastService.getFarmOverview()
-      .then(setData)
+      .then(data => {
+        setSnapshot(waterForecastService.peekFarmOverview() || { data, updatedAt: Date.now() });
+        setRefreshing(false);
+      })
       .catch(e => {
         if (retries > 0 && isNetworkError(e)) { loadOverview(retries - 1); return; }
         console.error('[WaterEnergy] getFarmOverview:', e);
+        setRefreshing(false);
         setError(isNetworkError(e) ? 'Falla de conexión al cargar el panel. Revisá tu conexión a internet y reintentá.' : (e?.message || 'Error desconocido'));
       });
   };
-  useEffect(() => { loadOverview(); }, []);
-  if (!data) return error ? (
-    <div className="mx-auto max-w-md space-y-3 p-8 text-center">
-      <p className="text-sm font-semibold text-slate-600">No se pudo cargar Water &amp; Energy.</p>
-      <p className="break-words rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">{error}</p>
-      <Button onClick={() => loadOverview()}>Reintentar</Button>
+  useEffect(() => {
+    let active = true;
+    let lastProbesAt = 0;
+    weatherService.getFarms().then(fs => {
+      if (!active) return;
+      setFarms(fs);
+      const preferred = fs.find(f => f.name === 'Las 500');
+      if (fs.length) setFarmId((preferred || fs[0]).id);
+    }).catch(() => { if (active) setFarms([]); });
+    const refreshProbes = () => {
+      if (Date.now() - lastProbesAt < PROBE_REFRESH_MS) return;
+      lastProbesAt = Date.now();
+      soilWaterService.getProbeSummaries()
+        .then(result => { if (active) setProbes(result); })
+        .catch(() => { /* conservar el último dato hasta el próximo intento */ });
+    };
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      loadOverview();
+      refreshProbes();
+    };
+    refresh();
+    const timer = window.setInterval(refresh, OVERVIEW_REFRESH_MS);
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('lucient:data-mutated', refresh);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('lucient:data-mutated', refresh);
+    };
+  }, []);
+  if (!snapshot) return (
+    <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
+      <ModuleHeader />
+      <WeatherPanel farms={farms} farmId={farmId} onFarmChange={setFarmId} />
+      <ProbeDailyChangeCard probes={probes} onOpen={id => navigate(`/water-energy/sensores/${id}`)} />
+      {error ? (
+        <div className="mx-auto max-w-md space-y-3 p-8 text-center">
+          <p className="text-sm font-semibold text-slate-600">No se pudo cargar Water &amp; Energy.</p>
+          <p className="break-words rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">{error}</p>
+          <p className="text-xs text-slate-400">Se reintentará automáticamente.</p>
+        </div>
+      ) : <LoadingState />}
     </div>
-  ) : <LoadingState />;
-  const { rows, totals } = data;
+  );
+  const { rows, totals } = snapshot.data;
   // La finca seleccionada en el selector meteorológico define los
   // lotes de la tabla Y las métricas: TODOS los lotes de esa finca
   // (con o sin perfil). Sin finca seleccionada, totales generales.
@@ -72,6 +112,8 @@ export default function WaterEnergy() {
   return (
     <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
       <ModuleHeader />
+      <p className="text-xs text-slate-500">Datos calculados: {new Date(snapshot.updatedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}{refreshing ? ' · actualizando automáticamente…' : ''}</p>
+      {error && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">No se pudieron actualizar los datos: {error}. Se muestran los últimos valores calculados.</p>}
       <WeatherPanel farms={farms} farmId={farmId} onFarmChange={setFarmId} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Suma de perfil" value={shown.avgStoredMm == null ? '—' : `${shown.avgStoredMm} mm`} detail={`Promedio · ${shown.monitored} de ${shown.lots} lotes monitoreados`} tone={shown.avgPct != null && shown.avgPct < 40 ? 'red' : 'light'} />
