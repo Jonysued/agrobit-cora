@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { monitoringService } from '@/services/irrigation/monitoringService';
 import { dateTime, duration, deviceStatus, stateLabel, liveSessionSeconds } from '@/services/irrigation/monitoringUtils';
 import { QrCard, downloadDeviceQrs } from './QrTools';
+import { PORTION_LABELS } from '@/lib/irrigationTurnos';
 const input = 'w-full rounded-lg border px-3 py-2 text-sm';
 const localInput = value => {
   const d = new Date(value);
@@ -45,6 +46,7 @@ export default function DeviceDetail({ device, devices, lots, admin, onEdit }) {
     <p className="mt-3 flex items-center gap-2 font-semibold"><span className="h-3 w-3 rounded-full" style={{ backgroundColor: status.color }} />{status.label}</p>
     <p className="mt-1 text-xs text-slate-500">Último cambio: {dateTime(device.state_since)}</p>
     {device.kind === 'valve' && <div className="mt-3 text-sm text-slate-600"><p>Pozo: <b>{well?.name || 'Sin vínculo'} · {well?.farm}</b></p><p>Lotes: <b>{device.lot_ids.map(id => lots.find(l => l.id === id)?.name || id).join(', ')}</b></p></div>}
+    {device.kind === 'valve' && <p className="mt-2 text-xs text-slate-500">Sector: {PORTION_LABELS[device.portion || '']} · {device.turno || 'Sin turno registrado'}{device.location_origin === 'sector_center' && device.latitude == null ? ' · Ubicación de referencia en el centro del sector' : ''}</p>}
     {device.notes && <p className="mt-2 text-sm text-slate-500">{device.notes}</p>}
     <div className="mt-4 grid grid-cols-2 gap-2">{[true, false].map(active => <button key={String(active)} disabled={busy || device.current_active === active || !navigator.onLine} onClick={() => { setError(''); setConfirm({ active, requestId: crypto.randomUUID() }); }} className={`rounded-xl px-3 py-3 text-sm font-bold text-white disabled:opacity-35 ${active ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>{stateLabel(device, active)}</button>)}</div>
     <p className="mt-2 text-xs text-slate-500">Confirmá el cambio cuando ocurra en campo. Se guarda la hora del servidor.</p>
