@@ -17,7 +17,7 @@ function Metric({ icon: Icon, label, value }) {
 }
 
 // Panel meteorológico del dashboard: dato observado de la estación propia
-// (si la finca la tiene) + pronóstico a 7 días con su fuente.
+// (si la finca la tiene) + pronóstico a 15 días con su fuente.
 export default function WeatherPanel({ farms: farmsProp, farmId: farmIdProp, onFarmChange }) {
   // Modo controlado: la página pasa la lista y la finca seleccionada
   // (el selector define qué lotes se ven abajo). Sin props, autónomo.
@@ -33,9 +33,23 @@ export default function WeatherPanel({ farms: farmsProp, farmId: farmIdProp, onF
   }, []);
   useEffect(() => {
     if (!farmId) return;
+    let active = true;
     setCombined(undefined);
     const farm = farms.find(f => f.id === farmId);
-    weatherService.getCombinedWeather(farm).then(setCombined).catch(() => setCombined({ failed: true }));
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      weatherService.getCombinedWeather(farm)
+        .then(result => { if (active) setCombined(result); })
+        .catch(() => { if (active) setCombined(previous => previous || { failed: true }); });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 5 * 60_000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
   }, [farmId]);
   if (!farms.length) return null;
   return (

@@ -78,6 +78,10 @@ function withoutUndefined(value) {
   );
 }
 
+function notifyDataMutation() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('lucient:data-mutated'));
+}
+
 function applyOrder(query, sort = '-created_date') {
   if (!sort) return query;
   return sort.split(',').reduce((ordered, field) => {
@@ -136,6 +140,7 @@ function entityApi(entityName) {
         .select('*')
         .single();
       fail(error);
+      notifyDataMutation();
       return data;
     },
 
@@ -146,6 +151,7 @@ function entityApi(entityName) {
         .insert(payloads.map(withoutUndefined))
         .select('*');
       fail(error);
+      notifyDataMutation();
       return data || [];
     },
 
@@ -157,12 +163,14 @@ function entityApi(entityName) {
         .select('*')
         .single();
       fail(error);
+      notifyDataMutation();
       return data;
     },
 
     async delete(id) {
       const { error } = await supabase.from(table).delete().eq('id', id);
       fail(error);
+      notifyDataMutation();
       return { id };
     },
 
@@ -174,6 +182,7 @@ function entityApi(entityName) {
       }
       const { data, error } = await query.select('id');
       fail(error);
+      notifyDataMutation();
       return data || [];
     },
 
