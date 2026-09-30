@@ -47,7 +47,7 @@ export const AuthProvider = ({ children }) => {
     await backend.auth.logout(shouldRedirect ? '/login' : false);
   };
 
-  const navigateToLogin = () => backend.auth.redirectToLogin(window.location.pathname);
+  const navigateToLogin = () => backend.auth.redirectToLogin(window.location.pathname + window.location.search);
 
   return (
     <AuthContext.Provider value={{
