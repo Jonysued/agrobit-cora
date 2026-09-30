@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Database, History, Upload } from 'lucide-react';
+import { Database, History, Upload, Users } from 'lucide-react';
 import { backend } from '@/api/backendClient';
 import { useFarm } from '@/lib/FarmContext';
+import UserProfiles from '@/components/UserProfiles';
+import { useAuth } from '@/lib/AuthContext';
 import LoadingState from '@/components/LoadingState';
 import Production from '@/pages/Production';
 
@@ -16,8 +18,9 @@ const types = {
 
 export default function Settings() {
   const d = useFarm();
+  const { user } = useAuth();
   const [params, setParams] = useSearchParams();
-  const activeTab = params.get('tab') === 'produccion' ? 'produccion' : 'administracion';
+  const activeTab = params.get('tab') === 'usuarios' && user?.role === 'admin' ? 'usuarios' : params.get('tab') === 'produccion' ? 'produccion' : 'administracion';
   const [type, setType] = useState('lotes');
   const [busy, setBusy] = useState(false);
   const [ranges, setRanges] = useState(() => JSON.parse(localStorage.getItem('mapRanges') || '{"low":30000,"high":38000}'));
@@ -51,6 +54,7 @@ export default function Settings() {
         {[
           ['administracion', 'Configuración general', Database],
           ['produccion', 'Históricos de producción', History],
+          ...(user?.role === 'admin' ? [['usuarios', 'Usuarios y perfiles', Users]] : []),
         ].map(([value, label, Icon]) => (
           <button
             key={value}
@@ -63,7 +67,7 @@ export default function Settings() {
         ))}
       </nav>
 
-      {activeTab === 'produccion' ? (
+      {activeTab === 'usuarios' ? <UserProfiles /> : activeTab === 'produccion' ? (
         <Production embedded />
       ) : (
         <>
