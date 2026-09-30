@@ -1,9 +1,16 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState, useRef } from 'react';
+import { queryClientInstance } from '@/lib/query-client';
 import { backend, supabase } from '@/api/backendClient';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
+  const access = useRef(null);
+  const applyUser = useCallback(nextUser => {
+    const key = nextUser ? `${nextUser.id}:${nextUser.role}` : null;
+    if (access.current !== key) { queryClientInstance.clear(); access.current = key; }
+    setUser(nextUser);
+  }, []);
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
@@ -13,25 +20,25 @@ export const AuthProvider = ({ children }) => {
     setIsLoadingAuth(true);
     try {
       const nextUser = await backend.auth.me();
-      setUser(nextUser);
+      applyUser(nextUser);
       setIsAuthenticated(true);
       setAuthError(null);
       return nextUser;
     } catch (error) {
-      setUser(null);
+      applyUser(null);
       setIsAuthenticated(false);
       setAuthError({ type: 'auth_required', message: error.message || 'Authentication required' });
       return null;
     } finally {
       setIsLoadingAuth(false);
     }
-  }, []);
+  }, [applyUser]);
 
   useEffect(() => {
     checkUserAuth();
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
-        setUser(null);
+        applyUser(null);
         setIsAuthenticated(false);
         setIsLoadingAuth(false);
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
@@ -39,10 +46,26 @@ export const AuthProvider = ({ children }) => {
       }
     });
     return () => listener.subscription.unsubscribe();
-  }, [checkUserAuth]);
+  }, [checkUserAuth, applyUser]);
+
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let disposed = false;
+    const refresh = async () => {
+      try {
+        const nextUser = await backend.auth.me();
+        if (!disposed) applyUser(nextUser);
+      } catch (error) { if (!disposed && error.status === 401) { applyUser(null); setIsAuthenticated(false); } }
+    };
+    const visible = () => { if (!document.hidden) refresh(); };
+    const timer = setInterval(refresh, 30000);
+    document.addEventListener('visibilitychange', visible);
+    return () => { disposed = true; clearInterval(timer); document.removeEventListener('visibilitychange', visible); };
+  }, [user?.id, applyUser]);
 
   const logout = async (shouldRedirect = true) => {
-    setUser(null);
+    applyUser(null);
     setIsAuthenticated(false);
     await backend.auth.logout(shouldRedirect ? '/login' : false);
   };

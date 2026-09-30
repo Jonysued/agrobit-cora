@@ -1,10 +1,13 @@
 import React, { createContext, useContext } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { backend } from '@/api/backendClient';
+import { useAuth } from '@/lib/AuthContext';
+import { backend, supabase } from '@/api/backendClient';
 const FarmContext = createContext(null);
 const names=['Lot','Campaign','ProductionRecord','Objective','HealthRecord','IrrigationDesign','IrrigationProgram','IrrigationLog','LotDocument','Observation','PruningRecord'];
 export function FarmProvider({children}){
-  const query=useQuery({queryKey:['farm-data'],queryFn:async()=>{const values=await Promise.all(names.map(n=>backend.entities[n].list()));return Object.fromEntries(names.map((n,i)=>[n,values[i]]));}});
+  const {user}=useAuth();
+  const regador=user?.role==='regador';
+  const query=useQuery({queryKey:['farm-data',user?.id,user?.role],queryFn:async()=>{if(regador){const {data,error}=await supabase.rpc('irrigation_map_lots');if(error)throw error;return {Lot:data||[]};}const values=await Promise.all(names.map(n=>backend.entities[n].list()));return Object.fromEntries(names.map((n,i)=>[n,values[i]]));}});
   // Si la consulta falla o aún no hay datos, cada entidad se recibe como
   // lista vacía para que las páginas muestren sus estados vacíos en vez
   // de romperse (el error queda disponible para mostrar un aviso).
