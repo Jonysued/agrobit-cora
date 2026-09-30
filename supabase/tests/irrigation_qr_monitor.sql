@@ -1,0 +1,47 @@
+begin;
+select set_config('request.jwt.claim.sub',(select id::text from public.profiles where role='admin' limit 1),true);
+insert into public.irrigation_devices(kind,name,farm,created_date) values('well','__QR_TEST_WELL__','__TEST__','2026-09-27T00:00:00Z');
+insert into public.irrigation_devices(kind,name,farm,parent_well_id,lot_ids,created_date)
+select 'valve','__QR_TEST_VALVE__',l.farm,d.id,array[l.id],'2026-09-27T00:00:00Z' from public.lots l cross join public.irrigation_devices d where d.name='__QR_TEST_WELL__' limit 1;
+set local role authenticated;
+do $$
+declare w uuid; v uuid; e1 public.irrigation_device_events; e2 public.irrigation_device_events; e3 public.irrigation_device_events; e4 public.irrigation_device_events; e5 public.irrigation_device_events; e6 public.irrigation_device_events; r record; rejected boolean:=false;
+begin
+ select id into w from public.irrigation_devices where name='__QR_TEST_WELL__';
+ select id into v from public.irrigation_devices where name='__QR_TEST_VALVE__';
+ e1:=public.record_irrigation_action(w,true,gen_random_uuid());
+ e2:=public.record_irrigation_action(v,true,gen_random_uuid());
+ if (public.record_irrigation_action(v,true,e2.request_id)).id<>e2.id then raise exception 'idempotency failed'; end if;
+ begin perform public.record_irrigation_action(v,true,gen_random_uuid()); exception when others then rejected:=true; end;
+ if not rejected then raise exception 'duplicate state accepted'; end if;
+ e3:=public.record_irrigation_action(w,false,gen_random_uuid());
+ e4:=public.record_irrigation_action(w,true,gen_random_uuid());
+ e5:=public.record_irrigation_action(v,false,gen_random_uuid());
+ e6:=public.record_irrigation_action(w,false,gen_random_uuid());
+ perform public.correct_irrigation_action(e1.id,true,'2026-09-29T02:40:00Z','Prueba transaccional');
+ perform public.correct_irrigation_action(e2.id,true,'2026-09-29T02:45:00Z','Prueba transaccional');
+ perform public.correct_irrigation_action(e3.id,false,'2026-09-29T02:55:00Z','Prueba transaccional');
+ perform public.correct_irrigation_action(e4.id,true,'2026-09-29T03:05:00Z','Prueba transaccional');
+ perform public.correct_irrigation_action(e5.id,false,'2026-09-29T03:15:00Z','Prueba transaccional');
+ perform public.correct_irrigation_action(e6.id,false,'2026-09-29T03:20:00Z','Prueba transaccional');
+ select * into r from public.irrigation_device_sessions(v,'2026-09-28T00:00:00Z',50,0);
+ if r.duration_seconds<>1800 or r.effective_seconds<>1200 then raise exception 'wrong intersection % %',r.duration_seconds,r.effective_seconds; end if;
+ if not exists(select 1 from public.irrigation_device_events where id=e2.id and jsonb_array_length(corrections)=1) then raise exception 'missing audit'; end if;
+ if (select current_active from public.irrigation_devices where id=w) or (select current_active from public.irrigation_devices where id=v) then raise exception 'wrong current state'; end if;
+ rejected:=false;
+ begin update public.irrigation_devices set current_active=true where id=v; exception when insufficient_privilege then rejected:=true; end;
+ if not rejected then raise exception 'direct state update allowed'; end if;
+ rejected:=false;
+ begin insert into public.irrigation_device_events(request_id,device_id,active,actor_name) values(gen_random_uuid(),v,true,'spoof'); exception when insufficient_privilege then rejected:=true; end;
+ if not rejected then raise exception 'direct event insert allowed'; end if;
+ rejected:=false;
+ begin update public.irrigation_devices set parent_well_id=(select id from public.irrigation_devices where kind='well' and id<>w limit 1) where id=v; exception when others then rejected:=true; end;
+ if not rejected then raise exception 'historical relink allowed'; end if;
+ perform set_config('request.jwt.claim.sub',gen_random_uuid()::text,true);
+ rejected:=false;
+ begin perform public.record_irrigation_action(v,true,gen_random_uuid()); exception when others then rejected:=true; end;
+ if not rejected then raise exception 'unregistered operator allowed'; end if;
+end $$;
+reset role;
+select 'PASS: midnight intersection 30min open / 20min effective, duplicate protection, retry idempotency, correction audit, immutable links, direct-write denial, unregistered-user denial' as verification;
+rollback;
