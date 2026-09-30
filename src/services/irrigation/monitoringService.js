@@ -15,6 +15,8 @@ export const monitoringService = {
       pump_id: form.pump_id || null, lot_ids: form.kind === 'valve' ? form.lot_ids : [],
       latitude: form.latitude === '' ? null : Number(form.latitude),
       longitude: form.longitude === '' ? null : Number(form.longitude), notes: form.notes || '',
+      portion: form.kind === 'valve' ? form.portion || '' : '', turno: form.turno || null,
+      location_origin: form.location_origin || 'manual',
     };
     if (form.id) {
       delete payload.kind; delete payload.pump_id;
