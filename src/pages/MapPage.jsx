@@ -46,17 +46,17 @@ export default function MapPage(){
   const finishDraw=()=>{if(draft.length>=3){setShowForm(true);}};
   const saveEdit=async()=>{await backend.entities.Lot.update(editLot.id,{polygon:draft,area_ha:+polygonAreaHa(draft).toFixed(1)});await d.refetch();setMode('view');setEditLot(null);setDraft([]);};
   const delLot=async()=>{const id=confirmDel.id;await Promise.all([backend.entities.Lot.delete(id),backend.entities.ProductionRecord.deleteMany({lot_id:id}),backend.entities.Objective.deleteMany({lot_id:id}),backend.entities.HealthRecord.deleteMany({lot_id:id}),backend.entities.IrrigationDesign.deleteMany({lot_id:id}),backend.entities.LotDocument.deleteMany({lot_id:id}),backend.entities.Observation.deleteMany({lot_id:id})]);await d.refetch();setConfirmDel(null);setSelected(null);};
-  return <div className="relative h-[calc(100vh-4.5rem)]">
-    <MapContainer center={center} zoom={15} className="h-full w-full" zoomControl doubleClickZoom={false}>
+  return <div className="map-page relative">
+    <MapContainer center={center} zoom={15} className="h-full w-full" zoomControl={false} doubleClickZoom={false}>
       <TileLayer attribution="&copy; Esri" url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"/>
       {lots.map(l=><Polygon key={l.id} positions={mode==='edit'&&editLot?.id===l.id?draft:l.polygon} pathOptions={{color:'#fff',weight:2,fillColor:color(l),fillOpacity:.62}} interactive={mode==='view'} eventHandlers={{click:()=>setSelected(l)}}><Tooltip permanent direction="center" className="lot-label">{l.name}</Tooltip></Polygon>)}
       {mode==='draw'&&<DrawLayer points={draft} setPoints={setDraft} onFinish={finishDraw}/>}
       {mode==='edit'&&editLot&&<EditLayer points={draft} setPoints={setDraft}/>}
     </MapContainer>
 
-    {mode==='view' && <div className="absolute left-4 top-4 z-[1000] w-[min(360px,calc(100%-2rem))]"><MapFilters view={view} setView={setView} filters={filters} setFilters={setFilters} lots={d.Lot||[]}/></div>}
+    {mode==='view' && <div className="map-filters absolute z-[1000]"><MapFilters view={view} setView={setView} filters={filters} setFilters={setFilters} lots={d.Lot||[]}/></div>}
 
-    <div className="absolute right-4 top-4 z-[1000] flex gap-2">
+    <div className="map-actions absolute z-[1000] flex gap-2">
       {mode==='view' && <Btn onClick={startDraw} primary><Plus size={16}/>Nuevo lote</Btn>}
       {mode==='draw' && <><Btn onClick={finishDraw} primary disabled={draft.length<3}><Check size={16}/>Finalizar</Btn><Btn onClick={()=>{setMode('view');setDraft([]);}}><X size={16}/>Cancelar</Btn></>}
       {mode==='edit' && <><Btn onClick={saveEdit} primary><Check size={16}/>Guardar</Btn><Btn onClick={()=>{setMode('view');setEditLot(null);setDraft([]);}}><X size={16}/>Cancelar</Btn></>}
@@ -64,7 +64,7 @@ export default function MapPage(){
 
     {mode==='draw' && <div className="absolute bottom-5 left-1/2 z-[1000] -translate-x-1/2 rounded-xl bg-white/95 px-4 py-3 text-sm shadow-xl">Clic para agregar vértices · doble clic o “Finalizar” para terminar ({draft.length} puntos)</div>}
 
-    {mode==='view' && <div className="absolute bottom-5 right-4 z-[1000] rounded-xl bg-white/95 px-4 py-3 text-xs shadow-xl"><b>{lots.length} lotes visibles</b><p className="mt-1 text-slate-500">Clic en un lote para ver opciones.</p>{view==='Riego activo/programado'&&<p className="mt-2 flex flex-col gap-1 border-t pt-2"><span className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded" style={{background:'#2563eb'}}/>Riego en curso</span><span className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded" style={{background:'#eab308'}}/>Programado hoy (más tarde)</span><span className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded" style={{background:'#94a3b8'}}/>Sin riego hoy</span></p>}</div>}
+    {mode==='view' && !selected && <div className="map-summary absolute bottom-5 right-4 z-[1000] rounded-xl bg-white/95 px-4 py-3 text-xs shadow-xl"><b>{lots.length} lotes visibles</b><p className="mt-1 text-slate-500">Tocá un lote para ver opciones.</p>{view==='Riego activo/programado'&&<p className="mt-2 flex flex-col gap-1 border-t pt-2"><span className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded" style={{background:'#2563eb'}}/>Riego en curso</span><span className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded" style={{background:'#eab308'}}/>Programado hoy (más tarde)</span><span className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded" style={{background:'#94a3b8'}}/>Sin riego hoy</span></p>}</div>}
 
     {selected && mode==='view' && <div className="absolute bottom-5 left-4 z-[1000] flex w-[min(420px,calc(100%-2rem))] items-center gap-3 rounded-2xl bg-white p-4 shadow-2xl">
       <div className="min-w-0 flex-1"><b className="truncate">{selected.name} · {selected.farm}</b><p className="truncate text-sm text-slate-500">{selected.crop} {selected.variety} · {selected.area_ha} ha</p></div>
