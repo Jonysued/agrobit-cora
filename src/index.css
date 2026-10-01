@@ -113,6 +113,9 @@
     padding-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
   }
 
+  /* iOS contentInset: automatic already reserves the native safe area. */
+  .lucient-native-ios .lucient-header { padding-top: 0; }
+
   .lucient-shell main {
     display: flex;
     flex-direction: column;
