@@ -57,7 +57,7 @@ export default function IrrigationMonitor({ lots, token, onSelectToken }) {
       </div>
       {selected && <div ref={detailRef}><DeviceDetail key={selected.id} device={selected} devices={devices} lots={lots} admin={admin} onEdit={setForm} /></div>}
     </div>
-    <Dialog open={scanner} onOpenChange={setScanner}><DialogContent><DialogHeader><DialogTitle>Escanear equipo de riego</DialogTitle></DialogHeader>{scanner && <QrScanner onFound={t => { setScanner(false); onSelectToken(t); }} />}</DialogContent></Dialog>
+    <Dialog open={scanner} onOpenChange={setScanner}><DialogContent><DialogHeader><DialogTitle>Escanear equipo de riego</DialogTitle></DialogHeader>{scanner && <QrScanner autoStart onFound={t => { setScanner(false); onSelectToken(t); }} />}</DialogContent></Dialog>
     <Dialog open={!!form} onOpenChange={open => { if (!open) setForm(null); }}><DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto"><DialogHeader><DialogTitle>{form?.id ? 'Editar / ubicar equipo' : 'Nuevo equipo de riego'}</DialogTitle></DialogHeader>{form && <DeviceForm device={form.id ? form : null} devices={devices} lots={lots} pumps={pumpsQuery.data || []} onCancel={() => setForm(null)} onSaved={async () => { setForm(null); await client.invalidateQueries({ queryKey: ['irrigation-monitor'] }); }} />}</DialogContent></Dialog>
   </div>;
 }
