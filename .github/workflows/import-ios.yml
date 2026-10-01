@@ -1,0 +1,58 @@
+name: Import and verify Lucient iOS
+on:
+  push:
+    branches: [feat/ios-native]
+    paths: [lucient-ios-source.zip, .github/workflows/import-ios.yml]
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/ios-native
+      - name: Verify reviewed source package
+        run: |
+          echo "2862aec3feb63a57ed3ea064388d92766021d8644e26f5735a8ecad3bae8d868  lucient-ios-source.zip" | shasum -a 256 -c -
+          python3 - <<'PYCODE'
+          import zipfile, pathlib
+          with zipfile.ZipFile('lucient-ios-source.zip') as archive:
+              for name in archive.namelist():
+                  path = pathlib.PurePosixPath(name)
+                  assert not path.is_absolute() and '..' not in path.parts
+                  assert '.env' not in path.parts and not name.endswith(('.p12', '.p8', '.jks'))
+              archive.extractall('.')
+          PYCODE
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck && npm run lint && npm test && npm run ios:sync && node scripts/verify-ios-bundle.mjs
+      - name: Compile for simulator
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/LucientSimulator" CODE_SIGNING_ALLOWED=NO build
+      - name: Compile device archive
+        run: |
+          xcodebuild archive -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Lucient.xcarchive" CODE_SIGNING_ALLOWED=NO
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lucient-iOS-unsigned
+          path: ${{ runner.temp }}/Lucient.xcarchive
+          retention-days: 14
+      - name: Commit verified native source to feature branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- .github/workflows/ios-build.yml IOS.md capacitor.config.ts index.html ios/.gitignore ios/App/App.xcodeproj/project.pbxproj ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist ios/App/App/AppDelegate.swift ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png ios/App/App/Assets.xcassets/AppIcon.appiconset/Contents.json ios/App/App/Assets.xcassets/Contents.json ios/App/App/Assets.xcassets/Splash.imageset/Contents.json ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-1.png ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-2.png ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732.png ios/App/App/Base.lproj/LaunchScreen.storyboard ios/App/App/Base.lproj/Main.storyboard ios/App/App/Info.plist ios/App/App/SceneDelegate.swift ios/App/CapApp-SPM/.gitignore ios/App/CapApp-SPM/Package.swift ios/App/CapApp-SPM/README.md ios/App/CapApp-SPM/Sources/CapApp-SPM/CapApp-SPM.swift ios/debug.xcconfig package-lock.json package.json scripts/check-mobile-env.mjs scripts/verify-ios-bundle.mjs src/api/backendClient.js src/components/OfflineStatus.jsx src/components/irrigation/monitor/DeviceDetail.jsx src/components/irrigation/monitor/IrrigationMonitor.jsx src/components/irrigation/monitor/QrTools.jsx src/components/irrigation/monitor/RegadorScanner.jsx src/lib/AuthContext.jsx src/lib/connectivity.js src/lib/connectivity.test.js src/lib/native.js src/lib/offline.js src/main.jsx src/pages/Login.jsx src/pages/Register.jsx src/services/irrigation/monitoringService.js
+          git rm -- lucient-ios-source.zip .github/workflows/import-ios.yml
+          git commit -m "Add verified native Lucient iOS source"
+          git push origin HEAD:feat/ios-native
