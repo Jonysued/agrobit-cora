@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Database, History, Upload, Users } from 'lucide-react';
+import { Database, History, Upload, Users, LogOut } from 'lucide-react';
 import { backend } from '@/api/backendClient';
 import { useFarm } from '@/lib/FarmContext';
 import UserProfiles from '@/components/UserProfiles';
@@ -25,7 +25,12 @@ export default function Settings() {
   const [busy, setBusy] = useState(false);
   const [ranges, setRanges] = useState(() => JSON.parse(localStorage.getItem('mapRanges') || '{"low":30000,"high":38000}'));
 
-  if (d.loading) return <LoadingState />;
+  const account = <section className="mt-5 rounded-2xl border bg-white p-4">
+    <h2 className="mb-3 text-lg font-bold">Mi cuenta</h2>
+    <button type="button" onClick={() => backend.auth.logout()} className="flex min-h-11 items-center gap-2 rounded-xl border px-4 py-3 font-semibold text-slate-700"><LogOut size={19} />Cerrar sesión</button>
+  </section>;
+
+  if (d.loading) return <div className="mx-auto max-w-[1000px] p-5 lg:p-8"><h1 className="text-3xl font-bold">Configuración</h1>{account}<LoadingState /></div>;
 
   const selectTab = tab => {
     if (tab === 'administracion') setParams({});
@@ -49,6 +54,7 @@ export default function Settings() {
     <div className={`mx-auto p-5 lg:p-8 ${activeTab === 'produccion' ? 'max-w-[1400px]' : 'max-w-[1000px]'}`}>
       <p className="text-sm font-bold uppercase tracking-widest text-emerald-700">Administración</p>
       <h1 className="text-3xl font-bold">Configuración</h1>
+      {account}
 
       <nav className="my-6 flex gap-2 overflow-x-auto">
         {[
