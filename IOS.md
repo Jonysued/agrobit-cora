@@ -26,8 +26,16 @@ El plugin nativo de red detecta la reconexión aunque `navigator.onLine` del Web
 
 Clima y sondas muestran la última descarga; nuevas consultas necesitan internet. El mapa satelital necesita conexión en la app nativa. Los puntos de pozos usan sus coordenadas guardadas y los perímetros conservan sus colores actuales. El perfil regador mantiene acceso solo a escaneo y cambios de estado.
 
-## Firma y distribución pendientes
+## Firma y distribución
 
 Antes de generar un IPA instalable hay que registrar `com.lucient.app` en Apple Developer, crear Lucient en App Store Connect y configurar un perfil App Store propio de Lucient y un certificado de distribución válido. Un perfil de otra app (por ejemplo Rimonim) no sirve para Lucient.
 
 El certificado privado, su contraseña, el perfil y la clave App Store Connect se guardan como secretos de CI, nunca en este repositorio. Después se archiva con firma, se exporta el IPA y se sube a App Store Connect para TestFlight. Completar la declaración de privacidad y verificar en un iPhone real el permiso de cámara, el cierre/reapertura sin señal y la sincronización de registros antes de distribuir ampliamente.
+
+El workflow **Lucient iOS TestFlight** está preparado y se inicia manualmente después de configurar:
+
+- Variable `APPLE_TEAM_ID`.
+- Secretos `IOS_CERTIFICATE_P12_BASE64`, `IOS_CERTIFICATE_PASSWORD`, `IOS_PROVISIONING_PROFILE_BASE64`, `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID`, `APPSTORE_API_KEY_P8_BASE64`.
+- Perfil App Store con nombre `Lucient App Store`, asociado exactamente a `com.lucient.app`.
+
+El workflow verifica que el perfil corresponda a Lucient, usa un número de build único por ejecución, firma, exporta y sube a App Store Connect. La habilitación de pruebas en TestFlight se completa en App Store Connect una vez procesado el build. No se envían invitaciones ni se agregan testers automáticamente.
