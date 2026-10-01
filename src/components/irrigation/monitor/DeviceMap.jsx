@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import { perimeterAreas } from '@/services/irrigation/perimeterAreas';
 import { PORTION_LABELS } from '@/lib/irrigationTurnos';
 import { devicePosition } from '@/services/irrigation/sectorGeometry';
+import { deviceStatus } from '@/services/irrigation/monitoringUtils';
 function MapControl({ points, onPick }) {
   const map = useMap();
   const key = JSON.stringify(points);
@@ -19,9 +20,10 @@ function MapControl({ points, onPick }) {
 export default function DeviceMap({ devices, allDevices = devices, lots = [], onSelect, onPick, draft, selectedId }) {
   const areas = useMemo(() => perimeterAreas(devices, allDevices, lots), [devices, allDevices, lots]);
   const located = devices.map(d => ({ device: d, position: devicePosition(d, lots) })).filter(d => d.position);
+  const wells = located.filter(({ device }) => device.kind === 'well');
   const polygons = lots.filter(l => l.polygon?.length > 2);
   const points = useMemo(() => draft ? [[draft.lat, draft.lng]] : onPick && located.length
-    ? located.map(d => d.position) : areas.length ? areas.flatMap(a => a.positions) : polygons.flatMap(l => l.polygon), [devices, lots, draft, onPick, areas]);
+    ? located.map(d => d.position) : [...(areas.length ? areas.flatMap(a => a.positions) : polygons.flatMap(l => l.polygon)), ...wells.map(w => w.position)], [devices, lots, draft, onPick, areas]);
   return <div className="relative isolate z-0 overflow-hidden rounded-xl border border-slate-200">
     <MapContainer center={points[0] || [-32.1, -68.5]} zoom={13} className={onPick ? 'h-64 w-full' : 'h-[440px] w-full'} scrollWheelZoom>
       <TileLayer attribution="&copy; Esri" url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" />
@@ -51,6 +53,14 @@ export default function DeviceMap({ devices, allDevices = devices, lots = [], on
       </Polygon>)}
         </Pane>
       </>}
+      {!onPick && wells.map(({ device, position }) => {
+        const status = deviceStatus(device, allDevices), size = device.id === selectedId ? 24 : 18;
+        return <Marker key={device.id} position={position} title={`${device.name} · ${status.label}`}
+          icon={L.divIcon({ className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: `<div style="width:${size}px;height:${size}px;background:${status.color};border:2px solid white;border-radius:50%;box-shadow:0 0 0 2px #0f172a"></div>` })}
+          eventHandlers={{ click: () => onSelect?.(device) }}>
+          <Tooltip direction="top">Pozo {device.name} · {status.label}</Tooltip>
+        </Marker>;
+      })}
       {onPick && located.map(({ device, position }) => <Marker key={device.id} position={position}
         icon={L.divIcon({ className: '', iconSize: [12, 12], iconAnchor: [6, 6], html: '<div style="width:12px;height:12px;background:#64748b;border:2px solid white;border-radius:50%"></div>' })}>
         <Tooltip>{device.name}</Tooltip>
