@@ -1,4 +1,5 @@
 import { backend } from '@/api/backendClient';
+import { snapshot } from '@/lib/offline';
 import { kcService } from './kcService';
 
 // ============================================================
@@ -199,7 +200,10 @@ export const weatherService = {
     const dates = Array.from({ length: 15 }, (_, i) => isoDate(addDays(i + 1)));
     if (farm?.latitude != null && farm?.longitude != null) {
       try {
-        return await fetchOpenMeteoForecast(farm.latitude, farm.longitude);
+        return await snapshot(`weather-forecast:${farm.latitude}:${farm.longitude}`, async () => {
+          try { return await fetchOpenMeteoForecast(farm.latitude, farm.longitude); }
+          catch (error) { throw new Error(`Network: ${error.message}`); }
+        });
       } catch { /* sin conexión a Open-Meteo → pronóstico simulado */ }
     }
     return dates.map(simulateFarmDay);

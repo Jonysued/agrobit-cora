@@ -1,3 +1,4 @@
+import { setOfflineUser } from '@/lib/offline';
 import React, { createContext, useCallback, useContext, useEffect, useState, useRef } from 'react';
 import { queryClientInstance } from '@/lib/query-client';
 import { backend, supabase } from '@/api/backendClient';
@@ -38,6 +39,7 @@ export const AuthProvider = ({ children }) => {
     checkUserAuth();
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
+        void setOfflineUser(null);
         applyUser(null);
         setIsAuthenticated(false);
         setIsLoadingAuth(false);

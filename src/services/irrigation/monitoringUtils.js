@@ -25,7 +25,7 @@ export function parseQr(value) {
   } catch { return /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null; }
 }
 export function liveSessionSeconds(session, device, devices, now = Date.now()) {
-  const elapsed = session.ended_at ? 0 : Math.max(0, (now - (session.client_received_at ?? Date.parse(session.calculated_at))) / 1000);
+  const elapsed = session.ended_at || session._offline_cached ? 0 : Math.max(0, (now - (session.client_received_at ?? Date.parse(session.calculated_at))) / 1000);
   return {
     duration: Number(session.duration_seconds) + elapsed,
     effective: Number(session.effective_seconds) + (deviceStatus(device, devices).effective ? elapsed : 0),

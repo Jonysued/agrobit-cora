@@ -1,3 +1,4 @@
+import { configureOffline, cachedUser, setOfflineUser, entityRead, entityWrite, queueFile, networkFailure } from '@/lib/offline';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -20,6 +21,8 @@ export const supabase = createClient(
     },
   }
 );
+
+configureOffline(supabase);
 
 const entityTables = {
   Campaign: 'campaigns',
@@ -91,7 +94,7 @@ function applyOrder(query, sort = '-created_date') {
   }, query);
 }
 
-function entityApi(entityName) {
+function rawEntityApi(entityName) {
   const table = entityTables[entityName];
   if (!table) throw new Error(`Unknown entity: ${entityName}`);
 
@@ -200,6 +203,21 @@ function entityApi(entityName) {
   };
 }
 
+function entityApi(entityName) {
+  const raw = rawEntityApi(entityName), table = entityTables[entityName];
+  return {
+    ...raw,
+    list: (sort = '-created_date', limit = 1000) => entityRead(table, 'all', () => raw.list(sort, null), {}, sort, limit),
+    filter: (criteria = {}, sort = '-created_date', limit = 1000, offset = 0) => entityRead(table, JSON.stringify([criteria, sort, limit, offset]), () => raw.filter(criteria, sort, limit, offset), criteria, sort, limit, offset, true),
+    async get(id) { const rows = await entityRead(table, `id:${id}`, async () => [await raw.get(id)], { id }, '', 1); if (!rows[0]) throw new Error('Registro no disponible en este dispositivo.'); return rows[0]; },
+    create: payload => entityWrite(table, 'create', payload.id, withoutUndefined(payload)),
+    async bulkCreate(payloads) { const rows = []; for (const payload of payloads || []) rows.push(await entityWrite(table, 'create', payload.id, withoutUndefined(payload))); return rows; },
+    update: (id, payload) => entityWrite(table, 'update', id, withoutUndefined(payload)),
+    delete: id => entityWrite(table, 'delete', id),
+    async deleteMany(criteria = {}) { const rows = await this.filter(criteria, '', null); for (const row of rows) await entityWrite(table, 'delete', row.id); return rows.map(({ id }) => ({ id })); },
+  };
+}
+
 const entities = new Proxy({}, {
   get(cache, entityName) {
     if (typeof entityName !== 'string') return undefined;
@@ -209,7 +227,9 @@ const entities = new Proxy({}, {
 });
 
 async function currentUser() {
+  if (!navigator.onLine) { const stored = await cachedUser(); if (!stored) throw new Error('Iniciá sesión con conexión antes de trabajar offline.'); await setOfflineUser(stored); return stored; }
   const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError && networkFailure(authError)) { const stored = await cachedUser(); if (stored) { await setOfflineUser(stored); return stored; } }
   fail(authError);
   if (!authData.user) throw Object.assign(new Error('Authentication required'), { status: 401 });
 
@@ -218,14 +238,18 @@ async function currentUser() {
     .select('*')
     .eq('id', authData.user.id)
     .maybeSingle();
+  if (profileError && networkFailure(profileError)) { const stored = await cachedUser(); if (stored?.id === authData.user.id) { await setOfflineUser(stored); return stored; } }
   fail(profileError);
-  return {
+  if (!profile) throw new Error('Usuario no habilitado.');
+  const result = {
     id: authData.user.id,
     email: authData.user.email,
     full_name: profile?.full_name || authData.user.user_metadata?.full_name || authData.user.email,
     role: profile?.role || 'user',
     ...profile,
   };
+  await setOfflineUser(result);
+  return result;
 }
 
 const auth = {
@@ -301,6 +325,7 @@ const auth = {
   },
 
   async logout(redirectTo = '/login') {
+    await setOfflineUser(null);
     const { error } = await supabase.auth.signOut();
     fail(error);
     if (redirectTo !== false) window.location.assign('/login');
@@ -315,15 +340,10 @@ const auth = {
 };
 
 async function uploadFile({ file }) {
-  const { data: userData } = await supabase.auth.getUser();
-  const userId = userData.user?.id || 'anonymous';
+  const user = await currentUser();
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '-');
-  const path = `${userId}/${crypto.randomUUID()}-${safeName}`;
-  const { error } = await supabase.storage.from('documents').upload(path, file, {
-    contentType: file.type || undefined,
-    upsert: false,
-  });
-  fail(error);
+  const path = `${user.id}/${crypto.randomUUID()}-${safeName}`;
+  await queueFile(path, file);
   const { data } = supabase.storage.from('documents').getPublicUrl(path);
   return { file_url: data.publicUrl, path };
 }

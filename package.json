@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
-    "test": "node --test src/services/waterEnergy/engine/*.test.js src/services/irrigation/*.test.js",
+    "test": "node --test src/services/waterEnergy/engine/*.test.js src/services/irrigation/*.test.js src/lib/offline.test.js pwa-shell.test.js",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview"
   },
@@ -96,6 +96,7 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.18",
     "eslint-plugin-unused-imports": "^4.3.0",
+    "fake-indexeddb": "6.2.5",
     "globals": "^15.14.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
