@@ -5,6 +5,10 @@ const unwrap = ({ data, error }) => {
   return data;
 };
 export const monitoringService = {
+  async scannedDevice(token) {
+    const devices = unwrap(await supabase.rpc('irrigation_scanned_device', { p_token: token }));
+    return devices?.[0] || null;
+  },
   async devices() {
     return unwrap(await supabase.from('irrigation_devices').select('*').order('farm').order('kind').order('name')) || [];
   },

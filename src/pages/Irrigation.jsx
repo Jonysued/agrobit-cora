@@ -2,6 +2,7 @@ import React,{useState, lazy, Suspense} from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CalendarDays, Radio } from 'lucide-react';
 const IrrigationMonitor = lazy(() => import('@/components/irrigation/monitor/IrrigationMonitor'));
+const RegadorScanner = lazy(() => import('@/components/irrigation/monitor/RegadorScanner'));
 import { useFarm } from '@/lib/FarmContext';
 import { useAuth } from '@/lib/AuthContext';
 import { backend } from '@/api/backendClient';
@@ -19,6 +20,7 @@ export default function Irrigation(){
   const tab = regador || params.get("tab") === "monitoreo" ? "monitoreo" : "cronograma";
   const selectTab = value => { const next = new URLSearchParams(params); next.set("tab", value); if (value !== "monitoreo") next.delete("equipo"); setParams(next); };
   const selectToken = token => { const next = new URLSearchParams(params); next.set("tab", "monitoreo"); if (token) next.set("equipo", token); else next.delete("equipo"); setParams(next); };
+  if(regador)return <div className="mx-auto max-w-xl p-5 lg:p-8"><Suspense fallback={<LoadingState/>}><RegadorScanner token={params.get('equipo')} onSelectToken={selectToken}/></Suspense></div>;
   if(d.loading)return <LoadingState/>;
   const lots=d.Lot||[],designs=d.IrrigationDesign||[];
   const programs=[...(d.IrrigationProgram||[])].sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
