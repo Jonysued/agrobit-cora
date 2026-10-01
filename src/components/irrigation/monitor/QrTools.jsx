@@ -26,9 +26,9 @@ export function QrCard({ device }) {
   }, [device.qr_token]);
   return <div className="text-center">{image && <img src={image} alt={`QR de ${device.name}`} className="mx-auto w-56" />}{error && <p role="alert">{error}</p>}<p className="break-all text-xs text-slate-500">{qrUrl(device.qr_token)}</p><p className="mt-2 text-sm">Escanear abre la ficha. El estado cambia al confirmar la acción.</p></div>;
 }
-export function QrScanner({ onFound }) {
+export function QrScanner({ onFound, autoStart = false }) {
   const video = useRef(null), controls = useRef(null);
-  const [camera, setCamera] = useState(false), [error, setError] = useState(''), [manual, setManual] = useState('');
+  const [camera, setCamera] = useState(autoStart), [error, setError] = useState(''), [manual, setManual] = useState('');
   const find = value => {
     const token = parseQr(value);
     if (!token) { setError('Ese QR no corresponde a un equipo de riego de Lucient.'); return false; }
