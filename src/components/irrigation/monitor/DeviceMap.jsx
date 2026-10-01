@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Tooltip, Polygon, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Tooltip, Polygon, Pane, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { perimeterAreas } from '@/services/irrigation/perimeterAreas';
@@ -26,12 +26,31 @@ export default function DeviceMap({ devices, allDevices = devices, lots = [], on
     <MapContainer center={points[0] || [-32.1, -68.5]} zoom={13} className={onPick ? 'h-64 w-full' : 'h-[440px] w-full'} scrollWheelZoom>
       <TileLayer attribution="&copy; Esri" url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" />
       <MapControl points={points} onPick={onPick} />
-      {polygons.map(l => <Polygon key={l.id} positions={l.polygon} pathOptions={{ color: '#e2e8f0', weight: 1, fillOpacity: 0.015 }}><Tooltip>{l.name}</Tooltip></Polygon>)}
-      {!onPick && areas.map(area => <Polygon key={area.key} positions={area.positions}
-        pathOptions={{ color: area.status.color, weight: area.device.id === selectedId ? 5 : 3, opacity: 1, fillColor: area.status.color, fillOpacity: 0.035 }}
+      <Pane name="lot-border-contrast" style={{ zIndex: 401, pointerEvents: 'none' }}>
+        {polygons.map(l => <Polygon key={l.id} positions={l.polygon} interactive={false}
+          pathOptions={{ color: '#0f172a', weight: 6, opacity: 0.95, fill: false, lineJoin: 'round' }} />)}
+      </Pane>
+      <Pane name="lot-borders" style={{ zIndex: 402 }}>
+        {polygons.map(l => <Polygon key={l.id} positions={l.polygon}
+          pathOptions={{ color: '#ffffff', weight: 3, opacity: 1, fillOpacity: 0.015, lineJoin: 'round' }}><Tooltip>{l.name}</Tooltip></Polygon>)}
+      </Pane>
+      {!onPick && <>
+        <Pane name="irrigation-border-shadow" style={{ zIndex: 403, pointerEvents: 'none' }}>
+          {areas.map(area => <Polygon key={area.key} positions={area.positions} interactive={false}
+            pathOptions={{ color: '#0f172a', weight: area.device.id === selectedId ? 10 : 8, opacity: 1, fill: false, lineJoin: 'round' }} />)}
+        </Pane>
+        <Pane name="irrigation-border-contrast" style={{ zIndex: 404, pointerEvents: 'none' }}>
+          {areas.map(area => <Polygon key={area.key} positions={area.positions} interactive={false}
+            pathOptions={{ color: '#ffffff', weight: area.device.id === selectedId ? 8 : 6, opacity: 1, fill: false, lineJoin: 'round' }} />)}
+        </Pane>
+        <Pane name="irrigation-state-borders" style={{ zIndex: 405 }}>
+      {areas.map(area => <Polygon key={area.key} positions={area.positions}
+        pathOptions={{ color: area.status.color, weight: area.device.id === selectedId ? 6 : 4, opacity: 1, fillColor: area.status.color, fillOpacity: 0.035, lineJoin: 'round' }}
         eventHandlers={{ click: () => onSelect?.(area.device) }}>
         <Tooltip sticky>{area.lot.name} · {PORTION_LABELS[area.valve.portion || '']} · {area.device.name} · {area.status.label}{area.device.kind === 'well' ? ` · Válvula ${area.valve.name}` : ''}</Tooltip>
       </Polygon>)}
+        </Pane>
+      </>}
       {onPick && located.map(({ device, position }) => <Marker key={device.id} position={position}
         icon={L.divIcon({ className: '', iconSize: [12, 12], iconAnchor: [6, 6], html: '<div style="width:12px;height:12px;background:#64748b;border:2px solid white;border-radius:50%"></div>' })}>
         <Tooltip>{device.name}</Tooltip>
