@@ -43,7 +43,7 @@ export default function RegadorScanner({ token, onSelectToken }) {
   return <section className="space-y-5">
     <h1 className="text-2xl font-bold">Escanear QR y cambiar estado</h1>
     {!online && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Sin conexión. Podés escanear QR y guardar estados en este teléfono. Se sincronizan al recuperar conexión con la app abierta.</p>}
-    {!token && <QrScanner onFound={onSelectToken} />}
+    {!token && <QrScanner autoStart onFound={onSelectToken} />}
     {token && <>
       {validToken && query.isLoading && <p role="status">Leyendo equipo…</p>}
       {(!validToken || (!query.isLoading && !query.error && !device)) && <p role="alert" className="text-sm text-red-700">El QR no corresponde a un equipo disponible.</p>}
