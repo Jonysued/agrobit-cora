@@ -1,3 +1,4 @@
+import { isOnline } from '@/lib/connectivity';
 import { snapshot, irrigationDevices, pendingOperations, offlineIrrigationAction, networkFailure, scannedIrrigationDevice } from '@/lib/offline';
 import { supabase } from '@/api/backendClient';
 
@@ -19,7 +20,7 @@ export const monitoringService = {
     return irrigationDevices(async () => unwrap(await supabase.from('irrigation_devices').select('*').order('farm').order('kind').order('name')) || []);
   },
   async saveDevice(form) {
-    if (!navigator.onLine) throw new Error('La configuración de equipos requiere conexión. Los cambios de estado sí se pueden registrar offline.');
+    if (!isOnline()) throw new Error('La configuración de equipos requiere conexión. Los cambios de estado sí se pueden registrar offline.');
     const payload = {
       name: form.name.trim(), farm: form.farm.trim(), kind: form.kind,
       parent_well_id: form.kind === 'valve' ? form.parent_well_id : null,
@@ -37,7 +38,7 @@ export const monitoringService = {
   },
   async action(deviceId, active, requestId) {
     const occurredAt = new Date().toISOString();
-    if (!navigator.onLine || (await pendingOperations()).length) return offlineIrrigationAction(deviceId, active, requestId, occurredAt);
+    if (!isOnline() || (await pendingOperations()).length) return offlineIrrigationAction(deviceId, active, requestId, occurredAt);
     const result = await supabase.rpc('record_irrigation_action', { p_device_id: deviceId, p_active: active, p_request_id: requestId });
     if (result.error && networkFailure(result.error)) return offlineIrrigationAction(deviceId, active, requestId, occurredAt);
     return unwrap(result);
@@ -62,7 +63,7 @@ export const monitoringService = {
     return sessions.map(s => ({ ...s, client_received_at: receivedAt, _offline_cached: stale }));
   },
   async correct(eventId, active, occurredAt, reason) {
-    if (!navigator.onLine) throw new Error('La corrección del historial requiere conexión.');
+    if (!isOnline()) throw new Error('La corrección del historial requiere conexión.');
     return unwrap(await supabase.rpc('correct_irrigation_action', {
       p_event_id: eventId, p_active: active, p_occurred_at: occurredAt, p_reason: reason,
     }));

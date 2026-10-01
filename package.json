@@ -1,20 +1,26 @@
 {
   "name": "lucient-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
-    "test": "node --test src/services/waterEnergy/engine/*.test.js src/services/irrigation/*.test.js src/lib/offline.test.js pwa-shell.test.js",
+    "test": "node --test src/services/waterEnergy/engine/*.test.js src/services/irrigation/*.test.js src/lib/offline.test.js pwa-shell.test.js src/lib/connectivity.test.js",
     "typecheck": "tsc -p ./jsconfig.json",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "ios:sync": "node scripts/check-mobile-env.mjs && npm run build && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.50",
     "@base44/vite-plugin": "^1.0.42",
+    "@capacitor/app": "8.0.1",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
+    "@capacitor/network": "8.0.1",
     "@hello-pangea/dnd": "^17.0.0",
     "@hookform/resolvers": "^4.1.2",
     "@radix-ui/react-accordion": "^1.2.3",
@@ -84,6 +90,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.2",
     "@eslint/js": "^9.19.0",
     "@types/node": "^22.13.5",
     "@types/react": "^18.2.66",

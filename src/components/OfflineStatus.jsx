@@ -1,3 +1,5 @@
+import { isNative } from '@/lib/native';
+import { isOnline } from '@/lib/connectivity';
 import React, { useEffect, useState } from 'react';
 import { Download, WifiOff, CloudUpload } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
@@ -10,13 +12,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 let started = false;
 export default function OfflineStatus() {
   const { user } = useAuth();
-  const [status, setStatus] = useState({}), [online, setOnline] = useState(navigator.onLine), [install, setInstall] = useState(null), [help, setHelp] = useState(false);
+  const [status, setStatus] = useState({}), [online, setOnline] = useState(isOnline()), [install, setInstall] = useState(null), [help, setHelp] = useState(false);
   const [review, setReview] = useState(false), [pending, setPending] = useState([]), [reviewError, setReviewError] = useState('');
-  const [installed, setInstalled] = useState(window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true);
+  const [installed, setInstalled] = useState(isNative || window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true);
   useEffect(() => {
     if (!started) { startOfflineRuntime(); started = true; }
     const stop = watchOffline(setStatus);
-    const network = () => setOnline(navigator.onLine);
+    const network = () => setOnline(isOnline());
     const prompt = event => { event.preventDefault(); setInstall(event); };
     const done = () => { setInstalled(true); setInstall(null); };
     const synced = () => queryClientInstance.invalidateQueries();
@@ -50,7 +52,7 @@ export default function OfflineStatus() {
       <span className="flex items-center gap-2">{!online ? <WifiOff size={15} /> : <CloudUpload size={15} />}{!online ? 'Sin conexión · datos guardados en este dispositivo' : status.syncing ? 'Sincronizando automáticamente…' : status.pending ? `${status.pending} cambio(s) pendiente(s) de sincronizar` : status.cached ? 'Mostrando última descarga · reconectando automáticamente' : status.ready ? 'App disponible sin conexión · sincronización automática' : 'Preparando la app para trabajar sin conexión…'}</span>
       <div className="flex gap-3">{status.error && <button onClick={openReview} className="font-bold underline">Revisar pendientes</button>}{status.error && <button onClick={() => retryOffline().catch(() => {})} className="font-bold underline">Reintentar cambio pendiente</button>}{!installed && <button onClick={installApp} className="flex items-center gap-1 font-bold"><Download size={14} />Instalar Lucient</button>}</div>
       {status.error && <p className="w-full font-semibold">Se conserva el cambio en este dispositivo: {status.error}</p>}
-      {!online && <p className="w-full opacity-80">Los cambios se sincronizan con la app abierta cuando vuelve la conexión. {user.role === 'regador' ? 'Cada cambio queda pendiente hasta que el servidor lo confirme.' : 'El satélite muestra solo las zonas ya visitadas; clima y sondas muestran la última descarga.'}</p>}
+      {!online && <p className="w-full opacity-80">Los cambios se sincronizan con la app abierta cuando vuelve la conexión. {user.role === 'regador' ? 'Cada cambio queda pendiente hasta que el servidor lo confirme.' : isNative ? 'El satélite requiere conexión; clima y sondas muestran la última descarga.' : 'El satélite muestra solo las zonas ya visitadas; clima y sondas muestran la última descarga.'}</p>}
     </div>
     <Dialog open={review} onOpenChange={setReview}><DialogContent className="max-h-[85vh] overflow-y-auto"><DialogHeader><DialogTitle>Revisar cambios pendientes</DialogTitle></DialogHeader><p className="text-sm">La sincronización conserva el orden de los cambios. Revisá el primero que muestra un error para continuar.</p>{reviewError && <p role="alert" className="text-sm text-red-700">{reviewError}</p>}{pending.map(op => <div className="rounded-lg border p-3 text-xs" key={op.requestId}><b>{op.table || (op.kind === 'irrigation' ? 'Estado de riego' : 'Archivo')} · {op.operation || (op.kind === 'irrigation' ? op.active ? 'Encendido / abierta' : 'Apagado / cerrada' : op.path)}</b><p className="mt-1 break-all">{op.id} {op.occurred_at}</p>{op.payload && <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap">{JSON.stringify(op.payload, null, 2)}</pre>}{op.error && <p className="mt-2 text-red-700">{op.error}</p>}<div className="mt-3 flex flex-wrap gap-4">{op.error && op.kind === 'entity' && op.operation !== 'create' && online && <button className="font-bold underline" onClick={() => resolve(op, false)}>Aplicar mi versión</button>}<button className="text-red-700 underline" onClick={() => resolve(op, true)}>Descartar este cambio</button></div></div>)}</DialogContent></Dialog>
     <Dialog open={help} onOpenChange={setHelp}><DialogContent><DialogHeader><DialogTitle>Instalar Lucient en tu teléfono</DialogTitle></DialogHeader><p className="text-sm"><b>Android:</b> abrí Lucient en Chrome y elegí “Instalar aplicación” o “Agregar a pantalla principal” en el menú.</p><p className="text-sm"><b>iPhone / iPad:</b> abrí Lucient en Safari, tocá Compartir y elegí “Agregar a pantalla de inicio”, con “Abrir como app” activado si aparece.</p><p className="text-sm">Después de instalar, abrí la app e iniciá sesión con conexión para descargar los datos. Visitá las secciones que necesitás offline antes de salir al campo.</p><p className="text-sm">Los registros quedan en este teléfono hasta enviarse. En iPhone, si cerrás la app, la sincronización continúa automáticamente al abrirla de nuevo con conexión. Conservá la app y sus datos hasta que no queden pendientes.</p></DialogContent></Dialog>

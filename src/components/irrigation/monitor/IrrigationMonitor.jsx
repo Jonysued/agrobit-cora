@@ -1,3 +1,4 @@
+import { isOnline } from '@/lib/connectivity';
 import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, QrCode, MapPin, List, Printer, Radio } from 'lucide-react';
@@ -15,7 +16,7 @@ const button = 'flex items-center justify-center gap-2 rounded-xl border border-
 export default function IrrigationMonitor({ lots, token, onSelectToken }) {
   const { user } = useAuth(), client = useQueryClient(), detailRef = useRef(null);
   const [farm, setFarm] = useState(''), [kind, setKind] = useState(''), [search, setSearch] = useState(''), [view, setView] = useState('map');
-  const [form, setForm] = useState(null), [scanner, setScanner] = useState(false), [error, setError] = useState(''), [printing, setPrinting] = useState(false), [online, setOnline] = useState(navigator.onLine);
+  const [form, setForm] = useState(null), [scanner, setScanner] = useState(false), [error, setError] = useState(''), [printing, setPrinting] = useState(false), [online, setOnline] = useState(isOnline());
   const admin = user?.role === 'admin';
   const query = useQuery({ queryKey: ['irrigation-monitor', 'devices'], queryFn: monitoringService.devices, refetchInterval: 15000 });
   const pumpsQuery = useQuery({ queryKey: ['irrigation-monitor', 'pumps'], queryFn: () => backend.entities.Pump.list(), enabled: admin && !!form });
@@ -23,7 +24,7 @@ export default function IrrigationMonitor({ lots, token, onSelectToken }) {
   useEffect(() => {
     const update = () => client.invalidateQueries({ queryKey: ['irrigation-monitor'] });
     const stop = monitoringService.subscribe(update);
-    const network = () => { setOnline(navigator.onLine); if (navigator.onLine) update(); };
+    const network = () => { setOnline(isOnline()); if (isOnline()) update(); };
     const visible = () => { if (!document.hidden) update(); };
     window.addEventListener('online', network); window.addEventListener('offline', network); document.addEventListener('visibilitychange', visible); window.addEventListener('lucient:offline-synced', update); window.addEventListener('lucient:data-mutated', update);
     return () => { stop(); window.removeEventListener('online', network); window.removeEventListener('offline', network); document.removeEventListener('visibilitychange', visible); window.removeEventListener('lucient:offline-synced', update); window.removeEventListener('lucient:data-mutated', update); };
