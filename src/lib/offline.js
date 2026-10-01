@@ -1,5 +1,7 @@
 // IndexedDB holds user-scoped snapshots and a durable, ordered outbox.
 // Every write has a stable request ID; the server applies it exactly once.
+import { isOnline } from './connectivity.js';
+import { Capacitor } from '@capacitor/core';
 let dbPromise, client, profile, running;
 const listeners = new Set();
 export const offlineState = { pending: 0, error: '', syncing: false, ready: false, cached: false };
@@ -17,7 +19,7 @@ function database() {
 async function store(name, mode, action) {
   const db = await database();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(name, mode), request = action(tx.objectStore(name));
+    const tx = db.transaction(name, mode, mode === 'readwrite' ? { durability: 'strict' } : undefined), request = action(tx.objectStore(name));
     tx.oncomplete = () => resolve(request.result);
     tx.onerror = () => reject(tx.error || new Error('No se pudo guardar en este dispositivo.'));
     tx.onabort = () => reject(tx.error || new Error('No se pudo guardar en este dispositivo.'));
@@ -27,7 +29,7 @@ const get = key => store('kv', 'readonly', s => s.get(key));
 const put = (key, value) => store('kv', 'readwrite', s => s.put(value, key));
 const scope = () => { if (!profile) throw new Error('Abrí la app con conexión e iniciá sesión antes de trabajar offline.'); return `${profile.id}:${profile.role}`; };
 const clean = value => Object.fromEntries(Object.entries(value || {}).filter(([key, v]) => v !== undefined && !key.startsWith('_offline')));
-export const networkFailure = error => !navigator.onLine || /fetch|network|failed to send|load failed/i.test(error?.message || '');
+export const networkFailure = error => !isOnline() || /fetch|network|failed to send|load failed/i.test(error?.message || '');
 export async function cachedUser() {
   const owner = localStorage.getItem('lucient-offline-owner');
   return owner ? get(`profile:${owner}`) : null;
@@ -49,7 +51,7 @@ async function refreshStatus() {
 }
 export async function snapshot(key, load) {
   const identity = scope(), cacheKey = `${identity}:${key}`;
-  if (navigator.onLine) {
+  if (isOnline()) {
     try { const value = await load(); if (scope() !== identity) throw new Error('La sesión cambió. Volvé a abrir esta sección.'); await put(cacheKey, value); offlineState.cached = false; emit(); return value; }
     catch (error) { if (!networkFailure(error)) throw error; }
   }
@@ -80,7 +82,7 @@ export async function entityRead(table, key, load, criteria = {}, sort = '', lim
   let rows, fresh = false;
   try { rows = await snapshot(`entity:${table}:${key}`, async () => { const data = await load(); fresh = true; return data; }); }
   catch (error) {
-    if (error.code !== 'OFFLINE_CACHE_MISS' && !networkFailure(error) && navigator.onLine) throw error;
+    if (error.code !== 'OFFLINE_CACHE_MISS' && !networkFailure(error) && isOnline()) throw error;
     rows = await get(`${scope()}:entity:${table}:all`);
     if (!rows) throw error;
   }
@@ -106,7 +108,7 @@ export async function saveOfflineOperation(op) {
   if (navigator.locks) await navigator.locks.request('lucient-enqueue', enqueue); else await enqueue();
   await refreshStatus();
   window.dispatchEvent(new Event('lucient:data-mutated'));
-  if (navigator.onLine) {
+  if (isOnline()) {
     try { await flushOffline(); } catch (error) {
       if (!networkFailure(error)) { await store('outbox', 'readwrite', s => s.put({ ...row, error: error.message })); await refreshStatus(); }
     }
@@ -120,7 +122,7 @@ export async function entityWrite(table, operation, id, payload = {}) {
   const identity = scope();
   const rows = await get(`${identity}:entity:${table}:all`) || [];
   const before = overlay(rows, await pendingOperations(), table).find(row => row.id === id);
-  if (operation !== 'create' && !navigator.onLine && !before) throw new Error('Descargá este registro con conexión antes de editarlo.');
+  if (operation !== 'create' && !isOnline() && !before) throw new Error('Descargá este registro con conexión antes de editarlo.');
   if (scope() !== identity) throw new Error('La sesión cambió. Volvé a intentar con tu usuario.');
   const data = clean(payload), recordId = id || crypto.randomUUID();
   const expected = before ? Object.fromEntries((operation === 'delete' ? Object.keys(clean(before)) : Object.keys(data)).filter(k => !['id','updated_date','created_date'].includes(k)).map(k => [k, before[k] ?? null])) : {};
@@ -156,7 +158,7 @@ export async function queueFile(path, file) {
 export async function flushOffline() {
   if (running) return running;
   const sync = async () => {
-    if (!profile || !client || !navigator.onLine) return;
+    if (!profile || !client || !isOnline()) return;
     offlineState.syncing = true; emit();
     try {
       const owner = profile.id;
@@ -165,7 +167,7 @@ export async function flushOffline() {
       const { data, error } = await client.auth.getUser();
       if (error || data.user?.id !== owner) return;
       for (const op of await pendingOperations()) {
-        if (profile?.id !== owner || !navigator.onLine) break;
+        if (profile?.id !== owner || !isOnline()) break;
         if (op.error) break;
         let result;
         try {
@@ -225,11 +227,13 @@ export async function retryOffline() {
 export function startOfflineRuntime() {
   const sync = () => { void flushOffline().catch(() => {}); };
   window.addEventListener('online', sync);
+  window.addEventListener('lucient:resume', sync);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) sync(); });
   setInterval(sync, 15000);
-  if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('/sw.js').then(async registration => {
+  if (Capacitor.isNativePlatform()) { offlineState.ready = true; emit(); }
+  else if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('/sw.js').then(async registration => {
     await navigator.serviceWorker.ready; offlineState.ready = true; emit();
-    setInterval(() => { if (navigator.onLine) void registration.update(); }, 3600000);
+    setInterval(() => { if (isOnline()) void registration.update(); }, 3600000);
   }).catch(() => {});
   navigator.storage?.persist?.().catch(() => {});
 }
@@ -240,7 +244,7 @@ export async function resolvePending(requestId, discard = false) {
   if (!op) return;
   if (discard) await store('outbox', 'readwrite', s => s.delete(requestId));
   else {
-    if (!navigator.onLine || op.kind !== 'entity' || op.operation === 'create') throw new Error('Este cambio necesita revisarse con conexión.');
+    if (!isOnline() || op.kind !== 'entity' || op.operation === 'create') throw new Error('Este cambio necesita revisarse con conexión.');
     const { data, error } = await client.from(op.table).select('*').eq('id', op.id).single();
     if (error) throw new Error(error.message);
     const expected = Object.fromEntries(Object.keys(op.expected).map(key => [key, data[key] ?? null]));

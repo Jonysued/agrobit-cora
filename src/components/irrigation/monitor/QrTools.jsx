@@ -29,6 +29,11 @@ export function QrCard({ device }) {
 export function QrScanner({ onFound, autoStart = false }) {
   const video = useRef(null), controls = useRef(null);
   const [camera, setCamera] = useState(autoStart), [error, setError] = useState(''), [manual, setManual] = useState('');
+  useEffect(() => {
+    const pause = () => setCamera(false);
+    window.addEventListener('lucient:pause', pause);
+    return () => window.removeEventListener('lucient:pause', pause);
+  }, []);
   const find = value => {
     const token = parseQr(value);
     if (!token) { setError('Ese QR no corresponde a un equipo de riego de Lucient.'); return false; }

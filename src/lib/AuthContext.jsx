@@ -63,7 +63,8 @@ export const AuthProvider = ({ children }) => {
     const visible = () => { if (!document.hidden) refresh(); };
     const timer = setInterval(refresh, 30000);
     document.addEventListener('visibilitychange', visible);
-    return () => { disposed = true; clearInterval(timer); document.removeEventListener('visibilitychange', visible); };
+    window.addEventListener('lucient:resume', refresh);
+    return () => { disposed = true; clearInterval(timer); document.removeEventListener('visibilitychange', visible); window.removeEventListener('lucient:resume', refresh); };
   }, [user?.id, applyUser]);
 
   const logout = async (shouldRedirect = true) => {

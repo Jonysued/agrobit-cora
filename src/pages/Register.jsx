@@ -1,3 +1,4 @@
+import { isNative } from '@/lib/native';
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { backend } from "@/api/backendClient";
@@ -99,6 +100,7 @@ export default function Register() {
         </>
       }
     >
+      {!isNative && <>
       <Button
         variant="outline"
         className="w-full h-12 text-sm font-medium mb-6"
@@ -116,6 +118,8 @@ export default function Register() {
           <span className="bg-card px-3 text-muted-foreground">or</span>
         </div>
       </div>
+
+      </>}
 
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">

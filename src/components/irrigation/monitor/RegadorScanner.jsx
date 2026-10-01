@@ -1,3 +1,4 @@
+import { isOnline } from '@/lib/connectivity';
 import React, { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
@@ -10,7 +11,7 @@ export default function RegadorScanner({ token, onSelectToken }) {
   const client = useQueryClient();
   const [confirm, setConfirm] = useState(null), [busy, setBusy] = useState(false);
   const [error, setError] = useState(''), [notice, setNotice] = useState('');
-  const [online, setOnline] = useState(navigator.onLine);
+  const [online, setOnline] = useState(isOnline());
   const validToken = token ? parseQr(token) : null;
   const query = useQuery({
     queryKey: ['irrigation-scanned-device', user?.id, user?.role, validToken],
@@ -20,7 +21,7 @@ export default function RegadorScanner({ token, onSelectToken }) {
   });
   const device = query.data;
   useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
+    const update = () => setOnline(isOnline());
     window.addEventListener('online', update); window.addEventListener('offline', update);
     return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); };
   }, []);

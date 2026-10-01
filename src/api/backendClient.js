@@ -1,3 +1,5 @@
+import { isNative, authCallbackOrigin } from '@/lib/native';
+import { isOnline } from '@/lib/connectivity';
 import { configureOffline, cachedUser, setOfflineUser, entityRead, entityWrite, queueFile, networkFailure } from '@/lib/offline';
 import { createClient } from '@supabase/supabase-js';
 
@@ -227,7 +229,7 @@ const entities = new Proxy({}, {
 });
 
 async function currentUser() {
-  if (!navigator.onLine) { const stored = await cachedUser(); if (!stored) throw new Error('Iniciá sesión con conexión antes de trabajar offline.'); await setOfflineUser(stored); return stored; }
+  if (!isOnline()) { const stored = await cachedUser(); if (!stored) throw new Error('Iniciá sesión con conexión antes de trabajar offline.'); await setOfflineUser(stored); return stored; }
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError && networkFailure(authError)) { const stored = await cachedUser(); if (stored) { await setOfflineUser(stored); return stored; } }
   fail(authError);
@@ -268,7 +270,8 @@ const auth = {
 
   async loginWithProvider(provider, returnTo = '/') {
     sessionStorage.setItem('auth_return_to', returnTo || '/');
-    const redirectTo = `${window.location.origin}/auth/callback`;
+    if (isNative) throw new Error('En la app del teléfono ingresá con email y contraseña.');
+    const redirectTo = `${authCallbackOrigin()}/auth/callback`;
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo },
@@ -283,7 +286,7 @@ const auth = {
       password,
       options: {
         data: { full_name: full_name || email.split('@')[0] },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: `${authCallbackOrigin()}/auth/callback`,
       },
     });
     fail(error);
@@ -312,7 +315,7 @@ const auth = {
 
   async resetPasswordRequest(email) {
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${authCallbackOrigin()}/reset-password`,
     });
     fail(error);
     return data;
