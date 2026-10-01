@@ -54,9 +54,9 @@ export default function DeviceMap({ devices, allDevices = devices, lots = [], on
         </Pane>
       </>}
       {!onPick && wells.map(({ device, position }) => {
-        const status = deviceStatus(device, allDevices), size = device.id === selectedId ? 24 : 18;
+        const status = deviceStatus(device, allDevices), size = device.id === selectedId ? 14 : 10;
         return <Marker key={device.id} position={position} title={`${device.name} · ${status.label}`}
-          icon={L.divIcon({ className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: `<div style="width:${size}px;height:${size}px;background:${status.color};border:2px solid white;border-radius:50%;box-shadow:0 0 0 2px #0f172a"></div>` })}
+          icon={L.divIcon({ className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: `<div style="box-sizing:border-box;width:${size}px;height:${size}px;background:${status.color};border:1.5px solid white;border-radius:50%;box-shadow:0 0 0 1px #0f172a"></div>` })}
           eventHandlers={{ click: () => onSelect?.(device) }}>
           <Tooltip direction="top">Pozo {device.name} · {status.label}</Tooltip>
         </Marker>;
