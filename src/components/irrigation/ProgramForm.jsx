@@ -59,7 +59,7 @@ export default function ProgramForm({lots,designs=[],programs=[],edit,onSaved,on
     </div>
   );
   return (
-    <form onSubmit={submit} className="h-fit self-start rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <form onSubmit={submit} className="min-w-0 h-fit self-start rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
       <div className="flex items-center justify-between gap-2.5">
         <div className="flex items-center gap-2.5">
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-900 text-white"><Droplets size={18}/></span>
