@@ -127,6 +127,26 @@
     padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
   }
 
+  .lucient-shell main > * { min-width: 0; max-width: 100%; }
+  .lucient-shell main > :not([role="status"]) { width: 100%; }
+  .lucient-shell main :is(.grid, .flex) > * { min-width: 0; }
+  .lucient-shell main :is(input, select, textarea) { min-width: 0; max-width: 100%; }
+  .lucient-shell main :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { width: 100%; }
+  .lucient-shell main svg { flex-shrink: 0; }
+
+  @media (max-width: 639px) {
+    .lucient-shell main > :is(.p-5, .p-4) { padding: 1rem; }
+    .lucient-shell main h1 { overflow-wrap: anywhere; }
+    .lucient-shell main :is(input, select, textarea), [role="dialog"] :is(input, select, textarea) { font-size: 16px; }
+    .lucient-shell main :is(input:not([type="checkbox"]):not([type="radio"]), select) { min-height: 44px; }
+    .lucient-shell main nav:not([aria-label="Secciones de Lucient"]) { max-width: 100%; }
+    .lucient-shell main [role="tablist"] { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .lucient-shell main [role="tab"] { min-height: 44px; justify-content: center; white-space: normal; }
+    .lucient-shell main .rdp { max-width: 100%; }
+    .lucient-shell main > [role="status"] > span { flex: 1 1 240px; line-height: 1.5; }
+    .lucient-shell main > [role="status"] > div { flex-wrap: wrap; }
+  }
+
   .lucient-shell main > [role="status"] { flex-shrink: 0; }
   .map-page { flex: 1; min-height: 320px; }
   .map-filters { top: 4.25rem; left: .75rem; width: min(360px, calc(100% - 1.5rem)); }
