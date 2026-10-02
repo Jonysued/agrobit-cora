@@ -49,7 +49,7 @@ export default function InitialStateConfig({ detail, onSaved }) {
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-cyan-50 text-cyan-700"><Droplets size={17} /></span>
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-cyan-50 text-cyan-700"><Droplets size={17} /></span>
           <div>
             <h3 className="text-sm font-bold text-charcoal">Estado hídrico del lote (inicialización)</h3>
             <p className="text-xs text-slate-500">
@@ -59,11 +59,11 @@ export default function InitialStateConfig({ detail, onSaved }) {
             </p>
           </div>
         </div>
-        <div className="flex items-end gap-2">
+        <div className="grid w-full min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
           <div>
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Suma de perfil inicial (mm)</label>
             <Input
-              type="number" min="0" step="0.1" className="h-9 w-36"
+              type="number" min="0" step="0.1" className="h-11 min-w-0 w-full max-w-full"
               value={value} placeholder="mm almacenados"
               onChange={e => setValue(e.target.value)}
             />
@@ -71,12 +71,12 @@ export default function InitialStateConfig({ detail, onSaved }) {
           <div>
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Fecha del estado</label>
             <Input
-              type="date" max={todayIso()} className="h-9 w-40"
+              type="date" max={todayIso()} className="block h-11 box-border min-w-0 w-full max-w-full appearance-none [&::-webkit-date-and-time-value]:min-w-0 [&::-webkit-date-and-time-value]:text-left"
               value={date}
               onChange={e => setDate(e.target.value)}
             />
           </div>
-          <Button size="sm" disabled={saving || !valid || parsed == null || !date} onClick={() => run(() => waterForecastService.initializeManual(profile.lot_id, parsed, date))}>
+          <Button size="sm" className="h-11 w-full sm:w-auto" disabled={saving || !valid || parsed == null || !date} onClick={() => run(() => waterForecastService.initializeManual(profile.lot_id, parsed, date))}>
             <Save size={14} className="mr-1" />Guardar
           </Button>
         </div>
