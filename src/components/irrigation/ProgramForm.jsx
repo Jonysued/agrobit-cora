@@ -53,9 +53,9 @@ export default function ProgramForm({lots,designs=[],programs=[],edit,onSaved,on
     setBusy(false);onSaved();
   };
   const field=(k,label,type='text')=>(
-    <div className="grid gap-1.5">
+    <div className="grid min-w-0 gap-1.5">
       <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}</label>
-      <input type={type} value={form[k]??''} onChange={e=>set(k,e.target.value)} required className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-200"/>
+      <input type={type} value={form[k]??''} onChange={e=>set(k,e.target.value)} required className="block box-border min-w-0 w-full max-w-full appearance-none [&::-webkit-date-and-time-value]:min-w-0 [&::-webkit-date-and-time-value]:text-left rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-200"/>
     </div>
   );
   return (
@@ -112,7 +112,7 @@ export default function ProgramForm({lots,designs=[],programs=[],edit,onSaved,on
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Fecha de riego</label>
           <Calendar mode="single" selected={form.date} onSelect={d=>set('date',d)} locale={es} className="justify-self-start rounded-lg border border-slate-200 p-2 text-xs"/>
         </div>
-        <div className="grid grid-cols-2 gap-3">{field('start_time','Hora inicio','time')}{field('end_time','Hora fin','time')}</div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{field('start_time','Hora inicio','time')}{field('end_time','Hora fin','time')}</div>
         <div className="grid gap-1.5">
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Estado</label>
           <select value={form.status} onChange={e=>set('status',e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500">
