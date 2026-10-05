@@ -72,7 +72,7 @@ function simulateFarmDay(dateStr) {
 }
 
 // ---- Open-Meteo: pronóstico real por lat/lon, sin API key ----
-async function fetchOpenMeteoForecast(latitude, longitude) {
+async function requestOpenMeteoForecast(latitude, longitude) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,rain_sum,et0_fao_evapotranspiration&timezone=auto&forecast_days=16`;
   // Timeout: si Open-Meteo no responde, se usa el pronóstico simulado
   // en vez de dejar la pestaña cargando indefinidamente.
@@ -94,6 +94,31 @@ async function fetchOpenMeteoForecast(latitude, longitude) {
     eto_mm: round1(json.daily.et0_fao_evapotranspiration[i + 1] ?? 0),
     source: 'open-meteo',
   }));
+}
+
+// El dashboard y el panel meteorológico comparten la misma petición pública.
+// Solo se cachean respuestas exitosas; los datos privados siguen en su caché
+// offline por usuario. La fecha evita reutilizar días de ayer tras medianoche.
+const forecastRequests = new Map();
+const FORECAST_FRESH_MS = 5 * 60_000;
+function fetchOpenMeteoForecast(latitude, longitude) {
+  const key = `${latitude}:${longitude}:${isoDate(new Date())}`;
+  const existing = forecastRequests.get(key);
+  if (existing && (existing.pending || Date.now() - existing.updatedAt < FORECAST_FRESH_MS)) return existing.promise;
+  const entry = { pending: true, updatedAt: 0, promise: null };
+  entry.promise = requestOpenMeteoForecast(latitude, longitude).then(days => {
+    entry.pending = false;
+    entry.updatedAt = Date.now();
+    return days;
+  }).catch(error => {
+    forecastRequests.delete(key);
+    throw error;
+  });
+  forecastRequests.set(key, entry);
+  for (const [oldKey, old] of forecastRequests) {
+    if (!old.pending && Date.now() - old.updatedAt >= FORECAST_FRESH_MS) forecastRequests.delete(oldKey);
+  }
+  return entry.promise;
 }
 
 export const weatherService = {
@@ -218,13 +243,14 @@ export const weatherService = {
       farm = farms.find(f => f.id === farm) || null;
     }
     const mode = farm?.weather_source || 'FORECAST_ONLY';
-    const forecast = await this.getForecast(farm);
-    let station = null;
-    let current = null;
-    if (mode !== 'FORECAST_ONLY') {
-      station = await this.getStationForFarm(farm.id);
-      current = await this.getLatestObservation(farm.id);
-    }
+    // Mostrar el último dato guardado sin esperar la sincronización remota.
+    // El pronóstico y las lecturas arrancan juntos, sin sumar sus latencias.
+    const observedPromise = mode === 'FORECAST_ONLY' ? Promise.resolve([null, null]) : Promise.all([
+      this.getStationForFarm(farm.id),
+      backend.entities.WeatherObservation.filter({ farm_id: farm.id }, '-timestamp', 1).then(rows => rows[0] || null),
+    ]);
+    const [forecast, [station, current]] = await Promise.all([this.getForecast(farm), observedPromise]);
+    if (station) void this.refreshIfStale(farm.id, station).catch(() => {});
     const data_age_minutes = current?.timestamp ? Math.round((Date.now() - new Date(current.timestamp).getTime()) / 60000) : null;
     return {
       mode,
