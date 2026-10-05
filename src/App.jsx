@@ -1,3 +1,5 @@
+import { lazy, Suspense } from 'react';
+import LoadingState from '@/components/LoadingState';
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
@@ -12,22 +14,22 @@ import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import AuthCallback from '@/pages/AuthCallback';
-import AppLayout from '@/components/AppLayout';
+const AppLayout = lazy(() => import('@/components/AppLayout'));
 import { FarmProvider } from '@/lib/FarmContext';
-import MapPage from '@/pages/MapPage';
-import Dashboard from '@/pages/Dashboard';
-import Lots from '@/pages/Lots';
-import LotDetail from '@/pages/LotDetail';
-import Irrigation from '@/pages/Irrigation';
-import Documents from '@/pages/Documents';
-import Settings from '@/pages/Settings';
-import WaterEnergy from '@/pages/WaterEnergy';
-import WaterEnergyLot from '@/pages/WaterEnergyLot';
-import WaterEnergyEnergy from '@/pages/WaterEnergyEnergy';
-import WaterEnergyIrrigation from '@/pages/WaterEnergyIrrigation';
-import WaterEnergyConfig from '@/pages/WaterEnergyConfig';
-import WaterEnergySoil from '@/pages/WaterEnergySoil';
-import WaterEnergySoilPoint from '@/pages/WaterEnergySoilPoint';
+const MapPage = lazy(() => import('@/pages/MapPage'));
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const Lots = lazy(() => import('@/pages/Lots'));
+const LotDetail = lazy(() => import('@/pages/LotDetail'));
+const Irrigation = lazy(() => import('@/pages/Irrigation'));
+const Documents = lazy(() => import('@/pages/Documents'));
+const Settings = lazy(() => import('@/pages/Settings'));
+const WaterEnergy = lazy(() => import('@/pages/WaterEnergy'));
+const WaterEnergyLot = lazy(() => import('@/pages/WaterEnergyLot'));
+const WaterEnergyEnergy = lazy(() => import('@/pages/WaterEnergyEnergy'));
+const WaterEnergyIrrigation = lazy(() => import('@/pages/WaterEnergyIrrigation'));
+const WaterEnergyConfig = lazy(() => import('@/pages/WaterEnergyConfig'));
+const WaterEnergySoil = lazy(() => import('@/pages/WaterEnergySoil'));
+const WaterEnergySoilPoint = lazy(() => import('@/pages/WaterEnergySoilPoint'));
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -54,6 +56,7 @@ const AuthenticatedApp = () => {
   }
 
   return (
+    <Suspense fallback={<LoadingState />} >
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
@@ -81,6 +84,7 @@ const AuthenticatedApp = () => {
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
+    </Suspense>
   );
 };
 
