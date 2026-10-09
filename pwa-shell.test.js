@@ -8,7 +8,7 @@ test('service worker boots deep links offline with lazy chunks and excludes API/
   offlineShell().generateBundle.call({ emitFile(file) { source = file.source; } }, {}, { 'assets/app.js': {}, 'assets/scanner.js': {}, 'assets/style.css': {} });
   const handlers = {}, saved = new Map(), names = new Map();
   const cache = { addAll: async urls => { for (const url of urls) saved.set(url, new Response(url)); }, match: async url => saved.get(url), keys: async () => [], put: async () => {}, delete: async () => {} };
-  vm.runInNewContext(source, { URL, Response, self: { location: { origin: 'https://lucient.example' }, clients: { claim: async () => {} }, addEventListener: (name, fn) => { handlers[name] = fn; } }, caches: { open: async name => { names.set(name, cache); return cache; }, keys: async () => [...names.keys()], delete: async name => names.delete(name) }, fetch: () => { throw new Error('offline'); } });
+  vm.runInNewContext(source, { URL, Response, AbortController, setTimeout, clearTimeout, self: { skipWaiting: async () => {}, location: { origin: 'https://lucient.example' }, clients: { claim: async () => {} }, addEventListener: (name, fn) => { handlers[name] = fn; } }, caches: { open: async name => { names.set(name, cache); return cache; }, keys: async () => [...names.keys()], delete: async name => names.delete(name) }, fetch: () => { throw new Error('offline'); } });
   let completion;
   handlers.install({ waitUntil: p => { completion = p; } }); await completion;
   assert.ok(saved.has('/assets/scanner.js')); assert.ok(saved.has('/brand/lucient-192.png')); assert.ok(saved.has('/index.html'));
@@ -16,4 +16,29 @@ test('service worker boots deep links offline with lazy chunks and excludes API/
   handlers.fetch({ request: { method: 'GET', mode: 'navigate', url: 'https://lucient.example/Riego?equipo=qr' }, respondWith: p => { response = p; } });
   assert.equal(await (await response).text(), '/index.html');
   for (const request of [{ method: 'POST', url: 'https://db.example/rest/v1/lots' }, { method: 'GET', mode: 'navigate', url: 'https://lucient.example/auth/callback' }, { method: 'GET', url: 'https://db.example/rest/v1/lots' }]) handlers.fetch({ request, respondWith: () => assert.fail('must not cache API or login callback') });
+});
+
+test('online navigation loads published HTML and preserves a complete offline shell', async () => {
+  let source;
+  offlineShell().generateBundle.call({ emitFile(file) { source = file.source; } }, {}, { 'assets/new.js': {} });
+  const handlers = {}, cached = new Map(), deleted = [];
+  let ready = false, activated = false;
+  const cache = { addAll: async urls => { for (const url of urls) cached.set(url, new Response('offline:' + url)); ready = true; }, match: async url => cached.get(url) };
+  vm.runInNewContext(source, {
+    URL, Response, AbortController, setTimeout, clearTimeout,
+    self: { location: { origin: 'https://lucient.example' }, skipWaiting: async () => { assert.equal(ready, true); activated = true; }, clients: { claim: async () => {} }, addEventListener: (name, fn) => { handlers[name] = fn; } },
+    caches: { open: async () => cache, keys: async () => ['lucient-shell-old', 'lucient-shell-previous'], delete: async name => deleted.push(name), match: async () => new Response('previous lazy screen') },
+    fetch: async (_req, options) => { assert.equal(options.cache, 'no-store'); return new Response('latest published HTML'); },
+  });
+  let completion;
+  handlers.install({ waitUntil: p => { completion = p; } }); await completion;
+  assert.equal(activated, true);
+  let response;
+  handlers.fetch({ request: { method: 'GET', mode: 'navigate', url: 'https://lucient.example/riego' }, respondWith: p => { response = p; } });
+  assert.equal(await (await response).text(), 'latest published HTML');
+  assert.equal(await (await cache.match('/index.html')).text(), 'offline:/index.html');
+  handlers.activate({ waitUntil: p => { completion = p; } }); await completion;
+  assert.deepEqual(deleted, ['lucient-shell-old']);
+  handlers.fetch({ request: { method: 'GET', url: 'https://lucient.example/assets/previous.js' }, respondWith: p => { response = p; } });
+  assert.equal(await (await response).text(), 'previous lazy screen');
 });
