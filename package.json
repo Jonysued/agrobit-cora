@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
-    "test": "node --test src/services/waterEnergy/engine/*.test.js src/services/irrigation/*.test.js src/lib/offline.test.js pwa-shell.test.js src/lib/connectivity.test.js",
+    "test": "node --test src/services/waterEnergy/engine/*.test.js src/services/irrigation/*.test.js src/lib/offline.test.js pwa-shell.test.js src/lib/connectivity.test.js src/services/waterEnergy/soilResponse.test.js src/services/waterEnergy/probeTransfer.test.js supabase/functions/_shared/soilCalibrationMath.test.mjs",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
     "android:sync": "node scripts/check-mobile-env.mjs && npm run build && cap sync android",
