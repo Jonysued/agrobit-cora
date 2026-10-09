@@ -113,8 +113,16 @@
     padding-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
   }
 
-  /* iOS contentInset: automatic already reserves the native safe area. */
-  .lucient-native-ios .lucient-header { padding-top: 0; }
+  /* A single CSS-owned inset keeps the status area stable on launch and resume.
+     Only the device's actual safe area is white; the navigation stays below it. */
+  .lucient-native-ios .lucient-header::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px);
+    background: #fff;
+    pointer-events: none;
+  }
 
   .lucient-shell main {
     display: flex;
