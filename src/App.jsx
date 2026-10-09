@@ -27,7 +27,6 @@ const WaterEnergyLot = lazy(() => import('@/pages/WaterEnergyLot'));
 const WaterEnergyEnergy = lazy(() => import('@/pages/WaterEnergyEnergy'));
 const WaterEnergyIrrigation = lazy(() => import('@/pages/WaterEnergyIrrigation'));
 const WaterEnergyConfig = lazy(() => import('@/pages/WaterEnergyConfig'));
-const WaterEnergySoil = lazy(() => import('@/pages/WaterEnergySoil'));
 const WaterEnergySoilPoint = lazy(() => import('@/pages/WaterEnergySoilPoint'));
 
 const AuthenticatedApp = () => {
@@ -74,7 +73,7 @@ const AuthenticatedApp = () => {
           <Route path="/water-energy" element={<Navigate to="/water-energy/energia" replace />} />
           <Route path="/water-energy/riegos" element={<WaterEnergyIrrigation />} />
           <Route path="/water-energy/energia" element={<WaterEnergyEnergy />} />
-          <Route path="/water-energy/sensores" element={<WaterEnergySoil />} />
+          <Route path="/water-energy/sensores" element={<Navigate to="/riego?tab=sensores" replace />} />
           <Route path="/water-energy/sensores/:probeId" element={<WaterEnergySoilPoint />} />
           <Route path="/water-energy/configuracion" element={<WaterEnergyConfig />} />
           <Route path="/water-energy/lote/:lotId" element={<WaterEnergyLot />} />
