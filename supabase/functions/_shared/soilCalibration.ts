@@ -5,6 +5,8 @@ import { serviceClient } from './backend.ts';
 import { probeProfileSnapshots, estimateProbeDynamics } from './soilCalibrationMath.js';
 import { aggregateGaritaObservations } from '../../../src/services/waterEnergy/garitaWeather.js';
 
+import { estimateTransferDynamics } from '../../../src/services/waterEnergy/probeTransfer.js';
+
 const PAGE_SIZE = 1000;
 
 async function pages(table, columns, configure) {
@@ -22,10 +24,11 @@ async function pages(table, columns, configure) {
 
 export async function calibrateAllSoilModels() {
   const [{ data: probes, error: probeError }, { data: currentModels, error: modelError },
-    { data: stations, error: stationError }] = await Promise.all([
+    { data: stations, error: stationError }, { data: points, error: pointError }] = await Promise.all([
     serviceClient.from('soil_probes').select('*').eq('provider', 'sentek').eq('active', true),
     serviceClient.from('soil_behavior_models').select('*'),
     serviceClient.from('weather_stations').select('id,name,active'),
+    serviceClient.from('soil_monitoring_points').select('id,lot_id'),
   ]);
   for (const error of [probeError, modelError, stationError]) {
     if (error) throw new Error(error.message);
@@ -63,10 +66,13 @@ export async function calibrateAllSoilModels() {
       const byDay = new Map(snapshots.map(snapshot => [snapshot.day, snapshot]));
       const days = [...byDay.values()];
       const estimated = estimateProbeDynamics(days, weather, snapshots);
+      const transfer = estimateTransferDynamics(days, snapshots, weather);
       const attemptAt = new Date().toISOString();
       for (const model of matching) {
         const summary = {
           ...estimated,
+          transfer_dynamics: { ...transfer, daily: transfer.daily.slice(-120), daily_profile: transfer.daily_profile.slice(-120) },
+          reference_lot_id: probe.lot_id || (pointError ? [] : points || []).find(p => p.id === probe.monitoring_point_id)?.lot_id || null,
           method: 'probe_history_rise_and_fall',
           first_probe_day: days[0]?.day || null,
           last_probe_day: days.at(-1)?.day || null,
