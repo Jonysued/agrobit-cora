@@ -52,7 +52,7 @@ export default function WaterEnergyLot() {
   const { lot, profile, state, model } = detail;
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-4 md:p-6">
-      <Link to="/water-energy" className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-800 hover:underline"><ArrowLeft size={15} />Volver a Water & Energy</Link>
+      <Link to="/riego?tab=balance" className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-800 hover:underline"><ArrowLeft size={15} />Volver a Balance hídrico</Link>
       <ModuleHeader />
       <div>
         <h2 className="text-lg font-bold text-charcoal">{lot.name}</h2>

@@ -11,7 +11,7 @@ import { weatherService } from '@/services/waterEnergy/weatherService';
 const OVERVIEW_REFRESH_MS = 2 * 60_000;
 const PROBE_REFRESH_MS = 5 * 60_000;
 
-export default function WaterEnergy() {
+export default function WaterEnergy({ embedded = false }) {
   const navigate = useNavigate();
   const [snapshot, setSnapshot] = useState(() => waterForecastService.peekFarmOverview());
   const [error, setError] = useState(null);
@@ -72,13 +72,13 @@ export default function WaterEnergy() {
     };
   }, []);
   if (!snapshot) return (
-    <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
-      <ModuleHeader />
+    <div className={embedded ? "space-y-5" : "mx-auto max-w-[1600px] space-y-5 p-4 md:p-6"}>
+      {!embedded && <ModuleHeader />}
       <label className="block text-xs font-bold text-slate-500">FINCA<select aria-label="Finca del balance hídrico" value={farmId || ''} onChange={e => setFarmId(e.target.value)} className="mt-1 w-full rounded-xl border bg-white px-3 py-3 text-sm font-normal sm:w-64">{farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
       <ProbeDailyChangeCard probes={probes} onOpen={id => navigate(`/water-energy/sensores/${id}`)} />
       {error ? (
         <div className="mx-auto max-w-md space-y-3 p-8 text-center">
-          <p className="text-sm font-semibold text-slate-600">No se pudo cargar Water &amp; Energy.</p>
+          <p className="text-sm font-semibold text-slate-600">No se pudo cargar el balance hídrico.</p>
           <p className="break-words rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">{error}</p>
           <p className="text-xs text-slate-400">Se reintentará automáticamente.</p>
         </div>
@@ -109,8 +109,8 @@ export default function WaterEnergy() {
   // vinculado o de otra finca también se muestra).
   const farmProbes = probes;
   return (
-    <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
-      <ModuleHeader />
+    <div className={embedded ? "space-y-5" : "mx-auto max-w-[1600px] space-y-5 p-4 md:p-6"}>
+      {!embedded && <ModuleHeader />}
       <p className="text-xs text-slate-500">Datos calculados: {new Date(snapshot.updatedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}{refreshing ? ' · actualizando automáticamente…' : ''}</p>
       {error && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">No se pudieron actualizar los datos: {error}. Se muestran los últimos valores calculados.</p>}
       <label className="block text-xs font-bold text-slate-500">FINCA<select aria-label="Finca del balance hídrico" value={farmId || ''} onChange={e => setFarmId(e.target.value)} className="mt-1 w-full rounded-xl border bg-white px-3 py-3 text-sm font-normal sm:w-64">{farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
