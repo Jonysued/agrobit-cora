@@ -26,6 +26,78 @@ export const energyService = {
 
   getActiveTariff(tariffs) { return tariffs[0] || DEFAULT_TARIFF; },
 
+  projectionWindow(now = new Date()) {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    const start = Date.parse(`${today}T00:00:00-03:00`);
+    return { start, end: start + 7 * 86400000, now: now.getTime() };
+  },
+
+  // Cada programa enciende un pozo, no una vez por cada lote del turno.
+  // La unión de intervalos evita duplicar horas de programas superpuestos.
+  getScheduledOverview(programs, pumps, rows, tariff, window = this.projectionWindow()) {
+    const intervals = new Map();
+    let incompletePrograms = 0;
+    const normalize = value => String(value || '').toLowerCase().replace(/\s+/g, '');
+    for (const program of programs) {
+      if (!['Programado', 'Activo'].includes(program.status)) continue;
+      const day = Date.parse(`${program.date}T00:00:00-03:00`);
+      const duration = Number(program.duration_min);
+      const clock = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(program.start_time || '');
+      if (!Number.isFinite(day)) continue;
+      const start = clock ? day + (Number(clock[1]) * 60 + Number(clock[2])) * 60000 : day;
+      const end = start + (Number.isFinite(duration) && duration > 0 ? duration * 60000 : 86400000);
+      if (start >= window.end || end <= Math.max(window.start, window.now)) continue;
+      let pump = program.pump_id ? pumps.find(p => p.id === program.pump_id) : null;
+      if (!pump && program.well) {
+        const key = normalize(program.well);
+        const glonet = /^glonet(\d+)$/.exec(key);
+        const number = /^pozo(\d+)$/.exec(key);
+        const matches = pumps.filter(p => glonet
+          ? normalize(p.farm) === 'glonet' && normalize(p.name) === `pozo${glonet[1]}`
+          : number ? normalize(p.name) === key && normalize(p.farm) === (number[1] === '7' ? 'las115' : 'las500')
+            : normalize(p.name) === key);
+        if (matches.length === 1) pump = matches[0];
+      }
+      if (!pump && !program.well) {
+        const linked = [...new Set(rows.filter(r => (program.lot_ids || []).includes(r.lot.id) && r.pump).map(r => r.pump.id))];
+        if (linked.length === 1) pump = pumps.find(p => p.id === linked[0]);
+      }
+      if (!pump || !clock || Number(clock[1]) > 23 || Number(clock[2]) > 59 || !(duration > 0)) {
+        incompletePrograms += 1;
+        continue;
+      }
+      const list = intervals.get(pump.id) || [];
+      list.push([Math.max(start, window.start, window.now), Math.min(end, window.end)]);
+      intervals.set(pump.id, list);
+    }
+    const pumpStats = pumps.map(pump => {
+      const list = (intervals.get(pump.id) || []).sort((a, b) => a[0] - b[0]);
+      let milliseconds = 0, lastStart = null, lastEnd = null;
+      for (const [start, end] of list) {
+        if (lastEnd != null && start <= lastEnd) lastEnd = Math.max(lastEnd, end);
+        else {
+          if (lastEnd != null) milliseconds += lastEnd - lastStart;
+          lastStart = start; lastEnd = end;
+        }
+      }
+      if (lastEnd != null) milliseconds += lastEnd - lastStart;
+      const hours = milliseconds / 3600000;
+      const kwh = hours === 0 ? 0 : pump.power_kw > 0 ? hours * pump.power_kw : null;
+      return { pump, hours, kwh, cost: kwh == null ? null : kwh * (tariff?.price_per_kwh ?? DEFAULT_TARIFF.price_per_kwh) };
+    });
+    const missingPower = pumpStats.some(s => s.kwh == null);
+    return { pumpStats, incompletePrograms, totalHours: pumpStats.reduce((s, p) => s + p.hours, 0),
+      totalKwh: missingPower ? null : pumpStats.reduce((s, p) => s + p.kwh, 0),
+      totalCost: missingPower ? null : pumpStats.reduce((s, p) => s + p.cost, 0) };
+  },
+
+  getRecommendedOverview(rows, window = this.projectionWindow()) {
+    return this.getEnergyOverview(rows.map(row => {
+      const date = Date.parse(`${row.recommendation?.recommended_start_date}T00:00:00-03:00`);
+      return { ...row, energy: date >= window.start && date < window.end ? row.energy : null };
+    }));
+  },
+
   // Bomba asociada al lote: primero la vinculada al perfil de suelo,
   // luego por lote, por sector, o la marcada como general. Nunca usa
   // un pozo arbitrario como respaldo: eso asignaría consumos al equipo
