@@ -65,7 +65,8 @@ const AuthenticatedApp = () => {
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route element={<FarmProvider><AppLayout /></FarmProvider>}>
-          <Route path="/" element={<MapPage />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/mapa" element={<MapPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/lotes" element={<Lots />} />
           <Route path="/lotes/:id" element={<LotDetail />} />
