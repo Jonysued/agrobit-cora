@@ -226,7 +226,7 @@ export default function MoistureChart({ detail }) {
                 ifOverflow="extendDomain"
               />
             )}
-            {showProbe && <Line data={dailyPoints.map(d => ({ ...d, [P]: probeByDay.get(isoDay(new Date(d.t))) ?? null }))} dataKey={P} stroke="#7c3aed" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} connectNulls={false} />}
+            {showProbe && <Line data={dailyPoints.filter(d => d.t >= winStart && d.t <= winEnd).map(d => ({ ...d, [P]: probeByDay.get(isoDay(new Date(d.t))) ?? null }))} dataKey={P} stroke="#7c3aed" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} connectNulls={false} />}
             <Line dataKey="Histórico" stroke="#111111" strokeWidth={3} dot={false} activeDot={{ r: 4 }} connectNulls />
             <Line dataKey="Previsión sin riego" stroke="#9ca3af" strokeWidth={3} dot={false} activeDot={{ r: 4 }} connectNulls />
             {hasScheduled && <Line dataKey={S} stroke="#2563eb" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls />}
