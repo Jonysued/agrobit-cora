@@ -4,6 +4,8 @@ import MetricCard from '@/components/MetricCard';
 import LoadingState from '@/components/LoadingState';
 import { waterForecastService, energyService } from '@/services/waterEnergy';
 
+const formatHours = hours => `${hours.toLocaleString('es-AR', { maximumFractionDigits: 1 })} h`;
+
 export default function WaterEnergyEnergy() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -23,7 +25,7 @@ export default function WaterEnergyEnergy() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="kWh por m³ bombeado" value={energy.pumpStats[0] ? `${energy.pumpStats[0].kwhPerM3}` : '—'} detail="Eficiencia energética de bombeo" tone="light" />
         <MetricCard label="kWh por hectárea" value={energy.kwhPerHa != null ? `${energy.kwhPerHa}` : 'Sin datos suficientes'} detail="Próximos 7 días" tone="light" />
-        <MetricCard label="Horas proyectadas" value={`${energy.totalHours} h`} detail="Próximos 7 días" tone="light" />
+        <MetricCard label="Horas proyectadas" value={formatHours(energy.totalHours)} detail="Próximos 7 días" tone="light" />
         <MetricCard label="Costo proyectado" value={`$ ${energy.totalCost.toLocaleString('es-AR')}`} detail={`${energy.totalKwh.toLocaleString('es-AR')} kWh · Estimación`} tone="dark" />
       </div>
       <section className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -44,7 +46,7 @@ export default function WaterEnergyEnergy() {
                   <td className="px-4 py-3 text-slate-600">{p.irrigation_sector || p.lot_id || '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{p.power_kw} kW</td>
                   <td className="px-4 py-3 text-slate-600">{p.flow_m3_h} m³/h</td>
-                  <td className="px-4 py-3 text-slate-600">{s ? `${s.hours} h` : '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{s ? formatHours(s.hours) : '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{s ? `${s.kwh.toLocaleString('es-AR')} kWh` : '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{s ? `$ ${s.cost.toLocaleString('es-AR')}` : '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{p.flow_m3_h ? Math.round((p.power_kw / p.flow_m3_h) * 1000) / 1000 : '—'}</td>
