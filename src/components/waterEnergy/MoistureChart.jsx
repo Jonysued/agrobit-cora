@@ -25,9 +25,10 @@ const mm = value => `${Math.round(value * 10) / 10} mm`;
 export default function MoistureChart({ detail }) {
   const { state, recommendation } = detail;
   // ---- Controles del encabezado ----
+  const [showProbe, setShowProbe] = useState(false);
   const [viewMode, setViewMode] = useState('week');
   const [selectedDay, setSelectedDay] = useState(argentinaToday);
-  useEffect(() => { setViewMode('week'); setSelectedDay(argentinaToday()); }, [detail.lot?.id]);
+  useEffect(() => { setShowProbe(false); setViewMode('week'); setSelectedDay(argentinaToday()); }, [detail.lot?.id]);
   const hasRec = recommendation != null;
 
   const today = argentinaToday();
@@ -45,7 +46,12 @@ export default function MoistureChart({ detail }) {
   // del día siguiente de cada riego o lluvia — el salto lee
   // EXACTAMENTE los mm aplicados y desde ahí baja con la ETc del día.
   const forecastEndTs = dayTs(today) + 15 * DAY;
-  const data = buildProfileSeries(detail, { H, S, R }, today).filter(d => d.t <= forecastEndTs);
+  const P = 'Sonda vinculada (medida)';
+  const probeHistory = detail.model?.calibration_diagnostics?.transfer_dynamics?.daily_profile || [];
+  const probeByDay = new Map(probeHistory.map(p => [p.day, p.mm]));
+  const data = buildProfileSeries(detail, { H, S, R }, today).filter(d => d.t <= forecastEndTs)
+    .map(d => ({ ...d, [P]: showProbe && d.t === dayTs(isoDay(new Date(d.t)))
+      ? probeByDay.get(isoDay(new Date(d.t))) ?? null : null }));
   const forecastDays = (detail.weather || []).filter(d => d.date > today && dayTs(d.date) <= forecastEndTs);
   const simulatedDays = forecastDays.filter(d => d.simulated);
   const observedForecastDays = forecastDays.filter(d => !d.simulated);
@@ -88,7 +94,7 @@ export default function MoistureChart({ detail }) {
     }));
 
   // Escala Y recortada al rango visible (como la referencia), no desde 0
-  const curveVals = filtered.flatMap(d => [d[H], d[S], d[R]].filter(v => v != null));
+  const curveVals = filtered.flatMap(d => [d[H], d[S], d[R], d[P]].filter(v => v != null));
   const maxV = Math.max(...curveVals, targetMm ?? 0, fcMm ?? 0);
   const minV = Math.min(...curveVals, rechargeMm ?? Infinity);
   const span = Math.max(maxV - minV, 20);
@@ -103,8 +109,8 @@ export default function MoistureChart({ detail }) {
   const delta = selectedValue != null && previousValue != null ? Math.round((selectedValue - previousValue) * 10) / 10 : null;
   const probeData = detail.model?.calibration_diagnostics;
   const probeName = detail.model?.name?.replace(/^Modelo de suelo ·\s*/, '') || 'sonda vinculada';
-  const probeDay = probeData?.daily_drydown_factors?.find(p => p.day === activeDay);
-  const probeChange = probeDay && Number.isFinite(probeDay.fall_mm) ? -probeDay.fall_mm : null;
+  const probeDay = probeData?.transfer_dynamics?.daily?.find(p => p.day === activeDay);
+  const probeChange = probeDay && Number.isFinite(probeDay.observed_fall_mm) ? -probeDay.observed_fall_mm : null;
   const probeLastDay = probeData?.last_probe_day;
   const forecastDay = (detail.scenarioWithoutIrrigation || []).find(p => p.date === activeDay);
   const recommendedIrrigation = (detail.scenarioWithIrrigation || []).find(p => p.date === activeDay)?.irrigation_mm;
@@ -134,6 +140,16 @@ export default function MoistureChart({ detail }) {
           {activeDay !== today && <button type="button" onClick={() => setSelectedDay(today)} className="rounded-lg px-2 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Ir a hoy</button>}
         </div>
       </div>
+      {detail.model?.reference_probe_id && <div className="mt-3">
+        <button type="button" aria-pressed={showProbe} disabled={!probeHistory.length}
+          onClick={() => setShowProbe(value => !value)}
+          className="min-h-[44px] rounded-lg border border-violet-200 px-3 py-2 text-sm font-semibold text-violet-700 disabled:opacity-50">
+          {showProbe ? 'Quitar curva de la sonda' : 'Agregar curva de la sonda'}
+        </button>
+        <p className="mt-1 text-xs text-slate-500">{probeHistory.length
+          ? 'Lecturas reales en mm. Los niveles pueden diferir; las recargas de la sonda no se trasladan al lote.'
+          : 'Sin lecturas completas disponibles para comparar la sonda vinculada.'}</p>
+      </div>}
       <p className="mt-3 text-xs text-slate-500">
         Pronóstico hasta 15 días · {forecastSource ? `Fuente: ${forecastSource}` : 'Sin pronóstico meteorológico real'}
         {simulatedDays.length > 0 && <span className="ml-2 font-semibold text-amber-700">· {simulatedDays.length} {simulatedDays.length === 1 ? 'día simulado' : 'días simulados'}</span>}
@@ -157,10 +173,11 @@ export default function MoistureChart({ detail }) {
           {forecastDay?.profile_loss_mm != null && <span>Bajada calculada del perfil: <b>{mm(forecastDay.profile_loss_mm)}</b></span>}
         </div>
         <p className="mt-2 text-[11px] text-slate-500">En la proyección, la lluvia y el riego de este día se reflejan en el valor del día siguiente.</p>
+        {probeDay?.excluded_reason && <p className="mt-2 text-xs text-amber-700">Secado estimado: lectura excluida por {probeDay.excluded_reason === 'probe_recharge' ? 'recarga de la sonda' : probeDay.excluded_reason === 'missing_readings' ? 'falta de lecturas' : 'drenaje posterior a una recarga'}.</p>}
         {probeLastDay && !isFuture && (
           <p className="mt-2 border-t border-slate-200 pt-2 text-xs text-slate-600">
             {probeChange != null
-              ? <>Sonda {probeName} el mismo día: <b>{probeChange > 0 ? '+' : ''}{mm(probeChange)}</b>. El lote ajusta esa bajada por su cultivo y suma solo sus riegos registrados y la lluvia.</>
+              ? <>Sonda {probeName} el mismo día: <b>{probeChange > 0 ? '+' : ''}{mm(probeChange)}</b>. El lote usa el secado válido de la sonda y suma solo sus propios riegos y lluvia.</>
               : activeDay > probeLastDay
                 ? <>Sonda {probeName} sin lectura desde el {fmtTip(dayTs(probeLastDay))}. La bajada de este lote es una estimación, no una medición nueva.</>
                 : <>Sin comparación diaria completa de la sonda {probeName} para esta fecha.</>}
@@ -173,6 +190,7 @@ export default function MoistureChart({ detail }) {
       </div>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600" aria-label="Referencias de la curva">
         <span><i className="mr-1.5 inline-block w-5 align-middle" style={{ borderTop: '3px solid #111827' }} />Histórico</span>
+        {showProbe && <span className="text-violet-700"><i className="mr-1.5 inline-block w-5 align-middle" style={{ borderTop: '2px solid #7c3aed' }} />Sonda {probeName}</span>}
         <span><i className="mr-1.5 inline-block w-5 align-middle" style={{ borderTop: '3px solid #9ca3af' }} />Sin riego futuro</span>
         {hasScheduled && <span><i className="mr-1.5 inline-block w-5 align-middle" style={{ borderTop: '3px solid #2563eb' }} />Programado</span>}
         {hasRec && <span><i className="mr-1.5 inline-block w-5 align-middle" style={{ borderTop: '3px dashed #16a34a' }} />Recomendado</span>}
@@ -208,6 +226,7 @@ export default function MoistureChart({ detail }) {
                 ifOverflow="extendDomain"
               />
             )}
+            {showProbe && <Line data={dailyPoints.map(d => ({ ...d, [P]: probeByDay.get(isoDay(new Date(d.t))) ?? null }))} dataKey={P} stroke="#7c3aed" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} connectNulls={false} />}
             <Line dataKey="Histórico" stroke="#111111" strokeWidth={3} dot={false} activeDot={{ r: 4 }} connectNulls />
             <Line dataKey="Previsión sin riego" stroke="#9ca3af" strokeWidth={3} dot={false} activeDot={{ r: 4 }} connectNulls />
             {hasScheduled && <Line dataKey={S} stroke="#2563eb" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls />}
