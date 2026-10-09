@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { Droplets } from 'lucide-react';
 
 const TABS = [
-  ['/water-energy', 'Dashboard'],
+  ['/water-energy', 'Balance hídrico'],
   ['/water-energy/riegos', 'Riegos'],
   ['/water-energy/energia', 'Energía'],
   ['/water-energy/sensores', 'Sensores'],
