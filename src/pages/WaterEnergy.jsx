@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ModuleHeader from '@/components/waterEnergy/ModuleHeader';
-import WeatherPanel from '@/components/waterEnergy/WeatherPanel';
 import LotForecastTable from '@/components/waterEnergy/LotForecastTable';
 import ProbeDailyChangeCard from '@/components/waterEnergy/ProbeDailyChangeCard';
 import MetricCard from '@/components/MetricCard';
@@ -75,7 +74,7 @@ export default function WaterEnergy() {
   if (!snapshot) return (
     <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
       <ModuleHeader />
-      <WeatherPanel farms={farms} farmId={farmId} onFarmChange={setFarmId} />
+      <label className="block text-xs font-bold text-slate-500">FINCA<select aria-label="Finca del balance hídrico" value={farmId || ''} onChange={e => setFarmId(e.target.value)} className="mt-1 w-full rounded-xl border bg-white px-3 py-3 text-sm font-normal sm:w-64">{farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
       <ProbeDailyChangeCard probes={probes} onOpen={id => navigate(`/water-energy/sensores/${id}`)} />
       {error ? (
         <div className="mx-auto max-w-md space-y-3 p-8 text-center">
@@ -114,7 +113,7 @@ export default function WaterEnergy() {
       <ModuleHeader />
       <p className="text-xs text-slate-500">Datos calculados: {new Date(snapshot.updatedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}{refreshing ? ' · actualizando automáticamente…' : ''}</p>
       {error && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">No se pudieron actualizar los datos: {error}. Se muestran los últimos valores calculados.</p>}
-      <WeatherPanel farms={farms} farmId={farmId} onFarmChange={setFarmId} />
+      <label className="block text-xs font-bold text-slate-500">FINCA<select aria-label="Finca del balance hídrico" value={farmId || ''} onChange={e => setFarmId(e.target.value)} className="mt-1 w-full rounded-xl border bg-white px-3 py-3 text-sm font-normal sm:w-64">{farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Suma de perfil" value={shown.avgStoredMm == null ? '—' : `${shown.avgStoredMm} mm`} detail={`Promedio · ${shown.monitored} de ${shown.lots} lotes monitoreados`} tone={shown.avgPct != null && shown.avgPct < 40 ? 'red' : 'light'} />
         <MetricCard label="Agua requerida · 15 días" value={`${shown.volumeM3.toLocaleString('es-AR')} m³`} detail="Lámina total recomendada" tone="light" />
