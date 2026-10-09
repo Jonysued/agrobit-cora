@@ -134,6 +134,16 @@ async function loadContext(lots) {
     const depths = refProbeId ? allChannels.filter(c => c.probe_id === refProbeId).map(c => c.depth_cm) : [];
     configs.set(p.id, computeProfileConfig(p, layersByProfile.get(p.id) || [], fullProfileDepthCm(depths) ?? DEFAULT_FULL_PROFILE_DEPTH_CM));
   }
+  // Escalar solo cuando conocemos el suelo de la ubicación física de la
+  // sonda o todos sus perfiles vinculados tienen la misma capacidad.
+  for (const model of models) {
+    const linked = profiles.filter(p => p.probe_id === model.reference_probe_id || p.soil_behavior_model_id === model.id);
+    const donor = linked.find(p => p.lot_id === model.calibration_diagnostics?.reference_lot_id);
+    const capacities = linked.map(p => configs.get(p.id)?.total_available_water_capacity_mm).filter(v => v > 0);
+    const reference = donor ? configs.get(donor.id)?.total_available_water_capacity_mm
+      : capacities.length && capacities.length === linked.length && capacities.every(v => v === capacities[0]) ? capacities[0] : null;
+    model.calibration_diagnostics = { ...model.calibration_diagnostics, reference_taw_mm: reference ?? null };
+  }
   // Una sola serie observada de Garita para TODOS los lotes, aunque
   // Garita esté vinculada únicamente a una finca en la configuración.
   const garita = selectGaritaStation(stations);
@@ -261,9 +271,9 @@ async function computeLot(lot, ctx, withHistory) {
       ? Math.round((Date.parse(`${d}T12:00:00Z`) - Date.parse(`${lastProbeDay}T12:00:00Z`)) / 86400000) : 0;
     const continuedFactor = missingProbeDays > 0 && missingProbeDays <= 2
       ? forecastDrydownFactor(model, 0, null, prev) : null;
-    const learnedLoss = kc != null && eto != null
+    const learnedLoss = eto != null
       ? probeProfileLoss(model, { date: d, eto, kc, referenceKc: referenceKc(ctx, model, d),
-        meanEto: obs.meanEto, forecastFactor: continuedFactor }) : null;
+        lotTaw: taw, meanEto: obs.meanEto, forecastFactor: continuedFactor }) : null;
     const etc = learnedLoss ?? (kc != null && eto != null
       ? round1(eto * kc * etcCorrectionFactor * drydownFactor(model, d)
         * (previousStepHadRecharge ? afterRiseFactor(model) : 1)) : 0);
@@ -370,7 +380,9 @@ async function computeLot(lot, ctx, withHistory) {
       model_status: model?.calibration_status || 'sin_modelo',
       recharge_efficiency_learned: model?.recharge_efficiency != null,
       etc_correction_learned: model?.etc_correction_factor != null,
-      probe_dynamics_learned: model?.calibration_diagnostics?.method === 'probe_history_rise_and_fall',
+      probe_capacity_scaled: model?.calibration_diagnostics?.reference_taw_mm > 0,
+      probe_transfer_last_clean_day: model?.calibration_diagnostics?.transfer_dynamics?.last_clean_day || null,
+      probe_dynamics_learned: model?.calibration_diagnostics?.transfer_dynamics?.clean_sample_count > 0,
     },
     // Punto de partida de la curva (fecha + valor en escala de Suma de
     // perfil): el gráfico encuadra su ventana y marca este punto para

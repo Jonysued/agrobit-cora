@@ -1,110 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { drydownFactor, afterRiseFactor, forecastDrydownFactor, probeProfileLoss } from './soilResponse.js';
-
-const model = { calibration_diagnostics: {
-  method: 'probe_history_rise_and_fall', depletion_sample_count: 5,
-  recharge_sample_count: 2, trend_factor: 0.8, post_rise_factor: 1.1,
-} };
-
-test('aplica tendencias y dinámica después de la recarga sin percentiles húmedo/seco', () => {
-  assert.equal(drydownFactor(model), 0.8);
-  assert.equal(afterRiseFactor(model), 1.1);
-  assert.equal(drydownFactor(null), 1);
-  assert.equal(afterRiseFactor(null), 1);
-  assert.equal(drydownFactor({ calibration_diagnostics: { ...model.calibration_diagnostics, method: 'probe_history_relative_drydown' } }), 1);
+import { probeProfileLoss, forecastDrydownFactor, afterRiseFactor, drydownFactor } from './soilResponse.js';
+import { runUsefulWaterScenario } from './engine/waterBalanceEngine.js';
+const model = { calibration_diagnostics: { last_probe_day:'2026-10-08',reference_taw_mm:100,
+  transfer_dynamics:{version:1,last_clean_day:'2026-10-08',recent_loss_mm_day:2,loss_per_eto:0.5,
+    daily:[{day:'2026-10-07',loss_mm:2},{day:'2026-10-08',loss_mm:0}]}}};
+test('histórico sigue la pérdida medida, escala capacidad y respeta pérdida cero',()=>{
+  assert.equal(probeProfileLoss(model,{date:'2026-10-07',lotTaw:100}),2);
+  assert.equal(probeProfileLoss(model,{date:'2026-10-07',lotTaw:200}),4);
+  assert.equal(probeProfileLoss(model,{date:'2026-10-08'}),0);
+  assert.equal(probeProfileLoss(model,{date:'2026-10-01'}),null);
 });
-
-test('la proyección sigue las fases aprendidas por la sonda y reinicia tras una recarga prevista', () => {
-  const recent = { calibration_diagnostics: {
-    ...model.calibration_diagnostics, trend_factor: 0.88,
-    recent_24h_factor: 2.9,
-    daily_drydown_factors: [{ day: '2026-09-28', factor: 2.9 }],
-    last_probe_day: '2026-09-28',
-    current_drydown_phase: 1,
-    drydown_cycle: [
-      { day: 1, factor: 2.7, samples: 4 },
-      { day: 2, factor: 1.4, samples: 3 },
-      { day: 3, factor: 1.1, samples: 3 },
-      { day: 4, factor: 0.95, samples: 2 },
-    ],
-  } };
-  assert.equal(drydownFactor(recent, '2026-09-28'), 2.9);
-  assert.equal(drydownFactor(recent, '2026-09-27'), 0.88);
-  assert.equal(forecastDrydownFactor(recent, 0), 1.4);
-  assert.equal(forecastDrydownFactor(recent, 1), 1.1);
-  assert.equal(forecastDrydownFactor(recent, 2, 2), 2.7);
-  assert.equal(forecastDrydownFactor(recent, 3, 2), 1.4);
-  assert.equal(forecastDrydownFactor(recent, 5), 0.88);
-  // La intensidad reciente modifica la forma aprendida del mismo
-  // episodio. Una recarga del lote la reinicia, y un dato viejo no la
-  // conserva artificialmente en el pronóstico.
-  assert.equal(forecastDrydownFactor(recent, 0, null, '2026-09-28'), 1.5);
-  assert.equal(forecastDrydownFactor(recent, 1, null, '2026-09-28'), 1.18);
-  assert.equal(forecastDrydownFactor(recent, 2, 2, '2026-09-28'), 2.7);
-  assert.equal(forecastDrydownFactor(recent, 0, null, '2026-09-29'), 1.18);
-  assert.equal(forecastDrydownFactor(recent, 0, null, '2026-10-02'), 0.88);
-  assert.equal(afterRiseFactor(recent), 1);
+test('pronóstico sigue secado limpio ajustado por clima, sin ciclo del riego donante',()=>{
+  assert.equal(probeProfileLoss(model,{date:'2026-10-09',forecastFactor:1,eto:6,lotTaw:200}),6);
+  assert.equal(probeProfileLoss(model,{date:'2026-11-01',forecastFactor:1,eto:6}),null);
+  assert.equal(probeProfileLoss(null,{eto:6}),null);
+  assert.equal(drydownFactor(model),1);
+  assert.equal(afterRiseFactor(model),1);
+  assert.equal(forecastDrydownFactor(model,0,0),1);
 });
-
-test('BARNEA mantiene la intensidad observada al continuar el ciclo actual', () => {
-  const barnea = { calibration_diagnostics: {
-    method: 'probe_history_rise_and_fall', depletion_sample_count: 20,
-    last_probe_day: '2026-09-28', current_drydown_phase: 1,
-    recent_24h_factor: 2.92,
-    trend_factor: 0.88,
-    drydown_cycle: [
-      { day: 1, factor: 1.73, samples: 6 },
-      { day: 2, factor: 1.25, samples: 3 },
-      { day: 3, factor: 1.1, samples: 2 },
-    ],
-  } };
-  assert.equal(forecastDrydownFactor(barnea, 0, null, '2026-09-28'), 2.11);
-  assert.equal(forecastDrydownFactor(barnea, 1, null, '2026-09-28'), 1.86);
-  // Si no llega la lectura del 29, el lote sigue el segundo día del
-  // episodio observado. El pronóstico del 30 continúa en el tercero.
-  assert.equal(forecastDrydownFactor(barnea, 0, null, '2026-09-29'), 1.86);
-  assert.equal(probeProfileLoss({ calibration_diagnostics: {
-    ...barnea.calibration_diagnostics, depletion_rate_mm_day: 3,
-  } }, { date: '2026-09-29', eto: 5, kc: 0.55, referenceKc: 0.55,
-    meanEto: 5, forecastFactor: forecastDrydownFactor(barnea, 0, null, '2026-09-28') }), 6.3);
-  assert.equal(forecastDrydownFactor(barnea, 0, 0, '2026-09-28'), 1.73);
-});
-
-test('una fase observada una sola vez también influye, sin imponerla por completo', () => {
-  const glonet = { calibration_diagnostics: {
-    method: 'probe_history_rise_and_fall', depletion_sample_count: 3,
-    trend_factor: 1, current_drydown_phase: 0, last_probe_day: '2026-09-28',
-    drydown_cycle: [
-      { day: 1, factor: 0.7, samples: 1 },
-      { day: 2, factor: 1.6, samples: 1 },
-    ],
-  } };
-  assert.equal(forecastDrydownFactor(glonet, 0, null, '2026-09-28'), 0.85);
-  assert.equal(forecastDrydownFactor(glonet, 1, null, '2026-09-28'), 1.3);
-});
-
-test('una fase actual sin continuación aprendida se atenúa; la recarga propia reinicia', () => {
-  const probe = { calibration_diagnostics: {
-    method: 'probe_history_rise_and_fall', depletion_sample_count: 4,
-    trend_factor: 1, last_probe_day: '2026-09-28', current_drydown_phase: 3,
-    recent_24h_factor: 1.82,
-    drydown_cycle: [{ day: 1, factor: 0.7, samples: 2 }, { day: 3, factor: 1.82, samples: 1 }],
-  } };
-  assert.equal(forecastDrydownFactor(probe, 0, null, '2026-09-28'), 1.53);
-  assert.equal(forecastDrydownFactor(probe, 1, null, '2026-09-28'), 1.35);
-  assert.equal(forecastDrydownFactor(probe, 0, 0, '2026-09-28'), 0.7);
-  assert.equal(forecastDrydownFactor(probe, 0, null, '2026-09-29'), 1.35);
-});
-
-test('la caída del perfil parte de los mm de la sonda y ajusta el cultivo de forma aditiva', () => {
-  const barnea = { calibration_diagnostics: {
-    method: 'probe_history_rise_and_fall', depletion_rate_mm_day: 3,
-    daily_drydown_factors: [{ day: '2026-09-28', fall_mm: 8.6 }],
-  } };
-  const common = { date: '2026-09-28', eto: 5.2, referenceKc: 0.547, meanEto: 5 };
-  assert.equal(probeProfileLoss(barnea, { ...common, kc: 0.547 }), 8.6);
-  assert.equal(probeProfileLoss(barnea, { ...common, kc: 0.137 }), 6.5);
-  assert.equal(probeProfileLoss(barnea, { ...common, date: '2026-09-27', kc: 0.547 }), null);
-  assert.equal(probeProfileLoss(null, { ...common, kc: 0.137 }), null);
+test('el nivel inicial y la recarga pertenecen al lote, con o sin riego programado',()=>{
+  const config={total_available_water_capacity_mm:100,recharge_threshold_mm:20,target_water_mm:80};
+  const days=[{date:'2026-10-09',profile_loss_mm:2,irrigation_mm:10},{date:'2026-10-10',profile_loss_mm:2}];
+  const dry=runUsefulWaterScenario(50,config,days.map(d=>({...d,irrigation_mm:0})));
+  const irrigated=runUsefulWaterScenario(50,config,days);
+  assert.equal(dry[1].available_water_mm,46);
+  assert.equal(irrigated[1].available_water_mm,56);
 });

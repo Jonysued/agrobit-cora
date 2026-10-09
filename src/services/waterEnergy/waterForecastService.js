@@ -48,17 +48,17 @@ if (typeof window !== 'undefined') {
 
 // Insumos diarios: el Kc se recalcula para cada fecha según cultivo,
 // edad del lote, etapa fenológica y desfase de campaña configurado.
-function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1, postRiseFactor = 1, model = null, scheduledByDate = new Map(), recentRecharge = false, referenceKcs = {}, meanEto = null) {
+function forecastInputs(weatherDays, lot, profile, etcCorrectionFactor = 1, postRiseFactor = 1, model = null, scheduledByDate = new Map(), recentRecharge = false, referenceKcs = {}, meanEto = null, lotTaw = null) {
   let rechargeAt = recentRecharge ? 0 : null;
   const firstDate = weatherDays?.[0]?.date;
   const asOfDay = firstDate ? new Date(Date.parse(`${firstDate}T12:00:00Z`) - 86400000).toISOString().slice(0, 10) : null;
   return (weatherDays || []).map((w, index) => {
     const kc = kcService.kcForLotDate(lot, w.date, profile);
     const factor = forecastDrydownFactor(model, index, rechargeAt, asOfDay);
-    const profileLoss = kc != null ? probeProfileLoss(model, {
+    const profileLoss = probeProfileLoss(model, {
       eto: w.eto_mm ?? 0, kc, referenceKc: referenceKcs[w.date],
-      forecastFactor: factor, meanEto,
-    }) : null;
+      date: w.date, forecastFactor: factor, meanEto, lotTaw,
+    });
     // La recarga prevista se refleja en el punto del día siguiente;
     // el primer descenso posterior inicia otra fase del ciclo aprendido.
     if ((w.effective_rainfall_mm ?? w.rainfall_mm ?? 0) > 0 || (scheduledByDate.get(w.date) ?? 0) > 0) {
@@ -92,7 +92,11 @@ function forecastQuality(curve, weatherDays, kcMissing) {
   if (!curve.model) warnings.push('sin modelo de suelo vinculado');
   else if (curve.model.calibration_status !== 'calibrated') warnings.push('modelo de suelo sin calibración completa');
   if (!curve.data_quality?.recharge_efficiency_learned) warnings.push('eficiencia de recarga no aprendida');
-  if (!curve.data_quality?.etc_correction_learned) warnings.push('respuesta de extracción no calibrada contra ETc');
+  if (!curve.data_quality?.probe_dynamics_learned) warnings.push('sin días de secado válidos de la sonda; se usa ET0 × Kc del lote');
+  else {
+    if (!curve.data_quality?.probe_capacity_scaled) warnings.push('suelo de referencia sin identificar; secado transferido directamente en mm');
+    if (daysBetween(curve.data_quality?.probe_transfer_last_clean_day) > 14) warnings.push('secado de la sonda desactualizado; se usa ET0 × Kc del lote');
+  }
   if (anchorAgeDays != null && anchorAgeDays > 30) warnings.push(`estado inicial con ${anchorAgeDays} días de antigüedad`);
   if (anchorAgeDays > 0 && observedAgeHours == null) warnings.push('sin meteorología observada para reconstruir el estado');
   else if (anchorAgeDays > 0 && observedAgeHours > 24) warnings.push('meteorología observada desactualizada');
@@ -174,7 +178,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const kc_missing = kc == null;
   const scheduledByDate = new Map((curve.events?.scheduled || []).map(e => [e.date, e.mm]));
   const baseDays = forecastInputs(weatherDays, lot, profile,
-    curve.etc_correction_factor ?? 1, curve.post_rise_factor ?? 1, model, new Map(), curve.recent_recharge, curve.reference_kc_by_date, curve.garita_mean_eto);
+    curve.etc_correction_factor ?? 1, curve.post_rise_factor ?? 1, model, new Map(), curve.recent_recharge, curve.reference_kc_by_date, curve.garita_mean_eto, curve.config.total_available_water_capacity_mm);
   const forecast_quality = forecastQuality(curve, weatherDays, kc_missing);
   const config = {
     total_available_water_capacity_mm: curve.config.total_available_water_capacity_mm,
@@ -185,7 +189,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   // (solo lluvia − ETc), sin ningún riego futuro.
   const scenarioNoIrrigation = runUsefulWaterScenario(curve.currentUsefulMm, config, baseDays, curve.recent_recharge);
   const scheduledBaseDays = forecastInputs(weatherDays, lot, profile,
-    curve.etc_correction_factor ?? 1, curve.post_rise_factor ?? 1, model, scheduledByDate, curve.recent_recharge, curve.reference_kc_by_date, curve.garita_mean_eto);
+    curve.etc_correction_factor ?? 1, curve.post_rise_factor ?? 1, model, scheduledByDate, curve.recent_recharge, curve.reference_kc_by_date, curve.garita_mean_eto, curve.config.total_available_water_capacity_mm);
   const days = scheduledBaseDays.map(d => ({
     ...d,
     irrigation_mm: scheduledByDate.get(d.date) ?? 0,
@@ -207,7 +211,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
   const scenarioWithIrrigation = recommendation
     ? runUsefulWaterScenario(curve.currentUsefulMm, config,
       forecastInputs(weatherDays, lot, profile, curve.etc_correction_factor ?? 1,
-        curve.post_rise_factor ?? 1, model, recommendedByDate, curve.recent_recharge, curve.reference_kc_by_date, curve.garita_mean_eto)
+        curve.post_rise_factor ?? 1, model, recommendedByDate, curve.recent_recharge, curve.reference_kc_by_date, curve.garita_mean_eto, curve.config.total_available_water_capacity_mm)
         .map(d => ({ ...d, irrigation_mm: recommendedByDate.get(d.date) ?? 0 })),
       curve.recent_recharge)
     : scenarioScheduled;
