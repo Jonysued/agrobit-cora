@@ -20,13 +20,14 @@ export function estimateTransferDynamics(days, snapshots = [], weather = new Map
   const clean = [];
   const daily = [];
   let quarantine = false, sinceRise = 0, settled = 0;
+  let settlingFalls = [];
   for (let i = 1; i < valid.length; i++) {
     const previous = valid[i - 1], current = valid[i];
     const gap = (Date.parse(current.day) - Date.parse(previous.day)) / DAY;
     const fall = round(previous.mm - current.mm);
     const rise = fall < -0.5 || rechargeDays.has(current.day);
-    if (gap !== 1) { quarantine = true; sinceRise = 0; settled = 0; }
-    if (rise) { quarantine = true; sinceRise = 0; settled = 0; }
+    if (gap !== 1) { quarantine = true; sinceRise = 0; settled = 0; settlingFalls = []; }
+    if (rise) { quarantine = true; sinceRise = 0; settled = 0; settlingFalls = []; }
     const recent = clean.slice(-7);
     const baseline = median(recent.map(d => d.loss_mm));
     const ratePerEto = median(recent.filter(d => d.eto > 0).map(d => d.loss_mm / d.eto));
@@ -35,11 +36,17 @@ export function estimateTransferDynamics(days, snapshots = [], weather = new Map
     if (quarantine && !rise && gap === 1) {
       sinceRise++;
       // Dos días de exclusión como mínimo; después, dos caídas consecutivas
-      // compatibles con el secado previo. Sin referencia, no inventar secado.
+      // compatibles con el secado previo. Si el historial inicia húmedo,
+      // exigir cuatro días sin recarga y una meseta de tres caídas antes
+      // de establecer una referencia (criterio conservador, no medición de drenaje).
+      settlingFalls.push(Math.max(0, fall));
+      const window = settlingFalls.slice(-3);
+      const bootstrap = baseline == null && sinceRise >= 4 && window.length === 3
+        && fall >= -0.5 && Math.max(...window) <= Math.max(0.5, Math.min(...window) * 1.6);
       const compatible = baseline != null && fall >= -0.5
         && fall <= Math.max(0.5, baseline * 1.5);
       settled = compatible ? settled + 1 : 0;
-      if (sinceRise >= 2 && settled >= 2) quarantine = false;
+      if (bootstrap || (sinceRise >= 2 && settled >= 2)) quarantine = false;
       else reason = 'post_recharge_drainage';
     }
     let loss = null;

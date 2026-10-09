@@ -27,3 +27,10 @@ test('cero secado es válido; un hueco no se trata como pérdida diaria', () => 
   assert.equal(d.daily[0].loss_mm,null);
   assert.equal(d.daily[0].excluded_reason,'missing_readings');
 });
+
+test('aprende después de estabilizarse aunque el historial comience con una recarga', () => {
+  const d = estimateTransferDynamics(series([180,220,208,201,196,194,192,190]));
+  assert.equal(d.daily[0].loss_mm,null);
+  assert.equal(d.daily.at(-1).source,'observed');
+  assert.equal(d.recent_loss_mm_day,2);
+});
