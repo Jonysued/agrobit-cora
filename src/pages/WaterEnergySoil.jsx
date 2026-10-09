@@ -22,15 +22,15 @@ const rel = ts => {
 };
 const missingLabels = row => (row.missing_configuration || []).map(k => CONFIG_LABELS[k] || k).join(', ');
 
-export default function WaterEnergySoil() {
+export default function WaterEnergySoil({ embedded = false }) {
   const nav = useNavigate();
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState(false);
   useEffect(() => { soilWaterService.getProbeSummaries().then(setRows).catch(() => setErr(true)); }, []);
   if (!rows) return err ? <div className="p-6 text-sm text-slate-500">No se pudo cargar los sensores.</div> : <LoadingState />;
   return (
-    <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
-      <ModuleHeader />
+    <div className={embedded ? "space-y-5" : "mx-auto max-w-[1600px] space-y-5 p-4 md:p-6"}>
+      {!embedded && <ModuleHeader />}
       <div>
         <h2 className="text-lg font-bold text-charcoal">Sensores</h2>
         <p className="text-xs text-slate-500">Mediciones de cada sonda, incluso antes de vincularla a un lote.</p>
@@ -44,7 +44,7 @@ export default function WaterEnergySoil() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {rows.map(row => (
-            <button key={row.probe.id} type="button" onClick={() => nav(`/water-energy/sensores/${row.probe.id}`)} className="rounded-2xl border border-black/5 bg-white p-5 text-left shadow-sm transition hover:shadow-md">
+            <button key={row.probe.id} type="button" onClick={() => nav(`/riego?tab=sensores&sonda=${encodeURIComponent(row.probe.id)}`)} className="rounded-2xl border border-black/5 bg-white p-5 text-left shadow-sm transition hover:shadow-md">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate font-bold text-charcoal">{row.probe.name}</p>

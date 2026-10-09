@@ -75,7 +75,7 @@ export default function WaterEnergy({ embedded = false }) {
     <div className={embedded ? "space-y-5" : "mx-auto max-w-[1600px] space-y-5 p-4 md:p-6"}>
       {!embedded && <ModuleHeader />}
       <label className="block text-xs font-bold text-slate-500">FINCA<select aria-label="Finca del balance hídrico" value={farmId || ''} onChange={e => setFarmId(e.target.value)} className="mt-1 w-full rounded-xl border bg-white px-3 py-3 text-sm font-normal sm:w-64">{farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
-      <ProbeDailyChangeCard probes={probes} onOpen={id => navigate(`/water-energy/sensores/${id}`)} />
+      <ProbeDailyChangeCard probes={probes} onOpen={id => navigate(`/riego?tab=sensores&sonda=${encodeURIComponent(id)}`)} />
       {error ? (
         <div className="mx-auto max-w-md space-y-3 p-8 text-center">
           <p className="text-sm font-semibold text-slate-600">No se pudo cargar el balance hídrico.</p>
@@ -125,7 +125,7 @@ export default function WaterEnergy({ embedded = false }) {
           {shown.unprofiled} lote(s) sin perfil de suelo configurado — configuralos en Water & Energy → Configuración.
         </p>
       )}
-      <ProbeDailyChangeCard probes={farmProbes} onOpen={id => navigate(`/water-energy/sensores/${id}`)} />
+      <ProbeDailyChangeCard probes={farmProbes} onOpen={id => navigate(`/riego?tab=sensores&sonda=${encodeURIComponent(id)}`)} />
       <LotForecastTable rows={farmRows} onOpen={id => navigate(`/water-energy/lote/${id}`)} />
       <p className="text-center text-xs text-slate-400">Modelo de balance hídrico EXPERIMENTAL — los datos de clima pueden ser observados (estación propia) o simulados, según la configuración de cada finca. No constituye una predicción agronómica validada.</p>
     </div>

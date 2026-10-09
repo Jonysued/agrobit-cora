@@ -1,6 +1,8 @@
 import React,{useState, lazy, Suspense} from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CalendarDays, Radio, Droplets } from 'lucide-react';
+import { CalendarDays, Radio, Droplets, Gauge } from 'lucide-react';
+const Sensors = lazy(() => import('@/pages/WaterEnergySoil'));
+const SensorDetail = lazy(() => import('@/pages/WaterEnergySoilPoint'));
 const WaterBalance = lazy(() => import('@/pages/WaterEnergy'));
 const IrrigationMonitor = lazy(() => import('@/components/irrigation/monitor/IrrigationMonitor'));
 const RegadorScanner = lazy(() => import('@/components/irrigation/monitor/RegadorScanner'));
@@ -19,8 +21,8 @@ export default function Irrigation(){
   const regador=user?.role==='regador';
   const [edit,setEdit]=useState(null);
   const [params, setParams] = useSearchParams();
-  const tab = regador ? "monitoreo" : ["balance", "cronograma", "monitoreo", "recomendaciones"].includes(params.get("tab")) ? params.get("tab") : "balance";
-  const selectTab = value => { const next = new URLSearchParams(params); next.set("tab", value); if (value !== "monitoreo") next.delete("equipo"); setParams(next); };
+  const tab = regador ? "monitoreo" : ["balance", "cronograma", "monitoreo", "recomendaciones", "sensores"].includes(params.get("tab")) ? params.get("tab") : "balance";
+  const selectTab = value => { const next = new URLSearchParams(params); next.set("tab", value); next.delete("sonda"); next.delete("grafico"); if (value !== "monitoreo") next.delete("equipo"); setParams(next); };
   const selectToken = token => { const next = new URLSearchParams(params); next.set("tab", "monitoreo"); if (token) next.set("equipo", token); else next.delete("equipo"); setParams(next); };
   if(regador)return <div className="mx-auto max-w-xl p-5 lg:p-8"><Suspense fallback={<LoadingState/>}><RegadorScanner token={params.get('equipo')} onSelectToken={selectToken}/></Suspense></div>;
   if(d.loading)return <LoadingState/>;
@@ -38,9 +40,9 @@ export default function Irrigation(){
       <h1 className="text-3xl font-bold tracking-tight">Riego</h1>
     </div>
     <div role="tablist" aria-label="Secciones de riego" className="mb-6 flex flex-wrap gap-2 border-b border-slate-200 pb-3">
-      {[["balance", "Balance hídrico", Droplets], ["cronograma", "Cronograma de riegos", CalendarDays], ["monitoreo", "Monitoreo de riegos", Radio], ["recomendaciones", "Recomendaciones de riego", Droplets]].filter(([value]) => !regador || value === 'monitoreo').map(([value, label, Icon]) => <button key={value} id={`tab-${value}`} role="tab" aria-selected={tab === value} aria-controls={`panel-${value}`} onClick={() => selectTab(value)} className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition ${tab === value ? 'bg-emerald-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}><Icon size={17}/>{label}</button>)}
+      {[["balance", "Balance hídrico", Droplets], ["cronograma", "Cronograma de riegos", CalendarDays], ["monitoreo", "Monitoreo de riegos", Radio], ["recomendaciones", "Recomendaciones de riego", Droplets], ["sensores", "Sensores", Gauge]].filter(([value]) => !regador || value === 'monitoreo').map(([value, label, Icon]) => <button key={value} id={`tab-${value}`} role="tab" aria-selected={tab === value} aria-controls={`panel-${value}`} onClick={() => selectTab(value)} className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition ${tab === value ? 'bg-emerald-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}><Icon size={17}/>{label}</button>)}
     </div>
-    {tab === 'balance' ? <div role="tabpanel" id="panel-balance" aria-labelledby="tab-balance"><Suspense fallback={<LoadingState/>}><WaterBalance embedded /></Suspense></div> : tab === 'recomendaciones' ? <div role="tabpanel" id="panel-recomendaciones" aria-labelledby="tab-recomendaciones"><Suspense fallback={<LoadingState/>}><IrrigationRecommendations /></Suspense></div> : tab === 'monitoreo' ? <div role="tabpanel" id="panel-monitoreo" aria-labelledby="tab-monitoreo"><Suspense fallback={<LoadingState/>}><IrrigationMonitor lots={lots} token={params.get('equipo')} onSelectToken={selectToken}/></Suspense></div> : <div role="tabpanel" id="panel-cronograma" aria-labelledby="tab-cronograma" className="grid gap-6 lg:grid-cols-[400px_1fr]">
+    {tab === 'sensores' ? <div role="tabpanel" id="panel-sensores" aria-labelledby="tab-sensores"><Suspense fallback={<LoadingState/>}>{params.get('sonda') ? <SensorDetail embedded probeIdProp={params.get('sonda')} /> : <Sensors embedded />}</Suspense></div> : tab === 'balance' ? <div role="tabpanel" id="panel-balance" aria-labelledby="tab-balance"><Suspense fallback={<LoadingState/>}><WaterBalance embedded /></Suspense></div> : tab === 'recomendaciones' ? <div role="tabpanel" id="panel-recomendaciones" aria-labelledby="tab-recomendaciones"><Suspense fallback={<LoadingState/>}><IrrigationRecommendations /></Suspense></div> : tab === 'monitoreo' ? <div role="tabpanel" id="panel-monitoreo" aria-labelledby="tab-monitoreo"><Suspense fallback={<LoadingState/>}><IrrigationMonitor lots={lots} token={params.get('equipo')} onSelectToken={selectToken}/></Suspense></div> : <div role="tabpanel" id="panel-cronograma" aria-labelledby="tab-cronograma" className="grid gap-6 lg:grid-cols-[400px_1fr]">
       <ProgramForm key={edit?.id||'new'} lots={lots} designs={designs} programs={programs} edit={edit}
         onSaved={async()=>{setEdit(null);await d.refetch();}}
         onCancel={()=>setEdit(null)}/>

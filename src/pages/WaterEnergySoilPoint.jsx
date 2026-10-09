@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, CalendarDays, Droplets, Layers3, Sprout, Thermometer, Zap } from 'lucide-react';
-import ModuleHeader from '@/components/waterEnergy/ModuleHeader';
 import LoadingState from '@/components/LoadingState';
 import ProbeChartCard from '@/components/waterEnergy/soil/ProbeChartCard';
 import { EmptyChart, MoistureLines, PROBE_RANGES, WaterSumChart } from '@/components/waterEnergy/soil/ProbeCharts';
@@ -125,8 +124,9 @@ function ProbeChartDetail({ data, chartId, setChartId }) {
   );
 }
 
-export default function WaterEnergySoilPoint() {
-  const { probeId } = useParams();
+export default function WaterEnergySoilPoint({ embedded = false, probeIdProp }) {
+  const { probeId: routeProbeId } = useParams();
+  const probeId = probeIdProp || routeProbeId;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState(null);
@@ -139,13 +139,12 @@ export default function WaterEnergySoilPoint() {
   const validChart = useMemo(() => CHARTS.some(chart => chart.id === chartId && (data?.configuration_status !== 'unlinked' || chart.id !== 'root')), [chartId, data]);
   if (!data) return err ? <div className="p-6 text-sm text-slate-500">No se pudo cargar la sonda.</div> : <LoadingState />;
   const missingText = (data.missing_configuration || []).map(k => CONFIG_LABELS[k] || k).join(', ');
-  const setChart = id => id ? setSearchParams({ grafico: id }) : setSearchParams({});
+  const setChart = id => { const next = new URLSearchParams(searchParams); if (id) next.set("grafico", id); else next.delete("grafico"); setSearchParams(next); };
 
   return (
-    <div className={`mx-auto space-y-5 p-4 md:p-6 ${validChart ? 'max-w-[1600px]' : 'max-w-[1500px]'}`}>
-      <ModuleHeader />
+    <div className={embedded ? 'space-y-5' : `mx-auto space-y-5 p-4 md:p-6 ${validChart ? 'max-w-[1600px]' : 'max-w-[1500px]'}`} >
       <div>
-        <button type="button" onClick={() => validChart ? setChart(null) : navigate('/water-energy/sensores')} className="inline-flex items-center gap-1 text-xs font-bold text-emerald-900 hover:underline"><ArrowLeft size={13} /> {validChart ? 'Todos los gráficos' : 'Sensores'}</button>
+        <button type="button" onClick={() => validChart ? setChart(null) : navigate('/riego?tab=sensores')} className="inline-flex items-center gap-1 text-xs font-bold text-emerald-900 hover:underline"><ArrowLeft size={13} /> {validChart ? 'Todos los gráficos' : 'Sensores'}</button>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
           <div><h1 className="text-xl font-extrabold text-charcoal md:text-2xl">{data.probe?.name}</h1><p className="mt-0.5 text-xs text-slate-500">{data.lot?.name || 'Sin lote vinculado'} · última lectura {data.lastReadingAt ? new Date(data.lastReadingAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</p></div>
           <div className="flex items-center gap-2">{data.probe?.connection_status === 'disconnected' && <span className="rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-bold uppercase text-red-700">Desconectada</span>}<span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase text-emerald-800">{SOURCE_LABEL[data.source] || data.source}</span></div>
