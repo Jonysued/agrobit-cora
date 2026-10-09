@@ -5,7 +5,9 @@ const config: CapacitorConfig = {
   appName: 'Lucient',
   webDir: 'dist',
   server: { androidScheme: 'https' },
-  ios: { contentInset: 'automatic', allowsLinkPreview: false },
+  // CSS owns safe-area spacing. Native automatic insets can shift on resume/scroll.
+  ios: { contentInset: 'never', scrollEnabled: false, backgroundColor: '#ffffff', allowsLinkPreview: false },
+  plugins: { SystemBars: { style: 'LIGHT', hidden: false } },
 };
 
 export default config;
