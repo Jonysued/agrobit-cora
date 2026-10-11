@@ -14,7 +14,7 @@ offline.configureOffline({ auth: { getUser: async () => ({ data: { user: { id: a
   if (failure === 'throw-network') throw new TypeError('Failed to fetch');
   if (failure) return { error: { message: failure } };
   if (name === 'irrigation_scanned_device') return { data: scanned ? [scanned] : [] };
-  if (!receipts.has(params.p_request_id)) receipts.set(params.p_request_id, name === 'apply_offline_change' ? { ...params.p_payload, id: params.p_id, created_date: 'server-date' } : { id: params.p_request_id, device_id: params.p_device_id, active: params.p_active, occurred_at: params.p_occurred_at });
+  if (!receipts.has(params.p_request_id)) receipts.set(params.p_request_id, name === 'apply_offline_change' ? { ...params.p_payload, id: params.p_id, created_date: 'server-date' } : { id: params.p_request_id, device_id: name === 'record_irrigation_qr_action' ? scanned.id : params.p_device_id, active: params.p_active, occurred_at: params.p_occurred_at });
   return { data: receipts.get(params.p_request_id) };
 } });
 
@@ -83,8 +83,9 @@ test('offline lifecycle: durable ordered writes, owner isolation, conflicts and 
   scanned = { id: 'valve-qr', name: 'Válvula de prueba', kind: 'valve', current_active: true };
   await offline.retryOffline();
   assert.equal((await offline.pendingOperations()).length, 0);
-  const qrActions = calls.filter(x => x.name === 'record_irrigation_offline_action' && x.params.p_device_id === 'valve-qr');
+  const qrActions = calls.filter(x => x.name === 'record_irrigation_qr_action' && x.params.p_token === 'new-qr');
   assert.deepEqual(qrActions.map(x => x.params.p_active), [true, false]);
+  assert.ok(qrActions.every(x => !('p_device_id' in x.params)), 'QR actions let the server resolve the equipment');
   navigator.onLine = false;
   const downloaded = await offline.scannedIrrigationDevice('new-qr', () => []);
   assert.equal(downloaded.name, 'Válvula de prueba');
