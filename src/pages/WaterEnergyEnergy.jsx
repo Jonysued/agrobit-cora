@@ -43,7 +43,7 @@ export default function WaterEnergyEnergy() {
   const { scheduled, recommended, recorded, pumps } = data;
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-4 md:p-6">
-      <ModuleHeader />
+      <ModuleHeader energy />
       <section className="space-y-3 rounded-2xl border bg-white p-4">
         <h2 className="text-lg font-bold text-charcoal">Funcionamiento registrado · últimos 7 días</h2>
         <p className="text-xs text-slate-500">Horas de encendido de los pozos según Monitoreo. El consumo se estima con su potencia; se cuenta cada pozo una sola vez, aunque abastezca varios lotes. Los equipos sin cierre registrado siguen en curso.</p>
