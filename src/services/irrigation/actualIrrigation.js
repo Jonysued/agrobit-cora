@@ -50,7 +50,7 @@ export function observedIrrigation(devices, events, lots, designs, now = Date.no
         for (const lotId of valve.lot_ids || []) {
           segments.push({ lotId, valveId: valve.id, portion: valve.portion || '', start, end,
             open: v.open && w.open, rate: applicationRate(designs.find(d => d.lot_id === lotId), lots.find(l => l.id === lotId)) });
-          if ((v.open && now - v.start > DAY) || (w.open && now - w.start > DAY)) warn(lotId, 'equipo activo por más de 24 h: revisar cierre en Monitoreo de riegos');
+          if (v.open && w.open && now - Math.max(v.start, w.start) > DAY) warn(lotId, 'equipo activo por más de 24 h: revisar cierre en Monitoreo de riegos');
         }
       }
     }
@@ -76,7 +76,7 @@ export function observedIrrigation(devices, events, lots, designs, now = Date.no
         row.seconds += (stop - start) / 1000 * factor;
         if (rate == null) row.mm = null;
         else if (row.mm != null) row.mm += (stop - start) / 3600000 * rate * factor;
-        row.inProgress ||= active.some(s => s.open);
+        row.inProgress ||= stop === now && active.some(s => s.open);
         daily.set(date, row); start = stop;
       }
     }

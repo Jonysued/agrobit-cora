@@ -58,3 +58,9 @@ test('actual energy clips the window and merges overlapping pump intervals', () 
   assert.equal(recordedPumpHours([[at(5), at(9)], [at(8), at(11)]], at(6), at(10)), 4);
   assert.equal(recordedPumpHours([], at(6), at(10)), 0);
 });
+
+test('a completed valve session does not inherit a well left running warning', () => {
+  const result = calculate([e('w', true, 6), e('v', true, 6), e('v', false, 7)], undefined, undefined, at(12) + 2 * 86400000);
+  assert.equal(result.warnings.has('a'), false);
+  assert.equal(result.byLot.get('a').get('2026-10-10').inProgress, false);
+});
