@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateTransferDynamics } from './probeTransfer.js';
+import { closedProbeDays, estimateTransferDynamics as estimate } from './probeTransfer.js';
+const estimateTransferDynamics = (days, snapshots, weather, options = {}) => estimate(days, snapshots, weather,
+  { asOf: '2026-11-01T12:00:00Z', ...options });
 const series = values => values.map((mm, i) => ({ day: `2026-10-${String(i + 1).padStart(2, '0')}`, mm }));
 test('excluye recarga y drenaje rápido, conserva secado previo sin aprender del futuro', () => {
   const d = estimateTransferDynamics(series([200,198,196,220,210,204,202,200,198]));
@@ -33,4 +35,57 @@ test('aprende después de estabilizarse aunque el historial comience con una rec
   assert.equal(d.daily[0].loss_mm,null);
   assert.equal(d.daily.at(-1).source,'observed');
   assert.equal(d.recent_loss_mm_day,2);
+});
+
+test('OPERACION1: acepta secado estabilizado sin copiar recarga ni caída rápida', () => {
+  const days = series([135,136.7,130.6,128.1,127,125.3]);
+  const d = estimateTransferDynamics(days);
+  assert.equal(d.daily[0].excluded_reason, 'probe_recharge');
+  assert.equal(d.daily[1].loss_mm, null);
+  assert.equal(d.daily[2].loss_mm, null);
+  assert.equal(d.daily.at(-1).source, 'observed');
+  assert.equal(d.daily.at(-1).loss_mm, 1.7);
+  assert.deepEqual(estimateTransferDynamics(days.slice(0, -1)).daily, d.daily.slice(0, -1));
+});
+
+test('la estabilización contempla demanda climática y sigue excluyendo drenaje acelerado', () => {
+  const days = series([100,130,118,111,109,105]);
+  const weather = new Map(days.map((d, i) => [d.day, { eto: i === 5 ? 4 : 2 }]));
+  const result = estimateTransferDynamics(days, [], weather);
+  assert.equal(result.daily.at(-1).loss_mm, 4);
+  const draining = estimateTransferDynamics(series([100,150,130,118,112,110]));
+  assert.equal(draining.clean_sample_count, 0);
+});
+
+test('hoy se muestra pero no se aprende, y un cierre temprano no cuenta como jornada completa', () => {
+  const days = series([200,198,197.9]).map(d => ({ ...d, time: Date.parse(`${d.day}T23:30:00-03:00`) }));
+  const asOf = '2026-10-03T03:45:00Z'; // 00:45 en Argentina
+  days[2].time = Date.parse('2026-10-03T03:00:00Z');
+  const closed = closedProbeDays(days, asOf);
+  assert.deepEqual(closed.map(d => d.day), ['2026-10-01','2026-10-02']);
+  const d = estimateTransferDynamics(days, [], new Map(), { asOf });
+  assert.equal(d.clean_sample_count, 1);
+  assert.equal(d.recent_loss_mm_day, 2);
+  assert.equal(d.last_clean_day, '2026-10-02');
+  assert.equal(d.daily_profile.at(-1).mm, 197.9);
+  assert.equal(d.incomplete_days, 1);
+  days[1].time = Date.parse('2026-10-02T15:00:00-03:00');
+  assert.equal(estimateTransferDynamics(days, [], new Map(), { asOf }).clean_sample_count, 0);
+});
+
+test('un cierre interrumpido no convierte una pérdida parcial en secado diario', () => {
+  const days = series([200,180]).map((d,i) => ({ ...d, time: Date.parse(`${d.day}T${i ? '20:55' : '23:55'}:00-03:00`) }));
+  const d = estimateTransferDynamics(days);
+  assert.equal(d.incomplete_days, 1);
+  assert.equal(d.clean_sample_count, 0);
+});
+
+test('una referencia antigua de secado cero no bloquea un nuevo ciclo', () => {
+  const days = [{ day:'2026-09-01', mm:100 },{ day:'2026-09-02', mm:100 },
+    ...series([100,130,118,111,108.5,107])];
+  const d = estimateTransferDynamics(days);
+  assert.equal(d.daily.at(-1).source, 'observed');
+  assert.equal(d.daily.at(-1).loss_mm, 1.5);
+  assert.equal(d.recent_loss_mm_day, 1.5);
+  assert.equal(d.recent_clean_sample_count, 1);
 });
