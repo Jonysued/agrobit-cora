@@ -23,11 +23,11 @@ const SOURCE_LABEL = {
 // incompleta o estado inicial sin definir)
 const noForecastReason = detail => {
   const { state } = detail;
-  if (!detail.profile) return 'Este lote no tiene perfil de suelo configurado. Configuralo en Water & Energy → Configuración.';
-  if (!state) return 'Este lote no tiene perfil de suelo configurado. Configuralo en Water & Energy → Configuración.';
+  if (!detail.profile) return 'Este lote no tiene perfil de suelo configurado. Configuralo en Configuración → Water & Energy.';
+  if (!state) return 'Este lote no tiene perfil de suelo configurado. Configuralo en Configuración → Water & Energy.';
   if (state.configuration_status === 'incomplete') {
     const missing = (state.missing_configuration || []).map(k => CONFIG_LABELS[k] || k).join(', ');
-    return `Configuración del perfil incompleta — falta: ${missing}. Completala en Water & Energy → Configuración.`;
+    return `Configuración del perfil incompleta — falta: ${missing}. Completala en Configuración → Water & Energy.`;
   }
   return 'Este lote todavía no tiene un estado hídrico inicial — definí un valor manual en la tarjeta de abajo, y a partir de ahí la curva evoluciona sola con los riegos, la lluvia y la demanda del cultivo.';
 };
@@ -82,7 +82,7 @@ export default function WaterEnergyLot() {
       </section>
       {!profile ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          Este lote no tiene perfil de suelo configurado. Configuralo en Water & Energy → Configuración.
+          Este lote no tiene perfil de suelo configurado. Configuralo en Configuración → Water & Energy.
         </p>
       ) : (
         <>
