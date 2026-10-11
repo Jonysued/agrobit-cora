@@ -26,7 +26,7 @@ export function QrCard({ device }) {
   }, [device.qr_token]);
   return <div className="text-center">{image && <img src={image} alt={`QR de ${device.name}`} className="mx-auto w-56" />}{error && <p role="alert">{error}</p>}<p className="break-all text-xs text-slate-500">{qrUrl(device.qr_token)}</p><p className="mt-2 text-sm">Escanear abre la ficha. El estado cambia al confirmar la acción.</p></div>;
 }
-export function QrScanner({ onFound, autoStart = false }) {
+export function QrScanner({ onFound, autoStart = false, compact = false }) {
   const video = useRef(null), controls = useRef(null);
   const [camera, setCamera] = useState(autoStart), [error, setError] = useState(''), [manual, setManual] = useState('');
   useEffect(() => {
@@ -52,15 +52,15 @@ export function QrScanner({ onFound, autoStart = false }) {
           if (result && !cancelled && find(result.getText())) ctl.stop();
         });
         if (cancelled) ctl.stop(); else controls.current = ctl;
-      } catch { if (!cancelled) { setError('No se pudo abrir la cámara. Revisá el permiso, escaneá con la cámara del celular o pegá el enlace del QR.'); setCamera(false); } }
+      } catch { if (!cancelled) { setError(compact ? 'No se pudo abrir la cámara. Permití el acceso a la cámara y volvé a intentar. También podés escanear la etiqueta con la cámara del celular.' : 'No se pudo abrir la cámara. Revisá el permiso, escaneá con la cámara del celular o pegá el enlace del QR.'); setCamera(false); } }
     };
     start();
     return () => { cancelled = true; controls.current?.stop(); if (element?.srcObject) element.srcObject.getTracks().forEach(t => t.stop()); };
   }, [camera]);
-  return <div className="space-y-4"><p className="text-sm text-slate-600">Escaneá el QR del pozo o la válvula. También podés usar la cámara del celular para abrir el enlace directamente.</p>
-    {camera ? <video ref={video} autoPlay playsInline muted className="w-full rounded-xl bg-slate-900" /> : <button onClick={() => { setError(''); setCamera(true); }} className="w-full rounded-xl bg-emerald-900 py-3 font-bold text-white">Abrir cámara</button>}
-    {camera && <button onClick={() => setCamera(false)} className="text-sm underline">Detener cámara</button>}
-    <form onSubmit={e => { e.preventDefault(); find(manual); }} className="flex gap-2"><input aria-label="Enlace o código QR" value={manual} onChange={e => setManual(e.target.value)} placeholder="Pegar enlace o código QR" className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm" /><button className="rounded-lg border px-3 py-2 text-sm font-bold">Abrir</button></form>
+  return <div className="space-y-4"><p className="text-sm text-slate-600">{compact ? 'Apuntá al QR de la válvula o del pozo.' : 'Escaneá el QR del pozo o la válvula. También podés usar la cámara del celular para abrir el enlace directamente.'}</p>
+    {camera ? <video aria-label="Cámara para escanear QR" ref={video} autoPlay playsInline muted className={`w-full rounded-2xl bg-slate-900 ${compact ? 'h-[min(42dvh,360px)] min-h-48 object-cover' : ''}`} /> : <button onClick={() => { setError(''); setCamera(true); }} className="min-h-16 w-full rounded-2xl bg-emerald-900 px-4 py-4 text-lg font-bold text-white">{compact ? 'Escanear QR' : 'Abrir cámara'}</button>}
+    {camera && <button onClick={() => setCamera(false)} className="min-h-11 w-full rounded-xl border py-2 text-sm font-semibold">Detener cámara</button>}
+    {!compact && <form onSubmit={e => { e.preventDefault(); find(manual); }} className="flex gap-2"><input aria-label="Enlace o código QR" value={manual} onChange={e => setManual(e.target.value)} placeholder="Pegar enlace o código QR" className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm" /><button className="rounded-lg border px-3 py-2 text-sm font-bold">Abrir</button></form>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
   </div>;
 }
