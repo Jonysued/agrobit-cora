@@ -23,6 +23,7 @@ test('half lot, complementary halves, and duplicate same-sector valves', () => {
   const events = [e('w', true, 6), e('v', true, 6), e('v', false, 10), e('v2', true, 6), e('v2', false, 10)];
   const half = { ...valve, portion: 'N' };
   assert.equal(calculate(events, [well, half]).byLot.get('a').get('2026-10-10').mm, 4);
+  assert.equal(calculate(events, [well, half]).byLot.get('a').get('2026-10-10').seconds, 4 * 3600);
   assert.equal(calculate(events, [well, half, { ...half, id: 'v2' }]).byLot.get('a').get('2026-10-10').mm, 4);
   assert.equal(calculate(events, [well, half, { ...half, id: 'v2', portion: 'S' }]).byLot.get('a').get('2026-10-10').mm, 8);
 });

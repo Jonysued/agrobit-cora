@@ -73,7 +73,7 @@ export function observedIrrigation(devices, events, lots, designs, now = Date.no
         const date = irrigationDay(start);
         const stop = Math.min(end, Date.parse(`${date}T00:00:00-03:00`) + DAY);
         const row = daily.get(date) || { date, seconds: 0, mm: rate == null ? null : 0, source: 'monitoreo', inProgress: false };
-        row.seconds += (stop - start) / 1000 * factor;
+        row.seconds += (stop - start) / 1000;
         if (rate == null) row.mm = null;
         else if (row.mm != null) row.mm += (stop - start) / 3600000 * rate * factor;
         row.inProgress ||= stop === now && active.some(s => s.open);
