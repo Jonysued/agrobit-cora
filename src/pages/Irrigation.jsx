@@ -30,7 +30,7 @@ export default function Irrigation(){
   return <div className="mx-auto max-w-[1500px] p-5 lg:p-8">
     <div className="mb-7">
       <p className="text-sm font-bold uppercase tracking-[.18em] text-emerald-700">Manejo del recurso hídrico</p>
-      <h1 className="text-3xl font-bold tracking-tight">Riego</h1>
+      <h1 className="text-3xl font-bold tracking-tight">Water</h1>
     </div>
     <div role="tablist" aria-label="Secciones de riego" className="mb-6 flex flex-wrap gap-2 border-b border-slate-200 pb-3">
       {[["balance", "Balance hídrico", Droplets], ["cronograma", "Cronograma de riegos", CalendarDays], ["monitoreo", "Monitoreo de riegos", Radio], ["recomendaciones", "Recomendaciones de riego", Droplets], ["sensores", "Sensores", Gauge]].filter(([value]) => !regador || value === 'monitoreo').map(([value, label, Icon]) => <button key={value} id={`tab-${value}`} role="tab" aria-selected={tab === value} aria-controls={`panel-${value}`} onClick={() => selectTab(value)} className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition ${tab === value ? 'bg-emerald-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}><Icon size={17}/>{label}</button>)}
