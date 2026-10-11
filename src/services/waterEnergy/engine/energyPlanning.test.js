@@ -1,3 +1,4 @@
+import { buildTurnPlan } from '../../irrigation/turnRecommendations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -44,9 +45,28 @@ test('un programa incompleto y potencia faltante no se presentan como consumo ce
   assert.equal(result.totalKwh, null);
   assert.equal(result.totalCost, null);
 });
-test('recomendaciones usan la misma ventana de siete días', () => {
-  const row = date => ({ lot: { area_ha: 6 }, profile: {}, pump: pumps[0], recommendation: { recommended_start_date: date }, energy: { hours: 3, kwh: 300, cost: 3000 } });
-  const result = service.getRecommendedOverview([row('2026-10-09'), row('2026-10-15'), row('2026-10-16')], window);
-  assert.equal(result.totalHours, 6);
-  assert.equal(result.totalKwh, 600);
+const turn = (start, hours=3, extra={}) => ({ well: { pump_id:'las' }, members: [{lotId:'a'}, {lotId:'b'}], recommendation: { feasible:true, start:Date.parse(start), end:Date.parse(start)+hours*3600000, ...extra } });
+test('energía recomendada cuenta una vez el turno, recorta multiday y usa la misma ventana', () => {
+  const result = service.getRecommendedOverview([turn('2026-10-09T08:00:00-03:00'), turn('2026-10-15T23:00:00-03:00',48), turn('2026-10-16T06:00:00-03:00')], window, tariff, pumps);
+  assert.equal(result.totalHours, 3); // 2 h restantes hoy + 1 h al final de la ventana.
+  assert.equal(result.totalKwh, 300);
+});
+test('no muestra cero ni total completo si falta disponibilidad o bomba', () => {
+  const blocked = service.getRecommendedOverview([turn('2026-10-10T06:00:00-03:00',3,{feasible:false,start:null,end:null})], window, tariff, pumps);
+  assert.equal(blocked.totalKwh,null); assert.equal(blocked.totalHours,null); assert.equal(blocked.unavailableTurns,1);
+  const missing = service.getRecommendedOverview([{...turn('2026-10-10T06:00:00-03:00'),well:{}}],window,tariff,pumps);
+  assert.equal(missing.totalHours,null); assert.equal(missing.incompletePrograms,1);
+});
+
+test('plan y energía comparten turnos simultáneos y nunca exceden las horas disponibles por bomba', () => {
+  const devices=[{id:'w',kind:'well',name:'1',farm:'Las 500',pump_id:'las'},
+    ...['a','b','c'].map((id,i)=>({id:'v'+id,kind:'valve',parent_well_id:'w',turno:i===2?'T2':'T1',lot_ids:[id],portion:''}))];
+  const rows=['a','b','c'].map(id=>({lot:{id,name:id},forecast_status:'ok',forecast_quality:{level:'complete'},state:{available_water_percent:10,total_available_water_capacity_mm:100},application_rate_mm_h:1,efficiency:1,recommendation:{recommended_start_date:'2026-10-10',recommended_irrigation_mm:100}}));
+  const groups=buildTurnPlan(devices,rows,[program({date:'2026-10-10',start_time:'00:00',duration_min:120})],window.now);
+  assert.equal(groups.length,2);
+  assert.equal(groups[0].recommendation.start,Date.parse('2026-10-10T02:00:00-03:00'));
+  assert.equal(groups[1].recommendation.start,groups[0].recommendation.end);
+  const result=service.getRecommendedOverview(groups,window,tariff,pumps);
+  assert.equal(result.pumpStats[0].hours,142); // Available from Oct 10 02:00 to Oct 16 00:00, no duplicate lots.
+  assert.ok(result.pumpStats[0].hours<=168);
 });

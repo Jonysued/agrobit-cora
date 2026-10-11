@@ -1,3 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
+import { monitoringService } from '@/services/irrigation/monitoringService';
+import { assignedPrograms } from '@/services/irrigation/planning';
 import React,{useState, lazy, Suspense} from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CalendarDays, Radio, Droplets, Gauge } from 'lucide-react';
@@ -21,12 +24,13 @@ export default function Irrigation(){
   const [edit,setEdit]=useState(null);
   const [params, setParams] = useSearchParams();
   const tab = regador ? "monitoreo" : ["balance", "cronograma", "monitoreo", "recomendaciones", "sensores"].includes(params.get("tab")) ? params.get("tab") : "balance";
+  const devices=useQuery({queryKey:['program-form-devices',user?.id],queryFn:()=>monitoringService.devices(),enabled:!!user&&!regador&&tab==='cronograma',staleTime:30000,refetchInterval:60000});
   const selectTab = value => { const next = new URLSearchParams(params); next.set("tab", value); next.delete("sonda"); next.delete("grafico"); if (value !== "monitoreo") next.delete("equipo"); setParams(next); };
   const selectToken = token => { const next = new URLSearchParams(params); next.set("tab", "monitoreo"); if (token) next.set("equipo", token); else next.delete("equipo"); setParams(next); };
   if(regador)return <div className="mx-auto max-w-xl p-5 lg:p-8"><Suspense fallback={<LoadingState/>}><RegadorScanner token={params.get('equipo')} onSelectToken={selectToken}/></Suspense></div>;
   if(d.loading)return <LoadingState/>;
   const lots=d.Lot||[],designs=d.IrrigationDesign||[];
-  const programs=[...(d.IrrigationProgram||[])].sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
+  const programs=assignedPrograms(d.IrrigationProgram||[],devices.data||[]).sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
   return <div className="mx-auto max-w-[1500px] p-5 lg:p-8">
     <div className="mb-7">
       <p className="text-sm font-bold uppercase tracking-[.18em] text-emerald-700">Manejo del recurso hídrico</p>
@@ -36,7 +40,9 @@ export default function Irrigation(){
       {[["balance", "Balance hídrico", Droplets], ["cronograma", "Cronograma de riegos", CalendarDays], ["monitoreo", "Monitoreo de riegos", Radio], ["recomendaciones", "Recomendaciones de riego", Droplets], ["sensores", "Sensores", Gauge]].filter(([value]) => !regador || value === 'monitoreo').map(([value, label, Icon]) => <button key={value} id={`tab-${value}`} role="tab" aria-selected={tab === value} aria-controls={`panel-${value}`} onClick={() => selectTab(value)} className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition ${tab === value ? 'bg-emerald-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}><Icon size={17}/>{label}</button>)}
     </div>
     {tab === 'sensores' ? <div role="tabpanel" id="panel-sensores" aria-labelledby="tab-sensores"><Suspense fallback={<LoadingState/>}>{params.get('sonda') ? <SensorDetail embedded probeIdProp={params.get('sonda')} /> : <Sensors embedded />}</Suspense></div> : tab === 'balance' ? <div role="tabpanel" id="panel-balance" aria-labelledby="tab-balance"><Suspense fallback={<LoadingState/>}><WaterBalance embedded /></Suspense></div> : tab === 'recomendaciones' ? <div role="tabpanel" id="panel-recomendaciones" aria-labelledby="tab-recomendaciones"><Suspense fallback={<LoadingState/>}><IrrigationRecommendations /></Suspense></div> : tab === 'monitoreo' ? <div role="tabpanel" id="panel-monitoreo" aria-labelledby="tab-monitoreo"><Suspense fallback={<LoadingState/>}><IrrigationMonitor lots={lots} token={params.get('equipo')} onSelectToken={selectToken}/></Suspense></div> : <div role="tabpanel" id="panel-cronograma" aria-labelledby="tab-cronograma" className="grid gap-6 lg:grid-cols-[400px_1fr]">
-      <ProgramForm key={edit?.id||'new'} lots={lots} designs={designs} programs={programs} edit={edit}
+      {devices.isError&&<p role="alert" className="lg:col-span-2 text-sm text-red-700">No se pudieron cargar las asignaciones de Monitoreo. <button onClick={()=>devices.refetch()} className="underline">Reintentar</button></p>}
+      {!devices.isPending&&programs.some(p=>p._assignment_missing)&&<p role="alert" className="lg:col-span-2 text-sm text-amber-800">Hay programas sin turno válido en Monitoreo. Revisá sus asignaciones; no se atribuye esa agua a ningún lote.</p>}
+      <ProgramForm devices={devices.data||[]} key={edit?.id||'new'} lots={lots} designs={designs} programs={programs} edit={edit}
         onSaved={async()=>{setEdit(null);await d.refetch();}}
         onCancel={()=>setEdit(null)}/>
       <div className="space-y-6">

@@ -1,5 +1,6 @@
 import { backend } from '@/api/backendClient';
 import { monitoringService } from '@/services/irrigation/monitoringService';
+import { assignedPrograms, pendingLotSchedule, businessDay } from '@/services/irrigation/planning';
 import { densityOf } from '@/lib/farmCalculations';
 import { kcService } from './kcService';
 import { soilWaterService, computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from './soilWaterService';
@@ -41,34 +42,11 @@ const EFFECTIVE_RAIN_FACTOR = 0.7;
 const round1 = n => Math.round(n * 10) / 10;
 const pad = n => String(n).padStart(2, '0');
 const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const todayStr = () => isoDay(new Date());
+const todayStr = () => businessDay();
 const dayAfter = (iso, n) => { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + n); return isoDay(d); };
 // Límite de reconstrucción hacia atrás (días) desde el ancla
 const MAX_HISTORY_DAYS = 180;
 
-
-// Factor del lote en el programa: suma de sus porciones (p.ej.
-// Oeste + Este = lote completo).
-function lotFactor(program, lotId) {
-  const items = (program.items || []).filter(i => i.lot_id === lotId);
-  return items.length ? items.reduce((s, i) => s + (i.factor ?? 1), 0) : 1;
-}
-
-// Lámina de un programa que corresponde a un lote (mm × factor del
-// lote). baseMm permite pasar los mm REALMENTE aplicados del log.
-// Los programas de la pestaña Riego suelen crearse sin mm explícito:
-// en ese caso la lámina se deriva del DISEÑO DE RIEGO del lote y la
-// duración del programa, con la misma fórmula que la vista previa de
-// la pestaña Riego (mm/h del equipo × horas de riego × factor).
-function lotIrrigationMm(program, lotId, lot, designs, baseMm) {
-  const factor = lotFactor(program, lotId);
-  if (baseMm != null) return baseMm * factor;
-  if (program.mm != null) return program.mm * factor;
-  const design = (designs || []).find(d => d.lot_id === lotId);
-  if (!design || !lot) return 0;
-  const mmh = (design.emitter_flow_lh || 0) * (design.emitters_per_plant || 0) * densityOf(lot) / 10000;
-  return mmh * ((program.duration_min || 0) / 60) * factor;
-}
 
 // ---- Fondo del perfil completo (0–N cm) de un lote ----
 // Definido por la sonda de referencia de su modelo de suelo (ej.
@@ -84,7 +62,7 @@ async function referenceFullDepthCm(profile, models) {
 
 // ---- Contexto compartido (una sola pasada para todos los lotes) ----
 async function loadContext(lots) {
-  const [profiles, models, states, programs, allLayers, allChannels, designs, stations, allLots] = await Promise.all([
+  let [profiles, models, states, programs, allLayers, allChannels, designs, stations, allLots] = await Promise.all([
     backend.entities.SoilProfile.list(),
     soilBehaviorService.getModels(),
     backend.entities.LotWaterState.list('-timestamp', 2000),
@@ -128,7 +106,8 @@ async function loadContext(lots) {
     ? await backend.entities.WeatherObservation.filter({ weather_station_id: garita.id }, '-timestamp', 2000)
     : [];
   const observed = aggregateGaritaObservations(observations);
-  const observedIrrigation = await monitoringService.observed(lots, designs);
+  const [observedIrrigation, devices] = await Promise.all([monitoringService.observed(lots, designs), monitoringService.devices()]);
+  programs = assignedPrograms(programs, devices);
   return { profiles, models, states, configs, garita, observed, programs, designs, allLots, referenceKcCache: new Map(), observedIrrigation };
 }
 
@@ -172,7 +151,7 @@ async function computeLot(lot, ctx, withHistory) {
   if (explicit) {
     // La inicialización más reciente: una nueva inicialización reinicia la curva
     anchor = {
-      date: isoDay(new Date(explicit.timestamp)),
+      date: businessDay(Date.parse(explicit.timestamp)),
       useful: Math.max(0, round1((explicit.profile_water_mm ?? 0) - wilting)),
       source: explicit.source,
       from: Date.parse(explicit.timestamp),
@@ -181,7 +160,7 @@ async function computeLot(lot, ctx, withHistory) {
     // Registros legados diarios: el más antiguo es el punto de partida
     const first = stateRecs[stateRecs.length - 1];
     anchor = {
-      date: isoDay(new Date(first.timestamp)),
+      date: businessDay(Date.parse(first.timestamp)),
       useful: Math.max(0, round1((first.profile_water_mm ?? 0) - wilting)),
       source: 'calculated',
       from: Date.parse(first.timestamp),
@@ -296,15 +275,10 @@ async function computeLot(lot, ctx, withHistory) {
   // cronograma (mm explícitos del programa o derivados de su diseño
   // de riego y duración); mm = efecto neto sobre el perfil (gross ×
   // eficiencia de recarga aprendida del suelo).
-  const t = todayStr();
-  const scheduledPrograms = (ctx.programs || [])
-    .filter(p => p.date && p.date > t && ['Programado', 'Activo'].includes(p.status) && (p.lot_ids || []).includes(lot.id))
-    .map(p => {
-      const gross = lotIrrigationMm(p, lot.id, lot, ctx.designs);
-      return { date: p.date, gross_mm: round1(gross), mm: round1(gross * efficiency), program_id: p.id, status: p.status };
-    })
-    .filter(e => e.gross_mm > 0)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const design = ctx.designs.find(d => d.lot_id === lot.id);
+  const rate = design ? (design.emitter_flow_lh || 0) * (design.emitters_per_plant || 0) * densityOf(lot) / 10000 : 0;
+  const scheduledPrograms = pendingLotSchedule(ctx.programs, lot, rate, ctx.observedIrrigation.asOf)
+    .map(e => ({ ...e, gross_mm: round1(e.gross_mm), mm: round1(e.gross_mm * efficiency), program_id: e.program_ids[0] }));
   // Agregado por fecha para el gráfico (puede haber varios programas
   // el mismo día).
   const scheduledAgg = new Map();
@@ -321,6 +295,7 @@ async function computeLot(lot, ctx, withHistory) {
   return {
     lot, profile, config, model,
     efficiency,
+    as_of: ctx.observedIrrigation.asOf,
     etc_correction_factor: etcCorrectionFactor,
     soil_response_factor: drydownFactor(model),
     post_rise_factor: afterRiseFactor(model),
@@ -412,7 +387,7 @@ export const lotWaterStateService = {
       .map(s => backend.entities.LotWaterState.delete(s.id)));
     return backend.entities.LotWaterState.create({
       lot_id: lotId,
-      timestamp: date ? `${date}T12:00:00` : new Date().toISOString(),
+      timestamp: date ? `${date}T12:00:00-03:00` : new Date().toISOString(),
       profile_water_mm: stored,
       source: 'manual_adjustment',
       model_version: MODEL_VERSION,

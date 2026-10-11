@@ -68,3 +68,9 @@ test('redondea hacia arriba a minutos completos sin reducir el riego requerido',
   const [group] = buildTurnRecommendations([well(), valve('v1', ['A'])], [row('A', 20, { application_rate_mm_h: 3, recommendation: { recommended_start_date: today, recommended_irrigation_mm: 10.01 } })], today);
   assert.equal(group.recommendation.minutes, 201);
 });
+
+test('válvulas duplicadas del mismo sector no convierten medio lote en lote completo', () => {
+  const [group] = buildTurnRecommendations([well(), valve('v1',['A'],{portion:'N'}),valve('v2',['A'],{portion:'N'})],[row('A',20)],today);
+  assert.equal(group.members[0].factor,0.5);
+  assert.equal(group.recommendation.minutes,480);
+});

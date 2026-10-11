@@ -54,9 +54,9 @@ export const energyService = {
       if (!['Programado', 'Activo'].includes(program.status)) continue;
       const day = Date.parse(`${program.date}T00:00:00-03:00`);
       const duration = Number(program.duration_min);
-      const clock = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(program.start_time || '');
+      const clock = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(program.start_time || '');
       if (!Number.isFinite(day)) continue;
-      const start = clock ? day + (Number(clock[1]) * 60 + Number(clock[2])) * 60000 : day;
+      const start = clock ? day + (Number(clock[1]) * 60 + Number(clock[2])) * 60000 + Number(clock[3] || 0) * 1000 : day;
       const end = start + (Number.isFinite(duration) && duration > 0 ? duration * 60000 : 86400000);
       if (start >= window.end || end <= Math.max(window.start, window.now)) continue;
       let pump = program.pump_id ? pumps.find(p => p.id === program.pump_id) : null;
@@ -103,11 +103,25 @@ export const energyService = {
       totalCost: missingPower ? null : pumpStats.reduce((s, p) => s + p.cost, 0) };
   },
 
-  getRecommendedOverview(rows, window = this.projectionWindow()) {
-    return this.getEnergyOverview(rows.map(row => {
-      const date = Date.parse(`${row.recommendation?.recommended_start_date}T00:00:00-03:00`);
-      return { ...row, energy: date >= window.start && date < window.end ? row.energy : null };
-    }));
+  getRecommendedOverview(groups, window = this.projectionWindow(), tariff, pumps = []) {
+    const programs = [];
+    const unavailablePumpIds = new Set();
+    let unavailableTurns = 0;
+    for (const group of groups) {
+      const rec = group.recommendation;
+      if (!rec) continue;
+      if (!rec.feasible || !Number.isFinite(rec.start) || !Number.isFinite(rec.end)) {
+        unavailableTurns += 1; unavailablePumpIds.add(group.well.pump_id); continue;
+      }
+      programs.push({ pump_id: group.well.pump_id, date: new Date(rec.start - 3 * 3600000).toISOString().slice(0, 10),
+        start_time: new Date(rec.start - 3 * 3600000).toISOString().slice(11, 19),
+        duration_min: (rec.end - rec.start) / 60000, status: 'Programado' });
+    }
+    const result = this.getScheduledOverview(programs, pumps, [], tariff, window);
+    const incomplete = unavailableTurns > 0 || result.incompletePrograms > 0;
+    return { ...result, unavailableTurns, partialHours: result.totalHours,
+      totalHours: incomplete ? null : result.totalHours, totalKwh: incomplete ? null : result.totalKwh, totalCost: incomplete ? null : result.totalCost,
+      pumpStats: result.pumpStats.map(p => unavailablePumpIds.has(p.pump.id) ? { ...p, hours: null, kwh: null, cost: null } : p) };
   },
 
   // Bomba asociada al lote: primero la vinculada al perfil de suelo,

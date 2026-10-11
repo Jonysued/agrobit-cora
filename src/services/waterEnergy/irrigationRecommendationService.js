@@ -23,7 +23,7 @@ import { netIrrigationNeeded } from './engine/recommendationMath';
 const round1 = n => Math.round(n * 10) / 10;
 
 export const irrigationRecommendationService = {
-  withRecommendation(config, lot, startMm, days, scenarioWithoutIrrigation, efficiency, recentRecharge = false) {
+  withRecommendation(config, lot, startMm, days, scenarioWithoutIrrigation, efficiency, recentRecharge = false, pendingTodayMm = 0) {
     const threshold = config.recharge_threshold_mm;
     const target = config.target_water_mm;
     if (threshold == null || target == null) {
@@ -84,7 +84,7 @@ export const irrigationRecommendationService = {
     // a lo ya programado ese día (grossMm × eff = neededMm).
     const scenarioWithIrrigation = runUsefulWaterScenario(startMm, config, days.map(d => (
       d.date === hit.date ? { ...d, irrigation_mm: round1((d.irrigation_mm || 0) + deliveredNetMm) } : d
-    )), recentRecharge);
+    )), recentRecharge, pendingTodayMm);
     return { recommendation, scenarioWithIrrigation };
   },
 

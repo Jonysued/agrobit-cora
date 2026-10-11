@@ -1,3 +1,4 @@
+import InitialMoistureNotice from '@/components/waterEnergy/InitialMoistureNotice';
 import { monitoringService } from '@/services/irrigation/monitoringService';
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -59,6 +60,7 @@ export default function WaterEnergyLot() {
     <div className="mx-auto max-w-[1400px] space-y-5 p-4 md:p-6">
       <Link to="/riego?tab=balance" className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-800 hover:underline"><ArrowLeft size={15} />Volver a Balance hídrico</Link>
       <ModuleHeader />
+      <InitialMoistureNotice />
       <div>
         <h2 className="text-lg font-bold text-charcoal">{lot.name}</h2>
         <p className="text-xs text-slate-500">{lot.farm} · {lot.crop} · {lot.area_ha} ha{lot.sector ? ` · ${lot.sector}` : ''}</p>

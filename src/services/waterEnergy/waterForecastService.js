@@ -1,3 +1,6 @@
+import { monitoringService } from '@/services/irrigation/monitoringService';
+import { buildTurnPlan } from '@/services/irrigation/turnRecommendations';
+import { businessDay } from '@/services/irrigation/planning';
 import { backend } from '@/api/backendClient';
 import { weatherService } from './weatherService';
 import { kcService } from './kcService';
@@ -194,11 +197,12 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
     ...d,
     irrigation_mm: scheduledByDate.get(d.date) ?? 0,
   }));
-  const scenarioScheduled = runUsefulWaterScenario(curve.currentUsefulMm, config, days, curve.recent_recharge);
+  const pendingTodayMm = scheduledByDate.get(businessDay(curve.as_of ?? Date.now())) || 0;
+  const scenarioScheduled = runUsefulWaterScenario(curve.currentUsefulMm, config, days, curve.recent_recharge, pendingTodayMm);
   // El escenario y la recomendación comparten los 15 días del pronóstico.
   const canRecommend = !kc_missing && forecast_quality.level !== 'blocked';
   const { recommendation } = canRecommend
-    ? irrigationRecommendationService.withRecommendation(config, lot, curve.currentUsefulMm, days, scenarioScheduled.slice(0, 15), efficiency, curve.recent_recharge)
+    ? irrigationRecommendationService.withRecommendation(config, lot, curve.currentUsefulMm, days, scenarioScheduled.slice(0, 15), efficiency, curve.recent_recharge, pendingTodayMm)
     : { recommendation: null };
   // La recomendación también reinicia el ciclo de extracción de la
   // sonda: su curva futura debe aprender del riego que se propone.
@@ -213,7 +217,7 @@ function buildRow(lot, curve, weatherDays, pumps, tariffs, designs) {
       forecastInputs(weatherDays, lot, profile, curve.etc_correction_factor ?? 1,
         curve.post_rise_factor ?? 1, model, recommendedByDate, curve.recent_recharge, curve.reference_kc_by_date, curve.garita_mean_eto, curve.config.total_available_water_capacity_mm)
         .map(d => ({ ...d, irrigation_mm: recommendedByDate.get(d.date) ?? 0 })),
-      curve.recent_recharge)
+      curve.recent_recharge, pendingTodayMm)
     : scenarioScheduled;
   const energy = recommendation ? energyService.compute(recommendation.recommended_irrigation_m3, pump, tariff, rateMmH, recommendation.recommended_irrigation_mm) : null;
   return {
@@ -275,17 +279,19 @@ export const waterForecastService = {
     const pumpsPromise = energyService.getPumps();
     const tariffsPromise = energyService.getTariffs();
     const designsPromise = backend.entities.IrrigationDesign.list();
+    const devicesPromise = monitoringService.devices();
+    const programsPromise = backend.entities.IrrigationProgram.list();
     const lots = await lotsPromise;
     // La reconstrucción del pasado y el pronóstico remoto son independientes.
     // Ambos arrancan tan pronto están los lotes, en lugar de sumar latencias.
     const curvesPromise = lotWaterStateService.getLotStates(lots, { withHistory: false });
     const weatherPromise = weatherService.getFarmForecast(lots);
-    const [pumps, tariffs, designs, curves, weather] = await Promise.all([
+    const [pumps, tariffs, designs, curves, weather, devices, programs] = await Promise.all([
       pumpsPromise,
       tariffsPromise,
       designsPromise,
       curvesPromise,
-      weatherPromise,
+      weatherPromise, devicesPromise, programsPromise,
     ]);
     const rows = lots.map(lot => {
       const curve = curves.get(lot.id);
@@ -295,6 +301,9 @@ export const waterForecastService = {
     const withState = rows.filter(r => r.forecast_status === 'ok');
     const withRecommendation = withState.filter(r => r.recommendation);
     const pcts = withState.map(r => r.state.available_water_percent).filter(v => v != null);
+    const turns = buildTurnPlan(devices, rows, programs);
+    const window = energyService.projectionWindow();
+    const recommendedEnergy = energyService.getRecommendedOverview(turns, { ...window, end: window.start + 15 * 86400000 }, energyService.getActiveTariff(tariffs), pumps);
     const totals = {
       lots: lots.length,
       monitored: withState.length,
@@ -302,10 +311,10 @@ export const waterForecastService = {
       avgPct: pcts.length ? Math.round(pcts.reduce((s, v) => s + v, 0) / pcts.length) : null,
       avgStoredMm: (() => { const mm = withState.map(r => r.state?.total_profile_water_mm).filter(v => v != null); return mm.length ? Math.round(mm.reduce((s, v) => s + v, 0) / mm.length * 10) / 10 : null; })(),
       volumeM3: Math.round(withRecommendation.reduce((s, r) => s + (r.recommendation?.recommended_irrigation_m3 || 0), 0)),
-      kwh: Math.round(withRecommendation.reduce((s, r) => s + (r.energy?.kwh || 0), 0)),
-      cost: Math.round(withRecommendation.reduce((s, r) => s + (r.energy?.cost || 0), 0)),
+      kwh: recommendedEnergy.totalKwh,
+      cost: recommendedEnergy.totalCost,
     };
-    return { rows, totals, tariff: energyService.getActiveTariff(tariffs) };
+    return { rows, totals, turns, pumps, tariff: energyService.getActiveTariff(tariffs) };
   },
 
   // ---- Detalle de un lote: histórico calculado + HOY + pronóstico de 15 días ----
