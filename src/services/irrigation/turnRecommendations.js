@@ -1,6 +1,6 @@
+import { allocateTurns, businessDay, turnMembers } from './planning.js';
 const round1 = value => Math.round(value * 10) / 10;
 const validState = row => row?.forecast_status === 'ok' && row.forecast_quality?.level !== 'blocked' && Number.isFinite(row.state?.available_water_percent);
-const portionFactor = portion => ['N', 'S', 'E', 'O'].includes(portion) ? 0.5 : 1;
 const number = value => value.toLocaleString('es-AR', { maximumFractionDigits: 1 });
 
 // Los grupos provienen del Monitoreo: no se inventan turnos a partir del pozo.
@@ -17,7 +17,7 @@ export function buildTurnRecommendations(devices, rows, today) {
     for (const lotId of valve.lot_ids || []) {
       const member = group.members.get(lotId) || { row: rowMap.get(lotId), lotId, factor: 0, valves: new Map() };
       member.valves.set(valve.id, valve);
-      member.factor = Math.min(1, [...member.valves.values()].reduce((sum, v) => sum + portionFactor(v.portion), 0));
+      member.factor = turnMembers(devices, well.id, turno).find(m => m.lotId === lotId)?.factor ?? 0;
       group.members.set(lotId, member);
     }
     groups.set(key, group);
@@ -73,4 +73,22 @@ export function buildTurnRecommendations(devices, rows, today) {
 
 function percentAt(row, date) {
   return row.scenarioWithoutIrrigation?.find(p => p.date === date)?.available_water_percent ?? row.state.available_water_percent;
+}
+
+export function buildTurnPlan(devices, rows, programs, now = Date.now()) {
+  return allocateTurns(buildTurnRecommendations(devices, rows, businessDay(now)), programs, now).map(group => {
+    const rec = group.recommendation;
+    if (!rec) return group;
+    if (!rec.feasible) return { ...group, status: 'Sin disponibilidad confirmada' };
+    const impacts = rec.impacts.map(member => {
+      const nextDate = new Date(Date.parse(`${rec.date}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
+      const next = member.row?.scenarioScheduled?.find(p => p.date === nextDate) || member.row?.scenarioWithoutIrrigation?.find(p => p.date === nextDate);
+      const capacity = member.row?.state?.total_available_water_capacity_mm;
+      return { ...member, excessMm: next && capacity != null && member.appliedMm != null ? round1(Math.max(0, next.available_water_mm + member.appliedMm * (member.row.efficiency ?? 1) - capacity)) : null };
+    });
+    const warnings = group.warnings.filter(w => !w.startsWith('Posible exceso sobre capacidad de campo:'));
+    const excessive = impacts.filter(m => m.excessMm > 0.5);
+    if (excessive.length) warnings.push(`Posible exceso sobre capacidad de campo: ${excessive.map(m => `${m.row.lot.name} (${number(m.excessMm)} mm)`).join(', ')}.`);
+    return { ...group, warnings, status: rec.date <= businessDay(now) ? 'Regar hoy' : 'Riego recomendado', recommendation: { ...rec, impacts, percentAtDate: percentAt(group.reference.row, rec.date) } };
+  });
 }
