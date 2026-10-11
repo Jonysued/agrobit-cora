@@ -1,3 +1,4 @@
+import InitialMoistureNotice from '@/components/waterEnergy/InitialMoistureNotice';
 import { monitoringService } from '@/services/irrigation/monitoringService';
 import React, { useEffect, useState } from 'react';
 import { backend } from '@/api/backendClient';
@@ -7,7 +8,7 @@ import LoadingState from '@/components/LoadingState';
 import { waterForecastService, energyService } from '@/services/waterEnergy';
 
 const formatNumber = value => value == null ? 'Sin datos suficientes' : value.toLocaleString('es-AR', { maximumFractionDigits: 1 });
-const formatHours = hours => `${formatNumber(hours)} h`;
+const formatHours = hours => hours == null ? 'Pendiente' : `${formatNumber(hours)} h`;
 const formatKwh = value => value == null ? '—' : `${formatNumber(value)} kWh`;
 const formatCost = value => value == null ? '—' : `$ ${value.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`;
 
@@ -32,18 +33,19 @@ export default function WaterEnergyEnergy() {
       ]);
       const window = energyService.projectionWindow();
       const scheduled = energyService.getScheduledOverview(programs, pumps, overview.rows, overview.tariff, window);
-      const recommended = energyService.getRecommendedOverview(overview.rows, window);
+      const recommended = energyService.getRecommendedOverview(overview.turns, window, overview.tariff, pumps);
       const observed = await monitoringService.observed(overview.rows.map(r => r.lot), []);
       const recorded = energyService.getRecordedOverview(observed, pumps, overview.tariff);
-      if (!cancelled) setData({ scheduled, recommended, recorded, pumps });
+      if (!cancelled) setData({ scheduled, recommended, recorded, pumps, turns: overview.turns });
     })().catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
   }, [reloadKey]);
   if (!data) return error ? <div className="p-6 text-sm text-slate-500">No se pudo cargar la sección Energía.</div> : <LoadingState />;
-  const { scheduled, recommended, recorded, pumps } = data;
+  const { scheduled, recommended, recorded, pumps, turns } = data;
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-4 md:p-6">
       <ModuleHeader energy />
+      <InitialMoistureNotice />
       <section className="space-y-3 rounded-2xl border bg-white p-4">
         <h2 className="text-lg font-bold text-charcoal">Funcionamiento registrado · últimos 7 días</h2>
         <p className="text-xs text-slate-500">Horas de encendido de los pozos según Monitoreo. El consumo se estima con su potencia; se cuenta cada pozo una sola vez, aunque abastezca varios lotes. Los equipos sin cierre registrado siguen en curso.</p>
@@ -55,7 +57,7 @@ export default function WaterEnergyEnergy() {
       </section>
       <div className="grid gap-5 lg:grid-cols-2">
         {[{ title: 'Energía programada', energy: scheduled, description: 'Riegos agendados · próximos 7 días. Los horarios superpuestos del mismo pozo se cuentan una sola vez.' },
-          { title: 'Energía recomendada', energy: recommended, description: 'Riego adicional sugerido por el modelo · próximos 7 días. No está agendado; las horas son la suma estimada por lote.' }].map(({ title, energy, description }) => (
+          { title: 'Energía recomendada', energy: recommended, description: 'Riego adicional sugerido por el modelo · próximos 7 días. No está agendado; cada turno se cuenta una vez por pozo y respeta los horarios programados.' }].map(({ title, energy, description }) => (
           <section key={title} className="space-y-3">
             <h2 className="text-lg font-bold text-charcoal">{title}</h2>
             <p className="text-xs leading-relaxed text-slate-500">{description}</p>
@@ -68,6 +70,8 @@ export default function WaterEnergyEnergy() {
         ))}
       </div>
       {scheduled.incompletePrograms > 0 && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Hay {scheduled.incompletePrograms} programa(s) sin pozo, horario o duración válidos. No están incluidos en la energía programada.</p>}
+      {(recommended.unavailableTurns > 0 || recommended.incompletePrograms > 0) && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Hay turnos sin disponibilidad confirmada o bomba vinculada. El total recomendado queda pendiente hasta completar esos datos.</p>}
+      {pumps.some(p => !(p.flow_m3_h > 0)) && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Falta el caudal medido de algunos pozos. Cargalo en Configuración → Energy. No se estima kWh/m³ sin ese dato; las horas y kWh pueden calcularse con duración y potencia.</p>}
       <section className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full min-w-[1100px] text-sm">
           <thead>
@@ -90,11 +94,11 @@ export default function WaterEnergyEnergy() {
                   <td className="px-4 py-3"><b className="text-charcoal">{p.name}</b></td>
                   <td className="px-4 py-3 text-slate-600">{p.farm || '—'}</td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-600">{p.energy_supply_number || '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{p.irrigation_sector || p.lot_id || '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{[...new Set(turns.filter(g => g.well.pump_id === p.id).flatMap(g => g.members.map(m => m.row?.lot.name).filter(Boolean)))].join(' · ') || 'Sin lotes asignados en Monitoreo'}</td>
                   <td className="px-4 py-3 text-slate-600">{p.power_kw} kW</td>
-                  <td className="px-4 py-3 text-slate-600">{p.flow_m3_h} m³/h</td>
+                  <td className="px-4 py-3 text-slate-600">{p.flow_m3_h > 0 ? `${formatNumber(p.flow_m3_h)} m³/h` : 'Sin caudal cargado'}</td>
                   {[planned, suggested].map((stats, index) => <React.Fragment key={index}>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatHours(stats?.hours ?? 0)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatHours(stats ? stats.hours : 0)}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatKwh(stats ? stats.kwh : 0)}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatCost(stats ? stats.cost : 0)}</td>
                   </React.Fragment>)}
@@ -106,7 +110,7 @@ export default function WaterEnergyEnergy() {
           </tbody>
         </table>
       </section>
-      <p className="text-center text-xs text-slate-400">Consumo y costo estimados según potencia del pozo y tarifa configurada. La energía recomendada es adicional a la programada; las horas por lote no equivalen a un cronograma de bombeo.</p>
+      <p className="text-center text-xs text-slate-400">Consumo y costo estimados según potencia del pozo y tarifa configurada. La energía recomendada es adicional a la programada; cada turno se contabiliza una sola vez por pozo.</p>
     </div>
   );
 }

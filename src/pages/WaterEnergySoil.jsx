@@ -26,7 +26,18 @@ export default function WaterEnergySoil({ embedded = false }) {
   const nav = useNavigate();
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState(false);
-  useEffect(() => { soilWaterService.getProbeSummaries().then(setRows).catch(() => setErr(true)); }, []);
+  useEffect(() => {
+    let cancelled = false, pending = false;
+    const refresh = async () => {
+      if (pending) return;
+      pending = true;
+      try { const next = await soilWaterService.getProbeSummaries(); if (!cancelled) { setRows(next); setErr(false); } }
+      catch { if (!cancelled) setErr(true); }
+      finally { pending = false; }
+    };
+    void refresh(); const timer = setInterval(refresh, 60000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, []);
   if (!rows) return err ? <div className="p-6 text-sm text-slate-500">No se pudo cargar los sensores.</div> : <LoadingState />;
   return (
     <div className={embedded ? "space-y-5" : "mx-auto max-w-[1600px] space-y-5 p-4 md:p-6"}>
@@ -35,6 +46,7 @@ export default function WaterEnergySoil({ embedded = false }) {
         <h2 className="text-lg font-bold text-charcoal">Sensores</h2>
         <p className="text-xs text-slate-500">Mediciones de cada sonda, incluso antes de vincularla a un lote.</p>
       </div>
+      {err && <p role="alert" className="text-sm text-amber-800">No se pudo actualizar. Se muestran las últimas lecturas descargadas.</p>}
       {!rows.length ? (
         <div className="rounded-2xl border border-black/5 bg-white p-10 text-center shadow-sm">
           <Gauge className="mx-auto text-slate-300" size={32} />
@@ -52,7 +64,7 @@ export default function WaterEnergySoil({ embedded = false }) {
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {row.connectionStatus === 'disconnected' && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-red-700">Desconectada</span>}
-                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${SOURCE_BADGE[row.source] || SOURCE_BADGE.MANUAL}`}>{row.source}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${SOURCE_BADGE[row.source] || SOURCE_BADGE.MANUAL}`}>{row.source === 'LIVE' ? 'Lectura remota' : row.source}</span>
                 </div>
               </div>
               {row.missing ? (
@@ -75,10 +87,10 @@ export default function WaterEnergySoil({ embedded = false }) {
                     <span className="pb-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">agua en el perfil · 0–{row.measured_profile_depth_cm ?? row.root_zone_depth_cm} cm</span>
                   </div>
                   <div className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-xs text-slate-600">
-                    <p>Estado hídrico: <b>{row.status || 'Sin configurar'}</b></p>
+                    <p>Estado de la última lectura: <b>{row.status || 'Sin configurar'}</b></p>
                     <p>Agua útil del perfil: <b>{row.current_available_water_mm} mm</b></p>
                     <p>Déficit hasta objetivo: <b>{row.water_deficit_mm != null ? `${row.water_deficit_mm} mm` : 'Sin configurar'}</b></p>
-                    <p>Última lectura: <b>{rel(row.lastReadingAt)}</b></p>
+                    <p>Última lectura: <b>{rel(row.lastReadingAt)}</b> · {row.lastReadingAt ? new Date(row.lastReadingAt).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }) : 'Sin lectura'}</p>
                     {row.missing_configuration?.length > 0 && <p className="text-amber-700">Falta configurar: {missingLabels(row)}</p>}
                   </div>
                 </>

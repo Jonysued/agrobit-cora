@@ -10,7 +10,8 @@ import WeatherPanel from '@/components/waterEnergy/WeatherPanel';
 import { waterForecastService, energyService } from '@/services/waterEnergy';
 import { weatherService } from '@/services/waterEnergy/weatherService';
 import { monitoringService } from '@/services/irrigation/monitoringService';
-import { buildTurnRecommendations } from '@/services/irrigation/turnRecommendations';
+import { assignedPrograms } from '@/services/irrigation/planning';
+import { buildTurnPlan } from '@/services/irrigation/turnRecommendations';
 const DashboardMap = lazy(() => import('@/components/DashboardMap'));
 const number = v => v == null ? 'Sin datos' : v.toLocaleString('es-AR', { maximumFractionDigits: 1 });
 const dayLabel = date => new Date(date + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
@@ -42,12 +43,11 @@ export default function Dashboard() {
   const below = usable.filter(r => r.state.current_available_water_mm <= r.state.recharge_threshold_mm).length;
   const active = (devices.data || []).filter(device => device.kind === 'well' && device.current_active === true && (!selected || device.farm === selected)).length;
   const period = energyService.projectionWindow();
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-  const turns = overview.data && devices.data ? buildTurnRecommendations(devices.data, overview.data.rows, today).filter(g => !selected || g.well.farm === selected) : null;
-  const programs = d.IrrigationProgram.filter(p => !selected || (p.lot_ids || []).some(id => ids.has(id)));
+  const turns = overview.data && devices.data ? buildTurnPlan(devices.data, overview.data.rows, d.IrrigationProgram, period.now).filter(g => !selected || g.well.farm === selected) : null;
+  const programs = assignedPrograms(d.IrrigationProgram, devices.data || []).filter(p => !selected || (devices.data || []).find(w => w.id === p._well_id)?.farm === selected);
   const upcoming = programs.filter(p => ['Programado', 'Activo'].includes(p.status) && p.start_time && Date.parse(p.date + 'T' + p.start_time + '-03:00') >= period.now).sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time))[0];
   const scheduled = pumps.data && overview.data ? energyService.getScheduledOverview(programs, pumps.data.filter(p => !selected || p.farm === selected), rows, overview.data.tariff, period) : null;
-  const recommended = overview.data ? energyService.getRecommendedOverview(rows, period) : null;
+  const recommended = overview.data && turns && pumps.data ? energyService.getRecommendedOverview(turns, period, overview.data.tariff, pumps.data) : null;
   const objectives = lots.map(l => ({ lot: l, ...lotMetrics(l, d.ProductionRecord, d.Objective, d.HealthRecord) })).filter(m => m.objective?.kg_ha > 0);
   const target = objectives.reduce((s, m) => s + m.objective.kg_ha * (Number(m.lot.area_ha) || 0), 0);
   const complete = objectives.length && objectives.every(m => m.objective.estimated_kg_ha != null && Number.isFinite(Number(m.objective.estimated_kg_ha)));
@@ -64,7 +64,7 @@ export default function Dashboard() {
       <Card title="Lotes" to="/lotes" values={[[ 'Lotes', lots.length ], ['Superficie', number(lots.reduce((s, l) => s + (Number(l.area_ha) || 0), 0)) + ' ha']]} />
       <Card title="Riego" to="/riego?tab=recomendaciones" values={[[ 'Turnos recomendados · 15 días', turns ? turns.filter(g => g.recommendation).length : pending(overview.isPending ? overview : devices) ], ['Pozos activos', devices.data ? active : pending(devices)]]} detail={'Próximo: ' + (upcoming ? dayLabel(upcoming.date) + ' · ' + upcoming.start_time.slice(0, 5) + ' · ' + (upcoming.well || 'pozo sin asignar') + ' ' + (upcoming.turno || '') : 'sin riegos futuros programados') + (missingTurns ? ' · ' + missingTurns + ' pozo(s) sin turno configurado' : '')} />
       <Card title="Estado hídrico" to="/riego?tab=balance" values={[[ 'Agua útil', average == null ? pending(overview) : number(average) + '%' ], ['Bajo umbral', usable.length ? below : pending(overview)]]} detail={usable.length + ' de ' + lots.length + ' lotes con datos · agua útil promedio'} />
-      <Card title="Energía" to="/water-energy/energia" values={[[ 'Programada', scheduled ? number(scheduled.totalKwh) + (scheduled.totalKwh == null ? '' : ' kWh') : pending(pumps.isPending ? pumps : overview) ], ['Recomendada', recommended ? number(recommended.totalKwh) + ' kWh' : pending(overview)]]} detail="Próximos 7 días · estimaciones. La recomendada es adicional y se calcula por lote." />
+      <Card title="Energía" to="/water-energy/energia" values={[[ 'Programada', scheduled ? number(scheduled.totalKwh) + (scheduled.totalKwh == null ? '' : ' kWh') : pending(pumps.isPending ? pumps : overview) ], ['Recomendada', recommended ? number(recommended.totalKwh) + (recommended.totalKwh == null ? '' : ' kWh') : pending(overview)]]} detail="Próximos 7 días · estimaciones. La recomendada es provisoria y se calcula una vez por turno." />
       <Card title="Objetivos" to="/lotes" values={[[ 'Objetivo', target > 0 ? number(target / 1000) + ' t' : 'Sin objetivos' ], ['Cumplimiento esperado', target > 0 && estimated != null ? number(estimated / target * 100) + '%' : 'Sin estimación']]} detail={'Últimos objetivos registrados · ' + objectives.length + ' de ' + lots.length + ' lotes'} />
     </div>
     <Suspense fallback={<div className="h-[320px] rounded-2xl border bg-white p-5 text-sm text-slate-500">Cargando mapa…</div>}><DashboardMap lots={lots} rows={rows} farm={selected} /></Suspense>

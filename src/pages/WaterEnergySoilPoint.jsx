@@ -6,7 +6,7 @@ import ProbeChartCard from '@/components/waterEnergy/soil/ProbeChartCard';
 import { EmptyChart, MoistureLines, PROBE_RANGES, WaterSumChart } from '@/components/waterEnergy/soil/ProbeCharts';
 import { soilWaterService, CONFIG_LABELS } from '@/services/waterEnergy';
 
-const SOURCE_LABEL = { LIVE: 'En vivo', CSV: 'Importado CSV', MANUAL: 'Manual', DEMO: 'Demo' };
+const SOURCE_LABEL = { LIVE: 'Lectura remota', CSV: 'Importado CSV', MANUAL: 'Manual', DEMO: 'Demo' };
 const CHARTS = [
   { id: 'moisture', title: 'Humedad del suelo', icon: Droplets, subtitle: 'Lecturas por profundidad' },
   { id: 'profile', title: 'Suma del perfil', icon: Droplets, subtitle: 'Agua almacenada en todo el perfil' },
