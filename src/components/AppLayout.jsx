@@ -21,12 +21,12 @@ export default function AppLayout() {
         <NavLink to={regador ? '/riego?tab=monitoreo' : '/dashboard'} className="flex h-14 w-[clamp(56px,20vw,84px)] shrink-0 items-center sm:w-auto"><img src="/brand/lucient-logo-white.svg" alt="Lucient" className="h-auto w-full sm:h-10 sm:w-auto" /></NavLink>
         <nav aria-label="Secciones de Lucient" className={`grid min-w-0 flex-1 gap-0.5 ${regador ? 'grid-cols-2' : 'grid-cols-5'} sm:flex sm:overflow-x-auto [scrollbar-width:none]`}>
           {links.filter(([to]) => !regador || to === '/riego' || to === '/configuracion').map(([to, label, Icon]) => regador && to === '/configuracion' ?
-            <button key={to} type="button" aria-label={label} title={label} onClick={() => setAccountOpen(true)} className={navClass(accountOpen)}><Icon size={19} /><span className="hidden xl:inline">{label}</span></button> :
-            <NavLink key={to} to={to} end={to === '/'} aria-label={label} title={label} className={({ isActive }) => navClass(isActive || (to === '/dashboard' && location.pathname === '/mapa'))}><Icon size={19} /><span className="hidden xl:inline">{label}</span></NavLink>)}
+            <button key={to} type="button" aria-label={regador ? 'Mi cuenta' : label} title={regador ? 'Mi cuenta' : label} onClick={() => setAccountOpen(true)} className={navClass(accountOpen)}><Icon size={19} /><span className="text-xs sm:text-sm">Mi cuenta</span></button> :
+            <NavLink key={to} to={to} end={to === '/'} aria-label={regador ? 'Monitoreo' : label} title={regador ? 'Monitoreo' : label} className={({ isActive }) => navClass(isActive || (to === '/dashboard' && location.pathname === '/mapa'))}><Icon size={19} /><span className={regador ? 'text-xs sm:text-sm' : 'hidden xl:inline'}>{regador ? 'Monitoreo' : label}</span></NavLink>)}
         </nav>
       </div>
     </header>
-    {regador && <Dialog open={accountOpen} onOpenChange={setAccountOpen}><DialogContent><DialogHeader><DialogTitle>Configuración</DialogTitle></DialogHeader><button type="button" onClick={() => backend.auth.logout()} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-3 font-semibold"><LogOut size={19} />Cerrar sesión</button></DialogContent></Dialog>}
+    {regador && <Dialog open={accountOpen} onOpenChange={setAccountOpen}><DialogContent><DialogHeader><DialogTitle>Mi cuenta</DialogTitle></DialogHeader><button type="button" onClick={() => backend.auth.logout()} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-3 font-semibold"><LogOut size={19} />Cerrar sesión</button></DialogContent></Dialog>}
     <main className="relative isolate z-0"><OfflineStatus /><Outlet /></main>
   </div>;
 }
