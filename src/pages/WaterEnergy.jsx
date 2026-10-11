@@ -62,12 +62,12 @@ export default function WaterEnergy({ embedded = false }) {
       refreshProbes();
     };
     refresh();
-    const timer = window.setInterval(refresh, OVERVIEW_REFRESH_MS);
+    const timer = setInterval(refresh, OVERVIEW_REFRESH_MS);
     document.addEventListener('visibilitychange', refresh);
     window.addEventListener('lucient:data-mutated', refresh);
     return () => {
       active = false;
-      window.clearInterval(timer);
+      clearInterval(timer);
       document.removeEventListener('visibilitychange', refresh);
       window.removeEventListener('lucient:data-mutated', refresh);
     };
@@ -94,8 +94,8 @@ export default function WaterEnergy({ embedded = false }) {
   const farmRows = farm ? rows.filter(r => r.lot.farm === farm.name) : [];
   const withState = farmRows.filter(r => r.forecast_status === 'ok');
   const pcts = withState.map(r => r.state?.available_water_percent).filter(v => v != null);
-  const window = energyService.projectionWindow();
-  const farmEnergy = energyService.getRecommendedOverview((snapshot.data.turns || []).filter(g => g.well.farm === farm?.name), { ...window, end: window.start + 15 * 86400000 }, snapshot.data.tariff, snapshot.data.pumps);
+  const projectionWindow = energyService.projectionWindow();
+  const farmEnergy = energyService.getRecommendedOverview((snapshot.data.turns || []).filter(g => g.well.farm === farm?.name), { ...projectionWindow, end: projectionWindow.start + 15 * 86400000 }, snapshot.data.tariff, snapshot.data.pumps);
   const farmTotals = {
     lots: farmRows.length,
     monitored: withState.length,
