@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/api/backendClient';
 import { useAuth } from '@/lib/AuthContext';
 
-const roles = [['admin', 'Administrador'], ['user', 'Usuario'], ['regador', 'Regador']];
+const roles = [['admin', 'Administrador'], ['user', 'Usuario'], ['regador', 'Regador · solo QR']];
 export default function UserProfiles() {
   const { user } = useAuth(), client = useQueryClient();
   const [drafts, setDrafts] = useState({}), [busy, setBusy] = useState(null), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -25,7 +25,7 @@ export default function UserProfiles() {
   return <section className="rounded-2xl border bg-white p-5 shadow-sm">
     <h2 className="text-xl font-bold">Usuarios y perfiles</h2>
     <p className="mt-2 text-sm text-slate-500">Asigná un perfil a cada usuario registrado.</p>
-    <div className="my-4 grid gap-2 text-sm text-slate-600"><p><b>Administrador:</b> acceso completo y gestión de usuarios.</p><p><b>Usuario:</b> acceso habitual a la app, sin gestión de perfiles.</p><p><b>Regador:</b> solo escanear QR y cambiar el estado del pozo o la válvula escaneada. Sin mapa, listados, historial, cronogramas ni otros datos.</p></div>
+    <div className="my-4 grid gap-2 text-sm text-slate-600"><p><b>Administrador:</b> acceso completo y gestión de usuarios.</p><p><b>Usuario:</b> acceso habitual a la app, sin gestión de perfiles.</p><p><b>Regador · solo QR:</b> solo escanear QR y cambiar el estado del pozo o la válvula escaneada. Sin mapa, listados, historial, cronogramas ni otros datos.</p></div>
     {(error || query.error) && <p role="alert" className="my-3 text-sm text-red-700">{error || query.error.message}</p>}
     {notice && <p role="status" className="my-3 text-sm text-emerald-800">{notice}</p>}
     {query.isLoading && <p className="py-4 text-sm">Cargando usuarios…</p>}
