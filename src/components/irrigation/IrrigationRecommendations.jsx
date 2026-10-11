@@ -1,10 +1,9 @@
+import InitialMoistureNotice from '@/components/waterEnergy/InitialMoistureNotice';
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Droplets } from 'lucide-react';
 import LoadingState from '@/components/LoadingState';
-import { monitoringService } from '@/services/irrigation/monitoringService';
 import { waterForecastService } from '@/services/waterEnergy';
-import { buildTurnRecommendations } from '@/services/irrigation/turnRecommendations';
 
 const number = value => value == null ? '—' : value.toLocaleString('es-AR', { maximumFractionDigits: 1 });
 const dateLabel = value => new Date(`${value}T12:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
@@ -15,9 +14,8 @@ export default function IrrigationRecommendations() {
   const query = useQuery({
     queryKey: ['irrigation-turn-recommendations'], staleTime: 60000,
     queryFn: async () => {
-      const [devices, overview] = await Promise.all([monitoringService.devices(), waterForecastService.getFarmOverview({ force: true })]);
-      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-      return { groups: buildTurnRecommendations(devices, overview.rows, today), updatedAt: new Date() };
+      const overview = await waterForecastService.getFarmOverview({ force: true });
+      return { groups: overview.turns, updatedAt: new Date() };
     },
   });
   if (query.isLoading) return <LoadingState />;
@@ -27,6 +25,7 @@ export default function IrrigationRecommendations() {
   const wells = [...new Map(groups.filter(g => !farm || g.well.farm === farm).map(g => [g.well.id, g.well])).values()];
   const visible = groups.filter(g => (!farm || g.well.farm === farm) && (!well || g.well.id === well));
   return <section className="space-y-5">
+      <InitialMoistureNotice />
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0 max-w-3xl">
         <h2 className="text-xl font-bold text-emerald-950">Recomendaciones de riego</h2>
@@ -50,10 +49,11 @@ export default function IrrigationRecommendations() {
           </div>
           {group.turno && reference && <div className="rounded-xl bg-slate-50 p-3 text-sm"><b>Lote de referencia: {reference.lot.name}</b><p className="mt-1 text-xs text-slate-600">Agua útil actual: {number(reference.state.available_water_percent)}% · suma de perfil {number(reference.state.total_profile_water_mm)} mm</p></div>}
           {rec && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <div><p className="text-xs text-slate-500">Fecha sugerida</p><p className="mt-1 font-bold">{dateLabel(rec.date)}</p></div>
+            <div><p className="text-xs text-slate-500">Fecha sugerida</p><p className="mt-1 font-bold">{rec.feasible ? dateLabel(rec.date) : 'Por definir'}</p></div>
             <div><p className="text-xs text-slate-500">Duración del turno</p><p className="mt-1 font-bold">{Math.floor(rec.minutes / 60)} h {rec.minutes % 60} min</p></div>
             <div><p className="text-xs text-slate-500">Lote de referencia</p><p className="mt-1 font-bold">{number(rec.appliedMm)} mm</p></div>
           </div>}
+          {rec?.feasible && <p className="text-xs text-emerald-800">Inicio: {new Date(rec.start).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })} · Fin: {new Date(rec.end).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}</p>}
           {rec && <p className="text-xs text-slate-500">Riego adicional al cronograma. La misma duración se aplica a todo el turno; los milímetros recibidos dependen del diseño y del sector de cada lote.</p>}
           {!group.turno && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Asigná el turno a sus válvulas desde Monitoreo → ficha de válvula → Editar. No se agrupan automáticamente todos los lotes de este pozo.</p>}
           {group.warnings.length > 0 && <details className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><summary className="cursor-pointer font-bold">{group.warnings.length} observaciones para revisar</summary><ul className="mt-2 list-disc space-y-1 pl-4">{[...new Set(group.warnings)].map(w => <li key={w}>{w}</li>)}</ul></details>}
