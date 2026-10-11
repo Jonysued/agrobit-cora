@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { backend } from '@/api/backendClient';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-const links = [['/dashboard', 'Dashboard', ChartNoAxesCombined], ['/lotes', 'Lotes', Table2], ['/riego', 'Riego', Droplets], ['/water-energy', 'Water & Energy', Zap], ['/configuracion', 'Configuración', Settings]];
+const links = [['/dashboard', 'Dashboard', ChartNoAxesCombined], ['/lotes', 'Lotes', Table2], ['/riego', 'Water', Droplets], ['/water-energy', 'Energy', Zap], ['/configuracion', 'Configuración', Settings]];
 
 export default function AppLayout() {
   const { user } = useAuth();
