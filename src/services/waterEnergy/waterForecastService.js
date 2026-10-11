@@ -13,7 +13,7 @@ import { forecastDrydownFactor, probeProfileLoss } from './soilResponse';
 // FORECAST HÍDRICO POR LOTE (CURVA CALCULADA):
 //   LotWaterState (estado calculado del lote, lotWaterStateService)
 //   + SoilBehaviorModel (comportamiento del suelo de referencia)
-//   + IrrigationLog (riegos ejecutados → ya aplicados al estado)
+//   + Monitoreo de riego (duración efectiva → estado del lote)
 //   + IrrigationProgram (riegos programados → futuro)
 //   + WeatherForecast (ET0 / lluvia pronosticada)
 //   + Kc del cultivo (ETc = ET0 × Kc)
@@ -84,7 +84,7 @@ const daysBetween = (a, b = new Date()) => {
 };
 
 function forecastQuality(curve, weatherDays, kcMissing) {
-  const warnings = [];
+  const warnings = [...(curve.data_quality?.irrigation_warnings || [])];
   const anchorAgeDays = daysBetween(curve.anchor_date);
   const observedAt = curve.data_quality?.observed_weather_last_at;
   const observedAgeHours = observedAt ? Math.max(0, (Date.now() - new Date(observedAt).getTime()) / 3600000) : null;
@@ -104,7 +104,7 @@ function forecastQuality(curve, weatherDays, kcMissing) {
   if (curve.data_quality?.missing_rain_days > 0) warnings.push(`sin lectura de lluvia de Garita en ${curve.data_quality.missing_rain_days} días`);
   if (simulatedInDecisionWindow) warnings.push('el horizonte de decisión contiene clima simulado');
   if (kcMissing) warnings.push('Kc sin configurar');
-  const blockedReasons = [];
+  const blockedReasons = [...(curve.data_quality?.irrigation_warnings || [])];
   if (kcMissing) blockedReasons.push('Falta configurar Kc.');
   if (simulatedInDecisionWindow) blockedReasons.push('No hay pronóstico meteorológico real para toda la ventana de decisión.');
   if (anchorAgeDays > 0 && (observedAgeHours == null || observedAgeHours > 24)) blockedReasons.push('La meteorología observada está ausente o tiene más de 24 horas.');
@@ -252,47 +252,6 @@ export const waterForecastService = {
 
   // ---- Inicialización del estado de un lote (SOLO valor manual) ----
   initializeManual(lotId, mm, date) { return lotWaterStateService.initializeManual(lotId, mm, date); },
-
-  // ---- Confirmar un riego programado como EJECUTADO ----
-  // Guarda el IrrigationLog con los mm realmente aplicados y marca el
-  // programa Finalizado: el evento pasa de "programado" (cronograma,
-  // futuro) a "ejecutado" (histórico). La próxima consulta reconstruye
-  // la curva con los mm reales y recalcula forecast y recomendación.
-  async confirmScheduledIrrigation(programId, appliedMm) {
-    const programs = await backend.entities.IrrigationProgram.list();
-    const program = programs.find(p => p.id === programId);
-    if (!program) throw new Error('Programa de riego no encontrado.');
-    // La ejecución SOLO se confirma el día del riego o después: un
-    // riego futuro todavía no ocurrió y no puede entrar al estado
-    // actual del lote (curva negra).
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    if (program.date > today) throw new Error('No se puede confirmar la ejecución de un riego futuro — confirmalo el día del riego o después.');
-    const mm = Math.round((Number(appliedMm) || 0) * 10) / 10;
-    if (!(mm > 0)) throw new Error('Los mm aplicados deben ser mayores que cero.');
-    await backend.entities.IrrigationLog.create({ program_id: programId, date: program.date, applied_mm: mm });
-    await backend.entities.IrrigationProgram.update(programId, { status: 'Finalizado' });
-  },
-
-  // ---- Riegos a confirmar: TODOS los lotes en una lista ----
-  // Programas de HOY o de fechas PASADAS sin su IrrigationLog (la
-  // ejecución nunca se confirma por adelantado), con el efecto neto
-  // sobre el perfil (mm × eficiencia de recarga del suelo). Más
-  // atrasados primero.
-  async getPendingIrrigations() {
-    const lots = await this.getLots();
-    const curves = await lotWaterStateService.getLotStates(lots, { withHistory: false });
-    return lots.flatMap(lot => {
-      const curve = curves.get(lot.id);
-      return (curve?.events?.pendingPrograms || []).map(e => ({
-        ...e,
-        lot_id: lot.id,
-        lot_name: lot.name,
-        lot_farm: lot.farm,
-        efficiency: curve?.efficiency ?? null,
-      }));
-    }).sort((a, b) => a.date.localeCompare(b.date) || a.lot_name.localeCompare(b.lot_name));
-  },
 
   // ---- Dashboard: filas por lote + totales de 15 días ----
   getFarmOverview({ force = false } = {}) {

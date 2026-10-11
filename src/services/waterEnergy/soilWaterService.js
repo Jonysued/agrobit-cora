@@ -1,3 +1,4 @@
+import { monitoringService } from '@/services/irrigation/monitoringService';
 import { backend } from '@/api/backendClient';
 import { sensorService } from './sensorService';
 import { selectGaritaStation, aggregateGaritaObservations } from './garitaWeather';
@@ -570,17 +571,11 @@ export const soilWaterService = {
     const state = await buildState(profile, channels, readings);
     const history = state._model ? usefulWaterSeries(readings, channels, state._model) : [];
 
-    // ---- Eventos de contexto: riegos EJECUTADOS (IrrigationLog) + lluvia ----
-    // Solo riegos con log: un programa sin log no prueba que el riego
-    // ocurrió (para aprender el suelo se usan riegos reales).
-    const [logs, programs] = await Promise.all([
-      backend.entities.IrrigationLog.list(),
-      backend.entities.IrrigationProgram.list(),
-    ]);
-    const programById = new Map(programs.map(p => [p.id, p]));
-    const irrigationEvents = [...new Set(logs
-      .filter(l => l.date && (programById.get(l.program_id)?.lot_ids || []).includes(lot.id))
-      .map(l => l.date))].sort();
+    // La calibración usa el mismo riego observado que el balance. Incluye
+    // fechas sin mm calculables para excluirlas de días de secado.
+    const designs = await backend.entities.IrrigationDesign.list();
+    const observed = await monitoringService.observed([lot], designs);
+    const irrigationEvents = [...(observed.byLot.get(lot.id)?.keys() || [])].sort();
     // La calibración cruza la sonda con la MISMA lluvia observada que
     // alimenta las curvas: Garita para todos los lotes, por ID de
     // estación y día local, sin tomar otra estación de la finca.
