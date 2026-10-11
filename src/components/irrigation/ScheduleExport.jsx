@@ -6,7 +6,7 @@ const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto',
 const DAY_NAMES=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 const EMERALD=[74,125,78];
 
-export default function ScheduleExport({programs,logs,lots}){
+export default function ScheduleExport({programs,lots}){
   const today=new Date();
   const [open,setOpen]=useState(false);
   const [year,setYear]=useState(today.getFullYear());
@@ -22,7 +22,6 @@ export default function ScheduleExport({programs,logs,lots}){
       .sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.start_time||'').localeCompare(b.start_time||''));
     const lotNames=p=>(p.lot_ids||[]).map(id=>lots.find(l=>l.id===id)?.name).filter(Boolean).join(', ')||'—';
     const fmtRange=p=>{if(!p.start_time)return '—';if(!p.duration_min)return p.start_time;const [h,m]=p.start_time.split(':').map(Number);const e=(h*60+m+p.duration_min)%1440;return `${p.start_time} – ${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;};
-    const isDone=p=>(logs||[]).some(l=>l.program_id===p.id&&l.date===p.date);
     const fmtDate=s=>{const d=new Date(`${s}T00:00:00`);return `${DAY_NAMES[(d.getDay()+6)%7]} ${String(d.getDate()).padStart(2,'0')}/${mm}`;};
 
     const drawTable=(startY,cols,rows)=>{
@@ -52,9 +51,9 @@ export default function ScheduleExport({programs,logs,lots}){
     const totalMin=monthProgs.reduce((a,p)=>a+(p.duration_min||0),0);
     doc.text(`${monthProgs.length} programas · ${Math.round(totalMin/60*10)/10} h totales · generado el ${today.toLocaleDateString('es-AR')}`,12,31);
 
-    const calRows=monthProgs.map(p=>[fmtDate(p.date),fmtRange(p),lotNames(p),p.well||'—',p.status||'—',isDone(p)?'Sí':'—']);
+    const calRows=monthProgs.map(p=>[fmtDate(p.date),fmtRange(p),lotNames(p),p.well||'—',p.status||'—']);
     let y=monthProgs.length?drawTable(38,[
-      {t:'Fecha',w:26},{t:'Horario',w:32},{t:'Lotes',w:118},{t:'Pozo',w:30},{t:'Estado',w:26},{t:'Realizado',w:21}
+      {t:'Fecha',w:26},{t:'Horario',w:32},{t:'Lotes',w:118},{t:'Pozo',w:30},{t:'Estado',w:26}
     ],calRows):38;
     if(!monthProgs.length){doc.setFontSize(10);doc.setTextColor(130);doc.text('Sin programas configurados para este mes.',12,40);}
 
