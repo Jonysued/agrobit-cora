@@ -68,3 +68,12 @@ test('la recomendación descuenta solo entradas que llegan a X+1', () => {
   // 140 - 100 - 10 - 14 + 5. No descuenta las entradas del día siguiente.
   assert.equal(needed, 21);
 });
+
+test('el riego aún pendiente de hoy entra mañana sin alterar el estado actual', () => {
+  const cfg = {total_available_water_capacity_mm:100,recharge_threshold_mm:20};
+  const days=[{date:'2026-10-12',eto_mm:0,kc:1,irrigation_mm:5},{date:'2026-10-13',eto_mm:0,kc:1,irrigation_mm:0}];
+  const withPending=runUsefulWaterScenario(40,cfg,days,false,10);
+  assert.equal(withPending[0].available_water_mm,50);
+  assert.equal(withPending[1].available_water_mm,55);
+  assert.equal(runUsefulWaterScenario(40,cfg,days)[0].available_water_mm,40);
+});
