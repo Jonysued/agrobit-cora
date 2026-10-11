@@ -5,7 +5,7 @@ import { serviceClient } from './backend.ts';
 import { probeProfileSnapshots, estimateProbeDynamics } from './soilCalibrationMath.js';
 import { aggregateGaritaObservations } from '../../../src/services/waterEnergy/garitaWeather.js';
 
-import { estimateTransferDynamics } from '../../../src/services/waterEnergy/probeTransfer.js';
+import { closedProbeDays, estimateTransferDynamics } from '../../../src/services/waterEnergy/probeTransfer.js';
 
 const PAGE_SIZE = 1000;
 
@@ -65,9 +65,12 @@ export async function calibrateAllSoilModels() {
       const snapshots = probeProfileSnapshots(channels, readings);
       const byDay = new Map(snapshots.map(snapshot => [snapshot.day, snapshot]));
       const days = [...byDay.values()];
-      const estimated = estimateProbeDynamics(days, weather, snapshots);
-      const transfer = estimateTransferDynamics(days, snapshots, weather);
       const attemptAt = new Date().toISOString();
+      const completedDays = closedProbeDays(days, attemptAt);
+      const completedDayKeys = new Set(completedDays.map(day => day.day));
+      const estimated = estimateProbeDynamics(completedDays, weather,
+        snapshots.filter(snapshot => completedDayKeys.has(snapshot.day)));
+      const transfer = estimateTransferDynamics(days, snapshots, weather, { asOf: attemptAt });
       for (const model of matching) {
         const summary = {
           ...estimated,
@@ -80,7 +83,7 @@ export async function calibrateAllSoilModels() {
           weather_station: 'Garita',
         };
         const transitions = estimated.recharge_sample_count + estimated.depletion_sample_count;
-        const status = days.length < 2 ? 'sin_datos'
+        const status = completedDays.length < 2 ? 'sin_datos'
           : transitions ? 'partial' : 'uncalibrated';
         const updates = {
           calibration_status: status,
@@ -99,7 +102,7 @@ export async function calibrateAllSoilModels() {
         const { error } = await serviceClient.from('soil_behavior_models').update(updates).eq('id', model.id);
         if (error) throw new Error(error.message);
       }
-      results.push({ probe: probe.name, ok: true, status: days.length < 2 ? 'sin_datos' : 'evaluated',
+      results.push({ probe: probe.name, ok: true, status: completedDays.length < 2 ? 'sin_datos' : 'evaluated',
         models: matching.length, ...estimated });
     } catch (error) {
       results.push({ probe: probe.name, ok: false, message: error.message });
