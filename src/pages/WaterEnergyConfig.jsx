@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import ModuleHeader from '@/components/waterEnergy/ModuleHeader';
 import LoadingState from '@/components/LoadingState';
 import { waterForecastService, sensorService, energyService, weatherService, soilBehaviorService } from '@/services/waterEnergy';
 import ProfileSection from '@/components/waterEnergy/config/ProfileSection';
@@ -11,7 +10,7 @@ import FarmLocationSection from '@/components/waterEnergy/config/FarmLocationSec
 import WeatherSourceSection from '@/components/waterEnergy/config/WeatherSourceSection';
 import WeatherStationSection from '@/components/waterEnergy/config/WeatherStationSection';
 
-export default function WaterEnergyConfig() {
+export default function WaterEnergyConfig({ embedded = false }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const refresh = async () => {
@@ -32,8 +31,11 @@ export default function WaterEnergyConfig() {
   useEffect(() => { refresh().catch(() => setError(true)); }, []);
   if (!data) return error ? <div className="p-6 text-sm text-slate-500">No se pudo cargar la configuración.</div> : <LoadingState />;
   return (
-    <div className="mx-auto max-w-[1200px] space-y-5 p-4 md:p-6">
-      <ModuleHeader />
+    <div className={embedded ? "space-y-5" : "mx-auto max-w-[1200px] space-y-5 p-4 md:p-6"}>
+      <div>
+        <h2 className="text-xl font-bold text-charcoal">Configuración de Water &amp; Energy</h2>
+        <p className="mt-1 text-sm text-slate-500">Perfiles de suelo, sondas, bombas, tarifas y fuentes meteorológicas.</p>
+      </div>
       <div className="space-y-5">
         <ProfileSection lots={data.lots} profiles={data.profiles} onChange={refresh} />
         <SensorSection lots={data.lots} probes={data.probes} profiles={data.profiles} models={data.models} onChange={refresh} />

@@ -39,7 +39,7 @@ export default function WaterEnergySoil({ embedded = false }) {
         <div className="rounded-2xl border border-black/5 bg-white p-10 text-center shadow-sm">
           <Gauge className="mx-auto text-slate-300" size={32} />
           <p className="mt-3 text-sm font-semibold text-charcoal">Todavía no hay sondas configuradas</p>
-          <p className="mt-1 text-xs text-slate-500">Registrá y sincronizá la sonda en Water & Energy → Configuración → Sensores.</p>
+          <p className="mt-1 text-xs text-slate-500">Registrá y sincronizá la sonda en Configuración → Water & Energy → Sensores.</p>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -66,7 +66,7 @@ export default function WaterEnergySoil({ embedded = false }) {
               ) : row.current_available_water_mm == null ? (
                 <div className="mt-5">
                   <p className="text-sm font-semibold text-amber-700">Configuración incompleta</p>
-                  <p className="mt-1 text-xs text-slate-400">Falta configurar: {missingLabels(row)} — Water & Energy → Configuración.</p>
+                  <p className="mt-1 text-xs text-slate-400">Falta configurar: {missingLabels(row)} — Configuración → Water & Energy.</p>
                 </div>
               ) : (
                 <>

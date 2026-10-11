@@ -102,7 +102,7 @@ export default function WaterEnergyEnergy() {
                 </tr>
               );
             })}
-            {!pumps.length && <tr><td colSpan={13} className="px-4 py-8 text-center text-sm text-slate-400">Sin pozos ni bombas configurados. Cargalos en Water & Energy → Configuración.</td></tr>}
+            {!pumps.length && <tr><td colSpan={13} className="px-4 py-8 text-center text-sm text-slate-400">Sin pozos ni bombas configurados. Cargalos en Configuración → Water & Energy.</td></tr>}
           </tbody>
         </table>
       </section>

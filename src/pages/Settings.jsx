@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Database, History, Upload, Users, LogOut } from 'lucide-react';
+import { Database, History, Upload, Users, LogOut, Droplets } from 'lucide-react';
 import { backend } from '@/api/backendClient';
 import { useFarm } from '@/lib/FarmContext';
 import UserProfiles from '@/components/UserProfiles';
 import { useAuth } from '@/lib/AuthContext';
 import LoadingState from '@/components/LoadingState';
 import Production from '@/pages/Production';
+
+const WaterEnergyConfig = lazy(() => import('@/pages/WaterEnergyConfig'));
 
 const types = {
   lotes: 'Lot',
@@ -20,7 +22,7 @@ export default function Settings() {
   const d = useFarm();
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
-  const activeTab = params.get('tab') === 'usuarios' && user?.role === 'admin' ? 'usuarios' : params.get('tab') === 'produccion' ? 'produccion' : 'administracion';
+  const activeTab = params.get('tab') === 'usuarios' && user?.role === 'admin' ? 'usuarios' : params.get('tab') === 'produccion' ? 'produccion' : params.get('tab') === 'water-energy' ? 'water-energy' : 'administracion';
   const [type, setType] = useState('lotes');
   const [busy, setBusy] = useState(false);
   const [ranges, setRanges] = useState(() => JSON.parse(localStorage.getItem('mapRanges') || '{"low":30000,"high":38000}'));
@@ -51,7 +53,7 @@ export default function Settings() {
   };
 
   return (
-    <div className={`mx-auto p-5 lg:p-8 ${activeTab === 'produccion' ? 'max-w-[1400px]' : 'max-w-[1000px]'}`}>
+    <div className={`mx-auto p-5 lg:p-8 ${['produccion', 'water-energy'].includes(activeTab) ? 'max-w-[1400px]' : 'max-w-[1000px]'}`}>
       <p className="text-sm font-bold uppercase tracking-widest text-emerald-700">Administración</p>
       <h1 className="text-3xl font-bold">Configuración</h1>
       {account}
@@ -60,6 +62,7 @@ export default function Settings() {
         {[
           ['administracion', 'Configuración general', Database],
           ['produccion', 'Históricos de producción', History],
+          ['water-energy', 'Water & Energy', Droplets],
           ...(user?.role === 'admin' ? [['usuarios', 'Usuarios y perfiles', Users]] : []),
         ].map(([value, label, Icon]) => (
           <button
@@ -73,7 +76,7 @@ export default function Settings() {
         ))}
       </nav>
 
-      {activeTab === 'usuarios' ? <UserProfiles /> : activeTab === 'produccion' ? (
+      {activeTab === 'water-energy' ? <Suspense fallback={<LoadingState />}><WaterEnergyConfig embedded /></Suspense> : activeTab === 'usuarios' ? <UserProfiles /> : activeTab === 'produccion' ? (
         <Production embedded />
       ) : (
         <>

@@ -122,7 +122,7 @@ export default function WaterEnergy({ embedded = false }) {
       </div>
       {shown.unprofiled > 0 && (
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-          {shown.unprofiled} lote(s) sin perfil de suelo configurado — configuralos en Water & Energy → Configuración.
+          {shown.unprofiled} lote(s) sin perfil de suelo configurado — configuralos en Configuración → Water & Energy.
         </p>
       )}
       <ProbeDailyChangeCard probes={farmProbes} onOpen={id => navigate(`/riego?tab=sensores&sonda=${encodeURIComponent(id)}`)} />

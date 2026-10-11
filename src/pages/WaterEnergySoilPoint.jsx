@@ -152,7 +152,7 @@ export default function WaterEnergySoilPoint({ embedded = false, probeIdProp }) 
       </div>
       {data.missing ? <div className="rounded-2xl border border-black/5 bg-white p-10 text-center shadow-sm"><p className="text-sm font-semibold text-charcoal">{data.missing}</p></div> : (
         <>
-          {data.configuration_status === 'incomplete' && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">Configuración incompleta: {missingText}. Completala en Water & Energy → Configuración.</div>}
+          {data.configuration_status === 'incomplete' && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">Configuración incompleta: {missingText}. Completala en Configuración → Water & Energy.</div>}
           {validChart ? <ProbeChartDetail data={data} chartId={chartId} setChartId={setChart} /> : <ProbeDashboard data={data} openChart={setChart} />}
           {data.coverage_status === 'partial' && <p className="text-xs font-semibold text-amber-700">Cobertura parcial: la sonda mide hasta {data.measured_profile_depth_cm} cm de los {data.root_zone_depth_cm} cm configurados.</p>}
         </>
