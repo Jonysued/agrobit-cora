@@ -183,7 +183,9 @@ export async function flushOffline() {
             if (profile?.id !== owner) break;
             await put(`${scope()}:scanned-device:${op.qrToken}`, device);
           }
-          result = await client.rpc('record_irrigation_offline_action', { p_device_id: deviceId, p_active: op.active, p_request_id: op.requestId, p_occurred_at: op.occurred_at });
+          result = op.qrToken
+            ? await client.rpc('record_irrigation_qr_action', { p_token: op.qrToken, p_active: op.active, p_request_id: op.requestId, p_occurred_at: op.occurred_at })
+            : await client.rpc('record_irrigation_offline_action', { p_device_id: deviceId, p_active: op.active, p_request_id: op.requestId, p_occurred_at: op.occurred_at });
         }
         else if (op.kind === 'file') {
           result = await client.storage.from('documents').upload(op.path, op.file, { contentType: op.file.type || undefined, upsert: false });
