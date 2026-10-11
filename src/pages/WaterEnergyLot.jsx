@@ -1,3 +1,4 @@
+import { monitoringService } from '@/services/irrigation/monitoringService';
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
@@ -46,7 +47,11 @@ export default function WaterEnergyLot() {
   // curva futura de Suma de perfil se recalcula inmediatamente.
   useEffect(() => {
     const unsubscribe = backend.entities.IrrigationProgram.subscribe(() => setReloadKey(k => k + 1));
-    return unsubscribe;
+    const change = () => setReloadKey(k => k + 1);
+    const stop = monitoringService.subscribe(change);
+    window.addEventListener('lucient:data-mutated', change);
+    const timer = setInterval(change, 60000);
+    return () => { unsubscribe(); stop(); window.removeEventListener('lucient:data-mutated', change); clearInterval(timer); };
   }, []);
   if (!detail) return error ? <div className="p-6 text-sm text-slate-500">Lote no encontrado.</div> : <LoadingState />;
   const { lot, profile, state, model } = detail;
@@ -68,6 +73,13 @@ export default function WaterEnergyLot() {
           </p>
         )}
       </div>
+      <section className="rounded-2xl border bg-white p-4 text-sm">
+        <h3 className="font-bold">Riego registrado en Monitoreo</h3>
+        <p className="mt-1 text-xs text-slate-500">Tiempo con válvula abierta y pozo encendido. Lámina estimada según el diseño y las asignaciones actuales del equipo; las confirmaciones antiguas del cronograma no se suman.</p>
+        <div className="mt-3 space-y-2">{(detail.events?.observed || []).slice(-7).reverse().map(e => <div key={e.date} className="flex flex-wrap justify-between gap-2 rounded-lg bg-slate-50 p-2"><b>{new Date(`${e.date}T12:00:00`).toLocaleDateString('es-AR')}</b><span>{(e.seconds / 3600).toLocaleString('es-AR', { maximumFractionDigits: 1 })} h · {e.mm == null ? 'Lámina sin calcular' : `${e.mm.toLocaleString('es-AR', { maximumFractionDigits: 1 })} mm`}{e.inProgress ? ' · En curso' : ''}</span></div>)}</div>
+        {!detail.events?.observed?.length && <p className="mt-2 text-slate-500">Sin riegos registrados para este lote.</p>}
+        <Link to="/riego?tab=monitoreo" className="mt-3 inline-block font-semibold text-emerald-800">Ver o corregir en Monitoreo de riegos</Link>
+      </section>
       {!profile ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           Este lote no tiene perfil de suelo configurado. Configuralo en Water & Energy → Configuración.
