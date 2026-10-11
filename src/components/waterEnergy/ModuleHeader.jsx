@@ -3,7 +3,6 @@ import { NavLink } from 'react-router-dom';
 import { Droplets } from 'lucide-react';
 
 const TABS = [
-  ['/water-energy/riegos', 'Riegos'],
   ['/water-energy/energia', 'Energía'],
   ['/water-energy/configuracion', 'Configuración'],
 ];
@@ -16,7 +15,7 @@ export default function ModuleHeader() {
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-emerald-700 to-emerald-500 text-white shadow-[0_8px_24px_rgba(43,85,65,.18)]"><Droplets size={20} /></span>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-charcoal">Water &amp; Energy</h1>
-            <p className="text-xs text-slate-500">Riegos, energía y configuración</p>
+            <p className="text-xs text-slate-500">Energía y configuración</p>
           </div>
         </div>
       </div>

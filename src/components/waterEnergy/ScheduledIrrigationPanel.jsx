@@ -3,10 +3,7 @@ import { CalendarClock } from 'lucide-react';
 
 const fmtDate = s => new Date(`${s}T00:00:00`).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'short' });
 
-// Panel de riegos PROGRAMADOS del lote (IrrigationProgram FUTUROS —
-// curva azul del gráfico). Sin botón de confirmación: cuando llega el
-// día del riego pasa a la pestaña "Riegos" de Water & Energy, donde
-// se centralizan todos los riegos a confirmar.
+// Planning affects the future scenario; execution comes from Monitoring.
 export default function ScheduledIrrigationPanel({ detail }) {
   const scheduled = detail.events?.scheduledPrograms || [];
   if (!scheduled.length) return null;
@@ -28,7 +25,7 @@ export default function ScheduledIrrigationPanel({ detail }) {
           </article>
         ))}
       </div>
-      <p className="mt-2 text-[11px] text-slate-400">Cuando llegue el día de cada riego, su ejecución se confirma desde Water & Energy → Riegos.</p>
+      <p className="mt-2 text-[11px] text-slate-400">El agua efectivamente aplicada se toma de Monitoreo de riegos, según válvula abierta y pozo encendido.</p>
     </section>
   );
 }
