@@ -9,7 +9,6 @@ const RegadorScanner = lazy(() => import('@/components/irrigation/monitor/Regado
 const IrrigationRecommendations = lazy(() => import('@/components/irrigation/IrrigationRecommendations'));
 import { useFarm } from '@/lib/FarmContext';
 import { useAuth } from '@/lib/AuthContext';
-import { backend } from '@/api/backendClient';
 import LoadingState from '@/components/LoadingState';
 import ProgramForm from '@/components/irrigation/ProgramForm';
 import ProgramList from '@/components/irrigation/ProgramList';
@@ -28,12 +27,6 @@ export default function Irrigation(){
   if(d.loading)return <LoadingState/>;
   const lots=d.Lot||[],designs=d.IrrigationDesign||[];
   const programs=[...(d.IrrigationProgram||[])].sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
-  const iso=dt=>{const x=new Date(dt);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`};
-  const toggle=async(p,day,log)=>{
-    if(log) await backend.entities.IrrigationLog.delete(log.id);
-    else await backend.entities.IrrigationLog.create({program_id:p.id,date:iso(day)});
-    await d.refetch();
-  };
   return <div className="mx-auto max-w-[1500px] p-5 lg:p-8">
     <div className="mb-7">
       <p className="text-sm font-bold uppercase tracking-[.18em] text-emerald-700">Manejo del recurso hídrico</p>
@@ -47,7 +40,7 @@ export default function Irrigation(){
         onSaved={async()=>{setEdit(null);await d.refetch();}}
         onCancel={()=>setEdit(null)}/>
       <div className="space-y-6">
-        <MonthlySchedule programs={programs} logs={d.IrrigationLog||[]} lots={lots} onToggle={toggle}/>
+        <MonthlySchedule programs={programs} lots={lots}/>
         <ProgramList programs={programs} lots={lots} onEdit={p=>{setEdit(p);window.scrollTo({top:0,behavior:'smooth'});}} onChange={d.refetch}/>
       </div>
     </div>}

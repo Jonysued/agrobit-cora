@@ -1,17 +1,16 @@
 import React,{useState} from 'react';
-import { Check, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import ScheduleExport from '@/components/irrigation/ScheduleExport';
 
 const DAY_NAMES=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 const JS_DAYS=[1,2,3,4,5,6,0];
 const MONTHS=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
-export default function MonthlySchedule({programs,logs,lots,onToggle}){
+export default function MonthlySchedule({programs,lots}){
   const today=new Date();today.setHours(0,0,0,0);
   const [offset,setOffset]=useState(0);
   const view=new Date(today.getFullYear(),today.getMonth()+offset,1);
   const iso=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
-  const logMap={};(logs||[]).forEach(l=>logMap[`${l.program_id}_${l.date}`]=l);
   const lotNames=p=>(p.lot_ids||[]).map(id=>lots.find(l=>l.id===id)?.name).filter(Boolean).join(', ')||'—';
   const fmt=(t,min)=>{const [h,m]=t.split(':').map(Number);const e=(h*60+m+min)%1440;return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;};
   const active=programs.filter(p=>p.status!=='Pausado');
@@ -32,7 +31,7 @@ export default function MonthlySchedule({programs,logs,lots,onToggle}){
           <button onClick={()=>setOffset(o=>o-1)} className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:border-emerald-500 hover:text-emerald-700"><ChevronLeft size={15}/></button>
           <b className="flex-1 sm:flex-none sm:w-40 text-center text-sm capitalize">{MONTHS[view.getMonth()]} {view.getFullYear()}</b>
           <button onClick={()=>setOffset(o=>o+1)} className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:border-emerald-500 hover:text-emerald-700"><ChevronRight size={15}/></button>
-          <ScheduleExport programs={programs} logs={logs} lots={lots}/>
+          <ScheduleExport programs={programs} lots={lots}/>
         </div>
       </div>
       <div className="mb-1 hidden sm:grid grid-cols-7 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">
@@ -51,13 +50,11 @@ export default function MonthlySchedule({programs,logs,lots,onToggle}){
               </div>
               <div className="space-y-1">
                 {items.length?items.map(p=>{
-                  const l=logMap[`${p.id}_${iso(dt)}`];
                   return (
-                    <button key={p.id} onClick={()=>onToggle(p,dt,l)} title={`${lotNames(p)} · ${p.start_time}`} className={`flex min-h-11 sm:min-h-0 w-full items-center gap-1 rounded-md border px-1.5 py-1 text-left text-[10px] leading-tight transition ${l?'border-emerald-600 bg-emerald-600 text-white':'border-slate-200 bg-white text-slate-700 hover:border-emerald-500'}`}>
-                      {l&&<Check size={10} className="shrink-0"/>}
+                    <div key={p.id} title={`${lotNames(p)} · ${p.start_time}`} className="flex min-h-11 sm:min-h-0 w-full items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-left text-[10px] leading-tight text-slate-700">
                       <span className="truncate">{lotNames(p)}</span>
-                      <span className={`ml-auto shrink-0 ${l?'text-emerald-50':'text-slate-400'}`}>{p.start_time}</span>
-                    </button>
+                      <span className="ml-auto shrink-0 text-slate-400">{p.start_time}</span>
+                    </div>
                   );
                 }):<p className="text-[10px] text-slate-300">—</p>}
               </div>
@@ -65,7 +62,7 @@ export default function MonthlySchedule({programs,logs,lots,onToggle}){
           );
         })}
       </div>
-      <p className="mt-3 text-xs text-slate-400">Tocá un riego para marcarlo como realizado.</p>
+      <p className="mt-3 text-xs text-slate-400">Este cronograma muestra la planificación. El riego realizado se registra desde Monitoreo de riegos.</p>
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import { backend } from '@/api/backendClient';
 import { densityOf } from '@/lib/farmCalculations';
+import { recordedPumpHours } from '@/services/irrigation/actualIrrigation';
 
 // ============================================================
 // energyService — bombas, tarifas y cálculo energético.
@@ -12,6 +13,17 @@ import { densityOf } from '@/lib/farmCalculations';
 const DEFAULT_TARIFF = { name: 'Tarifa por defecto', price_per_kwh: 150 };
 
 export const energyService = {
+  getRecordedOverview(observed, pumps, tariff) {
+    const end = observed.asOf, start = end - 7 * 86400000;
+    const pumpStats = pumps.map(pump => {
+      const hours = recordedPumpHours(observed.pumpHours.get(pump.id) || [], start, end);
+      const kwh = hours === 0 ? 0 : pump.power_kw > 0 ? hours * pump.power_kw : null;
+      return { pump, hours, kwh, cost: kwh == null ? null : kwh * (tariff?.price_per_kwh ?? DEFAULT_TARIFF.price_per_kwh) };
+    });
+    return { pumpStats, totalHours: pumpStats.reduce((sum, p) => sum + p.hours, 0),
+      totalKwh: pumpStats.some(p => p.kwh == null) ? null : pumpStats.reduce((sum, p) => sum + p.kwh, 0),
+      totalCost: pumpStats.some(p => p.cost == null) ? null : pumpStats.reduce((sum, p) => sum + p.cost, 0) };
+  },
   async getPumps() { return backend.entities.Pump.list(); },
   async savePump(data) {
     return data.id ? backend.entities.Pump.update(data.id, data) : backend.entities.Pump.create(data);

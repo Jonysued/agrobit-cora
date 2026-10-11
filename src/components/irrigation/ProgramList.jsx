@@ -8,7 +8,7 @@ const fmtRange=p=>{if(!p.start_time)return '—';if(!p.duration_min)return p.sta
 export default function ProgramList({programs,lots,onEdit,onChange}){
   const lotNames=p=>(p.lot_ids||[]).map(id=>lots.find(l=>l.id===id)?.name).filter(Boolean).join(', ')||'—';
   const toggleStatus=async p=>{await backend.entities.IrrigationProgram.update(p.id,{status:p.status==='Pausado'?'Activo':'Pausado'});onChange();};
-  const del=async p=>{await backend.entities.IrrigationProgram.delete(p.id);await backend.entities.IrrigationLog.deleteMany({program_id:p.id});onChange();};
+  const del=async p=>{await backend.entities.IrrigationProgram.delete(p.id);onChange();};
   return (
     <section className="rounded-2xl border bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between">

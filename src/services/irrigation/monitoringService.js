@@ -1,12 +1,46 @@
 import { isOnline } from '@/lib/connectivity';
 import { snapshot, irrigationDevices, pendingOperations, offlineIrrigationAction, networkFailure, scannedIrrigationDevice } from '@/lib/offline';
 import { supabase } from '@/api/backendClient';
+import { observedIrrigation } from './actualIrrigation';
 
 const unwrap = ({ data, error }) => {
   if (error) throw new Error(error.message);
   return data;
 };
+let ledgerCache = null, ledgerPending = null, ledgerGeneration = 0;
+if (typeof window !== 'undefined') window.addEventListener('lucient:data-mutated', () => {
+  ledgerGeneration++; ledgerCache = null; ledgerPending = null;
+});
+supabase.auth.onAuthStateChange(() => { ledgerGeneration++; ledgerCache = null; ledgerPending = null; });
 export const monitoringService = {
+  async observed(lots, designs, from = -Infinity) {
+    if (!ledgerCache || Date.now() - ledgerCache.received > 60000) {
+      if (!ledgerPending) {
+        const generation = ledgerGeneration;
+        ledgerPending = Promise.all([this.devices(), snapshot('irrigation-water-history', async () => {
+      const events = [];
+      // Page the entire ledger, including starts before the balance window.
+      for (let offset = 0; ; offset += 1000) {
+        const rows = unwrap(await supabase.from('irrigation_device_events').select('*')
+          .order('sequence').range(offset, offset + 999)) || [];
+        events.push(...rows);
+        if (rows.length < 1000) break;
+      }
+      return { events, asOf: Date.now() };
+    })]).then(([devices, history]) => {
+          const value = { devices, history, received: Date.now() };
+          if (generation === ledgerGeneration) ledgerCache = value;
+          return value;
+        }).finally(() => { if (generation === ledgerGeneration) ledgerPending = null; });
+      }
+      const value = await ledgerPending;
+      return observedIrrigation(value.devices, value.history.events, lots, designs, value.history.asOf, from);
+    }
+    const { devices, history } = ledgerCache;
+    // Offline we freeze at the last fetched instant: a disconnected phone
+    // cannot know whether another operator has since stopped the equipment.
+    return observedIrrigation(devices, history.events, lots, designs, history.asOf, from);
+  },
   async scannedDevice(token) {
     return scannedIrrigationDevice(token, async () => {
       const devices = unwrap(await supabase.rpc('irrigation_scanned_device', { p_token: token }));
@@ -32,16 +66,20 @@ export const monitoringService = {
     };
     if (form.id) {
       delete payload.kind; delete payload.pump_id;
-      return unwrap(await supabase.from('irrigation_devices').update(payload).eq('id', form.id).select().single());
+      const saved = unwrap(await supabase.from('irrigation_devices').update(payload).eq('id', form.id).select().single());
+      window.dispatchEvent(new Event('lucient:data-mutated')); return saved;
     }
-    return unwrap(await supabase.from('irrigation_devices').insert(payload).select().single());
+    const saved = unwrap(await supabase.from('irrigation_devices').insert(payload).select().single());
+    window.dispatchEvent(new Event('lucient:data-mutated')); return saved;
   },
   async action(deviceId, active, requestId) {
     const occurredAt = new Date().toISOString();
     if (!isOnline() || (await pendingOperations()).length) return offlineIrrigationAction(deviceId, active, requestId, occurredAt);
     const result = await supabase.rpc('record_irrigation_action', { p_device_id: deviceId, p_active: active, p_request_id: requestId });
     if (result.error && networkFailure(result.error)) return offlineIrrigationAction(deviceId, active, requestId, occurredAt);
-    return unwrap(result);
+    const event = unwrap(result);
+    window.dispatchEvent(new Event('lucient:data-mutated'));
+    return event;
   },
   async history(deviceId, from, offset = 0) {
     const query = supabase.from('irrigation_device_events').select('*').eq('device_id', deviceId)
@@ -64,14 +102,16 @@ export const monitoringService = {
   },
   async correct(eventId, active, occurredAt, reason) {
     if (!isOnline()) throw new Error('La corrección del historial requiere conexión.');
-    return unwrap(await supabase.rpc('correct_irrigation_action', {
+    const event = unwrap(await supabase.rpc('correct_irrigation_action', {
       p_event_id: eventId, p_active: active, p_occurred_at: occurredAt, p_reason: reason,
     }));
+    window.dispatchEvent(new Event('lucient:data-mutated'));
+    return event;
   },
   subscribe(onChange) {
     const channel = supabase.channel(`irrigation-monitor-${crypto.randomUUID()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'irrigation_devices' }, onChange)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'irrigation_device_events' }, onChange).subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'irrigation_device_events' }, () => { window.dispatchEvent(new Event('lucient:data-mutated')); onChange(); }).subscribe();
     return () => { supabase.removeChannel(channel); };
   },
 };

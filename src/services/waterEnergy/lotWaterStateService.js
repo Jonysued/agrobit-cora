@@ -1,4 +1,5 @@
 import { backend } from '@/api/backendClient';
+import { monitoringService } from '@/services/irrigation/monitoringService';
 import { densityOf } from '@/lib/farmCalculations';
 import { kcService } from './kcService';
 import { soilWaterService, computeProfileConfig, fullProfileDepthCm, DEFAULT_FULL_PROFILE_DEPTH_CM } from './soilWaterService';
@@ -13,7 +14,7 @@ import { drydownFactor, afterRiseFactor, forecastDrydownFactor, probeProfileLoss
 // sonda. Evoluciona con los eventos PROPIOS del lote:
 //
 //   estado hídrico anterior
-//   + riegos ejecutados (IrrigationLog → lámina del programa)
+//   + riegos ejecutados (Monitoreo → duración efectiva × intensidad del diseño)
 //   + riegos programados (IrrigationProgram, futuro)
 //   + lluvia observada / pronosticada
 //   − demanda del cultivo (ETc = ET0 × Kc)
@@ -69,29 +70,6 @@ function lotIrrigationMm(program, lotId, lot, designs, baseMm) {
   return mmh * ((program.duration_min || 0) / 60) * factor;
 }
 
-// ---- Riegos ejecutados (PASADO) por lote ----
-// PASADO = IrrigationLog: un riego cuenta como ejecutado SOLO si
-// tiene su log (un programa histórico sin log no prueba que ocurrió).
-// Los mm son los REALMENTE APLICADOS (log.applied_mm); si el log no
-// los registra, se usa la lámina programada como respaldo.
-function executedIrrigationFrom(logs, programs, lots, designs) {
-  const lotIds = new Set(lots.map(l => l.id));
-  const lotById = new Map(lots.map(l => [l.id, l]));
-  const programById = new Map(programs.map(p => [p.id, p]));
-  const executed = new Map();
-  for (const log of logs) {
-    const p = programById.get(log.program_id);
-    if (!p || !log.date) continue;
-    for (const lotId of p.lot_ids || []) {
-      if (!lotIds.has(lotId)) continue;
-      if (!executed.has(lotId)) executed.set(lotId, new Map());
-      const cur = executed.get(lotId).get(log.date) || 0;
-      executed.get(lotId).set(log.date, round1(cur + lotIrrigationMm(p, lotId, lotById.get(lotId), designs, log.applied_mm)));
-    }
-  }
-  return executed;
-}
-
 // ---- Fondo del perfil completo (0–N cm) de un lote ----
 // Definido por la sonda de referencia de su modelo de suelo (ej.
 // sonda 10–115 cm → 0–120 cm). Sin sonda de referencia → null: la
@@ -106,11 +84,10 @@ async function referenceFullDepthCm(profile, models) {
 
 // ---- Contexto compartido (una sola pasada para todos los lotes) ----
 async function loadContext(lots) {
-  const [profiles, models, states, logs, programs, allLayers, allChannels, designs, stations, allLots] = await Promise.all([
+  const [profiles, models, states, programs, allLayers, allChannels, designs, stations, allLots] = await Promise.all([
     backend.entities.SoilProfile.list(),
     soilBehaviorService.getModels(),
     backend.entities.LotWaterState.list('-timestamp', 2000),
-    backend.entities.IrrigationLog.list(),
     backend.entities.IrrigationProgram.list(),
     backend.entities.SoilLayer.list(),
     backend.entities.SoilProbeChannel.list(),
@@ -151,8 +128,8 @@ async function loadContext(lots) {
     ? await backend.entities.WeatherObservation.filter({ weather_station_id: garita.id }, '-timestamp', 2000)
     : [];
   const observed = aggregateGaritaObservations(observations);
-  const executed = executedIrrigationFrom(logs, programs, lots, designs);
-  return { profiles, models, states, configs, garita, observed, executed, programs, designs, allLots, referenceKcCache: new Map(), loggedProgramIds: new Set(logs.map(l => l.program_id)) };
+  const observedIrrigation = await monitoringService.observed(lots, designs);
+  return { profiles, models, states, configs, garita, observed, programs, designs, allLots, referenceKcCache: new Map(), observedIrrigation };
 }
 
 function referenceKc(ctx, model, date) {
@@ -198,6 +175,7 @@ async function computeLot(lot, ctx, withHistory) {
       date: isoDay(new Date(explicit.timestamp)),
       useful: Math.max(0, round1((explicit.profile_water_mm ?? 0) - wilting)),
       source: explicit.source,
+      from: Date.parse(explicit.timestamp),
     };
   } else if (stateRecs.length) {
     // Registros legados diarios: el más antiguo es el punto de partida
@@ -206,6 +184,7 @@ async function computeLot(lot, ctx, withHistory) {
       date: isoDay(new Date(first.timestamp)),
       useful: Math.max(0, round1((first.profile_water_mm ?? 0) - wilting)),
       source: 'calculated',
+      from: Date.parse(first.timestamp),
     };
   } else if (configComplete && profile.manual_initial_water_mm != null) {
     anchor = { date: todayStr(), useful: profile.manual_initial_water_mm, source: 'manual_adjustment' };
@@ -239,7 +218,8 @@ async function computeLot(lot, ctx, withHistory) {
   const end = todayStr();
   let startDay = anchor.date;
   if (startDay < dayAfter(end, -(MAX_HISTORY_DAYS - 1))) startDay = dayAfter(end, -(MAX_HISTORY_DAYS - 1));
-  const executed = ctx.executed.get(lot.id) || new Map();
+  const actualSinceAnchor = await monitoringService.observed([lot], ctx.designs, anchor.from ?? Date.parse(`${anchor.date}T00:00:00-03:00`));
+  const executed = new Map([...(actualSinceAnchor.byLot.get(lot.id) || [])].map(([date, event]) => [date, event.mm ?? 0]));
   const obs = ctx.observed;
   const irrigationEvents = [];
   const rainEvents = [];
@@ -288,7 +268,7 @@ async function computeLot(lot, ctx, withHistory) {
     prev = d;
     d = dayAfter(d, 1);
   }
-  // Punto de HOY = estado AHORA: el riego confirmado HOY y la lluvia
+  // Punto de HOY = estado AHORA: el riego registrado HOY y la lluvia
   // observada HOY ya están en el suelo, así que SÍ se incluyen en el
   // punto de hoy (su subida en el histórico recién se dibuja mañana).
   // Cubre también el ancla de HOY: el valor ingresado capturó el
@@ -311,8 +291,8 @@ async function computeLot(lot, ctx, withHistory) {
   // hacia atrás del punto de partida).
 
   // ---- Programados del lote (futuro) con eficiencia del modelo ----
-  // Un evento por PROGRAMA (guarda program_id para poder confirmar la
-  // ejecución desde la UI). gross_mm = lámina a aplicar del
+  // Un evento por PROGRAMA (guarda program_id para identificarlo en el
+  // cronograma; nunca prueba su ejecución). gross_mm = lámina a aplicar del
   // cronograma (mm explícitos del programa o derivados de su diseño
   // de riego y duración); mm = efecto neto sobre el perfil (gross ×
   // eficiencia de recarga aprendida del suelo).
@@ -332,20 +312,6 @@ async function computeLot(lot, ctx, withHistory) {
   const scheduledEvents = [...scheduledAgg.entries()]
     .map(([date, mm]) => ({ date, mm }))
     .sort((a, b) => a.date.localeCompare(b.date));
-  // Riegos a CONFIRMAR: programas de HOY o de fechas PASADAS que
-  // siguen sin su IrrigationLog — nunca se confirma una ejecución por
-  // adelantado (un riego futuro todavía no ocurrió). Al confirmarse
-  // con los mm reales entran al histórico y el estado ACTUAL del
-  // lote los refleja (punto de hoy o reconstrucción del pasado).
-  const pendingPrograms = (ctx.programs || [])
-    .filter(p => p.date && p.date <= t && ['Programado', 'Activo'].includes(p.status) && (p.lot_ids || []).includes(lot.id) && !(ctx.loggedProgramIds || new Set()).has(p.id))
-    .map(p => {
-      const gross = lotIrrigationMm(p, lot.id, lot, ctx.designs);
-      return { date: p.date, gross_mm: round1(gross), mm: round1(gross * efficiency), program_id: p.id, status: p.status };
-    })
-    .filter(e => e.gross_mm > 0)
-    .sort((a, b) => a.date.localeCompare(b.date));
-
   // Movimiento de las últimas 24 h: variación del agua del perfil
   // entre el punto de AYER y el de HOY (misma variación en escala de
   // agua útil y de Suma de perfil — difieren en la constante de
@@ -371,6 +337,8 @@ async function computeLot(lot, ctx, withHistory) {
     origin: anchor.source,
     anchored_at: anchor.date,
     data_quality: {
+      irrigation_warnings: actualSinceAnchor.warnings.get(lot.id) || [],
+      irrigation_source: 'monitoreo',
       anchor_date: anchor.date,
       observed_weather_last_at: obs?.lastObservationAt || null,
       observed_weather_station: ctx.garita?.name || null,
@@ -390,7 +358,7 @@ async function computeLot(lot, ctx, withHistory) {
     anchor_date: anchor.date,
     anchor_storage_mm: round1(wilting + anchor.useful),
     history: withHistory ? history : null,
-    events: { irrigation: irrigationEvents, scheduled: scheduledEvents, scheduledPrograms, pendingPrograms, rain: rainEvents },
+    events: { irrigation: irrigationEvents, scheduled: scheduledEvents, scheduledPrograms, observed: [...(ctx.observedIrrigation.byLot.get(lot.id)?.values() || [])], rain: rainEvents },
     forecast_status: 'ok',
   };
 }
