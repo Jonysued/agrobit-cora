@@ -21,6 +21,10 @@ jobs:
       APPSTORE_API_KEY_P8_BASE64: ${{ secrets.APPSTORE_API_KEY_P8_BASE64 }}
     steps:
       - uses: actions/checkout@v4
+      - name: Apply reviewed mobile design sources
+        run: |
+          unzip -o lucient-mobile-source.zip
+          rm lucient-mobile-source.zip
       - uses: actions/setup-node@v4
         with:
           node-version: 24
